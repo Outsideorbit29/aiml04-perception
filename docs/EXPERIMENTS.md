@@ -6,6 +6,7 @@ Add one row per run as soon as it finishes. W&B project: `aiml04-perception`.
 | Date | Run | Model | Data | Epochs | mAP@0.5 | mAP@0.5:0.95 | W&B | Notes |
 |---|---|---|---|---|---|---|---|---|
 | 2026-11-09 | data-check (sanity only) | YOLO11n COCO | 1% of BDD 20k subset, imgsz 320 | 1 | 0.085 | 0.049 | – | Pipeline check only, not a result. Proves `configs/data_bdd.yaml` trains and validates on all 10k val images. |
+| 2026-11-09 | train-yolo smoke (sanity only) | YOLO11s COCO → BDD | 640 train imgs (668 with RFS), 500 val, imgsz 320 | 1 | 0.016 | 0.006 | [njln4om8](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/njln4om8) | Job check only (3.6 min). Zero-shot on the same 500 val images at 640: mAP@0.5 0.356 (7 shared classes). Staging 60k files to /kaggle/temp took ~140 s. |
 | | baseline-zeroshot | YOLO11s COCO | BDD val | 0 | | | | |
 
 ## Tracking (M2)
