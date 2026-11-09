@@ -84,6 +84,33 @@ def shared_mean(per_class: dict[str, dict[str, float]], key: str) -> float:
 
 
 # ---------- Kaggle-side steps ----------
+WEIGHT_URLS = (
+    "https://github.com/ultralytics/assets/releases/download/v8.4.0/{name}",
+    "https://huggingface.co/Ultralytics/YOLO11/resolve/main/{name}",
+)
+
+
+def get_weights(name: str, dest: Path = Path("/kaggle/temp/weights"), tries: int = 4) -> str:
+    """Download pretrained weights with retries and a mirror (GitHub assets can return 504)."""
+    import urllib.request
+
+    target = dest / name
+    if target.exists() or Path(name).exists():
+        return str(target if target.exists() else name)
+    dest.mkdir(parents=True, exist_ok=True)
+    for attempt in range(tries):
+        for url in WEIGHT_URLS:
+            try:
+                urllib.request.urlretrieve(url.format(name=name), target)
+                print(f"weights {name} from {url.format(name=name)}", flush=True)
+                return str(target)
+            except Exception as exc:  # noqa: BLE001 - any network error: try the next source
+                print(f"weights download failed ({url.format(name=name)}): {exc}", flush=True)
+                target.unlink(missing_ok=True)
+        time.sleep(15 * (attempt + 1))
+    raise ConnectionError(f"could not download {name}")
+
+
 def copy_tree(src: Path, dst: Path, workers: int = 32) -> int:
     """Copy a folder with many threads (the kernel-output mount is latency bound)."""
     files = [p for p in src.rglob("*") if p.is_file()]
@@ -158,7 +185,7 @@ def zeroshot(cfg: dict[str, Any], root: Path, bdd_names: dict[int, str], out: Pa
     from ultralytics import YOLO
 
     zs = cfg["zeroshot"]
-    model = YOLO(zs["model"])
+    model = YOLO(get_weights(zs["model"]))
     mapping = bdd_to_coco_ids(bdd_names, zs["bdd_to_coco"])
     side = Path(cfg["stage_dir"]).parent / "bdd_zeroshot"
     (side / "images").mkdir(parents=True, exist_ok=True)
@@ -298,7 +325,7 @@ def main(argv: Iterable[str] | None = None) -> None:
         add_callbacks(model, cfg, t_start)
         model.train(resume=True)
     else:
-        model = YOLO(tr.pop("model"))
+        model = YOLO(get_weights(tr.pop("model")))
         add_callbacks(model, cfg, t_start)
         model.train(data=str(yml), project=str(out / "runs"), exist_ok=True, **tr)
 
