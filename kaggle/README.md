@@ -21,6 +21,10 @@ kaggle kernels status anish2906/aiml04-<job>
 kaggle kernels output anish2906/aiml04-<job> -p runs/<job>   # only if outputs are needed locally
 ```
 
+## W&B
+Project `aiml04-perception`, entity `anish-grd2004-vellore-institute-of-technology` (the account's
+default entity, so `wandb.init(project="aiml04-perception")` logs there without extra flags).
+
 ## One-time per job
 The first time a job is pushed, open it on kaggle.com → Add-ons → Secrets and attach
 `WANDB_API_KEY`. Without it the runner logs W&B offline instead of failing.

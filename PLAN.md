@@ -49,7 +49,7 @@ Online:
 - [x] M0.1 Create the GitHub repo (public, so Kaggle can clone it without a token) and push this scaffold: github.com/Outsideorbit29/aiml04-perception
 - [x] M0.2 Kaggle account: phone verified, 30 h/week GPU quota available (username `anish2906`). The `WANDB_API_KEY` secret is attached per notebook on the first job push (see `kaggle/README.md`).
 - [x] M0.3 Kaggle API token saved in `%USERPROFILE%\.kaggle\access_token`. The Kaggle CLI works, and `kaggle/smoke_test` ran on a Tesla T4 on 2026-11-09.
-- [ ] M0.4 W&B: `wandb login`, project `aiml04-perception`
+- [x] M0.4 W&B: logged in as `anish-grd2004`; project `aiml04-perception` created under entity `anish-grd2004-vellore-institute-of-technology`
 - [x] M0.5 GitHub Actions workflow running `pytest` and `ruff` on push
 - [x] M0.6 Scaffold the package layout from ARCHITECTURE.md section 5, plus `perception/types.py` with tests and the `kaggle/_template` runner
 
