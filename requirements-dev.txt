@@ -1,0 +1,7 @@
+# Light, CPU-only dependencies for unit tests and lint (laptop + GitHub Actions).
+# No torch here on purpose: heavy ML deps live in requirements.txt and run on Kaggle.
+numpy>=1.26
+opencv-python-headless>=4.9
+pyyaml>=6.0
+pytest>=8.0
+ruff>=0.6

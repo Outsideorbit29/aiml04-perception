@@ -6,14 +6,15 @@ the final TensorRT engine. Expected laptop disk use is about 25 GB, mostly CARLA
 ## 1. Online accounts (do these yourself, no installs)
 1. **GitHub.** Create a public repo `aiml04-perception` and push this folder. Kaggle notebooks clone it.
 2. **Kaggle.** Sign up at kaggle.com and verify your phone number under Settings. GPU and internet access in notebooks need this.
-   - Settings → Secrets → add `WANDB_API_KEY` (copied from wandb.ai/authorize).
-   - Settings → API → "Create New Token" downloads `kaggle.json`. Put it in `C:\Users\<you>\.kaggle\kaggle.json`. Never commit it.
+   - Settings → API Tokens → **Generate New Token** (the recommended option, not "Legacy"). Save the token as the file `C:\Users\<you>\.kaggle\access_token` (one line, the token only), or set it as the user environment variable `KAGGLE_API_TOKEN`. Never commit it.
+   - Secrets are attached per notebook, not in account settings: open a job's notebook on kaggle.com → Add-ons → Secrets → add `WANDB_API_KEY` (copied from wandb.ai/authorize).
 3. **Weights & Biases.** Sign up at wandb.ai and create the project `aiml04-perception`.
 4. **Hugging Face** (optional, M7.8): account for a free CPU Space demo.
 
 ## 2. Laptop: light tools (Windows)
 ```powershell
 pip install kaggle wandb          # small CLIs: launch Kaggle jobs, read results
+# pip puts kaggle.exe in %APPDATA%\Python\Python314\Scripts; add that folder to your user PATH
 kaggle kernels list --mine        # check the token works
 ```
 A full PyTorch/CUDA install on Windows is **not** needed. Unit tests run in GitHub Actions. For

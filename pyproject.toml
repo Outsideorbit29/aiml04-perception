@@ -1,0 +1,23 @@
+[project]
+name = "aiml04-perception"
+version = "0.1.0"
+description = "Autonomous driving perception stack (Nexvia AIML-04)"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = ["perception*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["ros2_ws/build", "ros2_ws/install", "notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.black]
+line-length = 100

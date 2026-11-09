@@ -29,4 +29,5 @@ ros2_ws/log/
 # secrets / local
 .env
 kaggle.json
+access_token
 .claude/settings.local.json

@@ -1,0 +1,13 @@
+{
+  "id": "anish2906/aiml04-template",
+  "title": "aiml04-template",
+  "code_file": "runner.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
