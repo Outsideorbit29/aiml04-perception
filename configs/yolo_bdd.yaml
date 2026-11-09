@@ -1,0 +1,48 @@
+# YOLO11s fine-tune on the BDD100K 20k subset (M2.1-M2.3). Used by scripts/train_yolo.py on Kaggle.
+data_config: configs/data_bdd.yaml   # class names; `path` is re-resolved at run time
+search: /kaggle/input                # where to look for the data-prep output (bdd_yolo/data.yaml)
+stage_dir: /kaggle/temp/bdd_yolo     # local copy: the mounted kernel output reads slowly
+lists_dir: /kaggle/temp/lists
+out_dir: /kaggle/working/m2          # small outputs saved with the job (metrics, plots, best.pt)
+
+wandb:
+  project: aiml04-perception
+  ckpt_artifact: yolo11s-bdd-ckpt    # last.pt with optimizer state, uploaded every `ckpt_every` epochs
+  best_artifact: yolo11s-bdd-best    # final best.pt
+  ckpt_every: 1
+
+# Repeat-factor sampling (LVIS style), decision in docs/EXPERIMENTS.md (2026-11-09).
+rfs:
+  enabled: true
+  threshold: 0.1
+  seed: 42
+
+zeroshot:                            # M2.1: COCO model on BDD val, BDD classes mapped to COCO ids
+  enabled: true
+  model: yolo11s.pt
+  # rider -> person (COCO has no rider; a COCO model sees riders as people). traffic sign has no
+  # COCO class, so it is left out of the zero-shot score.
+  bdd_to_coco: {car: 2, truck: 7, bus: 5, person: 0, rider: 0, bicycle: 1, motorcycle: 3,
+                traffic light: 9}
+
+train:                               # passed straight to Ultralytics model.train()
+  model: yolo11s.pt
+  epochs: 50
+  imgsz: 640
+  batch: 32
+  amp: true
+  workers: 4
+  cos_lr: true
+  close_mosaic: 10
+  patience: 15
+  seed: 42
+  plots: true
+  name: yolo11s-bdd
+
+time_limit_h: 11.0                   # stop cleanly before Kaggle's 12 h session limit, resume later
+
+smoke:                               # --smoke: prove the job end to end in ~10 min
+  train_limit: 640
+  val_limit: 500
+  epochs: 1
+  imgsz: 320
