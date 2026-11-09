@@ -15,7 +15,9 @@ CHECK = (
     "import torch, perception.types as t; "
     "print('cuda', torch.cuda.is_available(), "
     "torch.cuda.get_device_name(0) if torch.cuda.is_available() else '-'); "
-    "print('repo ok', t.Detection.__name__)"
+    "print('repo ok', t.Detection.__name__); "
+    "import wandb; r = wandb.init(project='aiml04-perception', job_type='smoke-test'); "
+    "wandb.log({'smoke': 1}); print('wandb url', r.url, 'mode', r.settings.mode); r.finish()"
 )
 JOB_CMD = ["python", "-c", CHECK]
 WORKDIR = "/kaggle/temp/repo"  # outside /kaggle/working so the code is not saved as job output
