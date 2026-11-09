@@ -1,0 +1,21 @@
+# KITTI data for the distance/depth evaluation (M4.4) and the test clip (M1.5).
+# Kaggle mounts attached datasets at /kaggle/input/datasets/<owner>/<slug>/ (probed 2026-11-09).
+# Licence: KITTI is CC BY-NC-SA 3.0 (non-commercial, attribution, share-alike).
+input_root: /kaggle/input/datasets
+object:
+  # KITTI 3D object detection: 7481 training frames with image_2, calib, label_2 and velodyne.
+  dataset: garymk/kitti-3d-object-detection-dataset   # 32.2 GB (Kaggle licence field: unknown)
+  image_dir: garymk/kitti-3d-object-detection-dataset/training/image_2      # 7481 png, 6.2 GB
+  calib_dir: garymk/kitti-3d-object-detection-dataset/training/calib        # 7481 txt
+  label_dir: garymk/kitti-3d-object-detection-dataset/training/label_2      # 7481 txt
+  velodyne_dir: garymk/kitti-3d-object-detection-dataset/training/velodyne  # 7481 bin, 14.3 GB
+  # Alternative without LiDAR (images/calib/labels only, CC BY-NC-SA 3.0 stated):
+  # klemenko/kitti-dataset (24.1 GB, also has image_3 for stereo)
+tracking:
+  # KITTI tracking: 21 training sequences at 10 fps with image_02, calib, label_02, velodyne, oxts.
+  dataset: leducnhuan/kitti-tracking                  # 37.5 GB (Kaggle licence field: unknown)
+  image_dir: leducnhuan/kitti-tracking/kitti_tracking/training/image_02
+  label_dir: leducnhuan/kitti-tracking/kitti_tracking/training/label_02
+  calib_dir: leducnhuan/kitti-tracking/kitti_tracking/training/calib
+  velodyne_dir: leducnhuan/kitti-tracking/kitti_tracking/training/velodyne
+  fixture_sequence: "0000"                            # first 30 frames -> tests/fixtures clip

@@ -1,0 +1,23 @@
+[
+ {"name": "a.jpg", "attributes": {"weather": "clear", "scene": "city street", "timeofday": "daytime"},
+  "labels": [
+   {"category": "car", "box2d": {"x1": 100.0, "y1": 200.0, "x2": 300.0, "y2": 400.0}, "attributes": {"occluded": true, "truncated": false}},
+   {"category": "person", "box2d": {"x1": 10.0, "y1": 20.0, "x2": 30.0, "y2": 80.0}},
+   {"category": "bike", "box2d": {"x1": -5.0, "y1": 600.0, "x2": 50.0, "y2": 730.0}},
+   {"category": "motor", "box2d": {"x1": 500.0, "y1": 300.0, "x2": 500.5, "y2": 340.0}},
+   {"category": "train", "box2d": {"x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 100.0}},
+   {"category": "lane", "poly2d": [{"vertices": [[0, 0], [10, 10]]}]},
+   {"category": "drivable area", "poly2d": [{"vertices": [[0, 0], [10, 10]]}]}
+  ]},
+ {"name": "b.jpg", "attributes": {"weather": "rainy", "scene": "highway", "timeofday": "night"},
+  "labels": [
+   {"category": "pedestrian", "box2d": {"x1": 640.0, "y1": 360.0, "x2": 660.0, "y2": 420.0}},
+   {"category": "motorcycle", "box2d": {"x1": 700.0, "y1": 300.0, "x2": 800.0, "y2": 400.0}},
+   {"category": "other vehicle", "box2d": {"x1": 0.0, "y1": 0.0, "x2": 100.0, "y2": 100.0}},
+   {"category": "traffic light", "box2d": {"x1": 1200.0, "y1": 10.0, "x2": 1210.0, "y2": 40.0}}
+  ]},
+ {"name": "c.jpg", "frames": [{"timestamp": 10000, "objects": [
+   {"category": "traffic sign", "box2d": {"x1": 400.0, "y1": 100.0, "x2": 440.0, "y2": 140.0}}]}],
+  "attributes": {"weather": "snowy", "scene": "residential", "timeofday": "dawn/dusk"}},
+ {"name": "d.jpg", "labels": []}
+]

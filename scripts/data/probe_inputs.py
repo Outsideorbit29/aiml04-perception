@@ -53,7 +53,7 @@ def probe(root: Path, max_listed: int = 30) -> dict:
         if filenames or len(dirnames) > 0:
             report[dirpath] = entry
         if filenames:
-            print(f"{dirpath}: {len(filenames)} files, {entry['size_mb']} MB, {dict(ext)}", flush=True)
+            print(f"{dirpath}: {len(filenames)} files, {entry['size_mb']} MB, {dict(ext)}")
     return report
 
 

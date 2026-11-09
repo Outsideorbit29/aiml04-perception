@@ -1,0 +1,43 @@
+# BDD100K detection data (M1). One file, two uses:
+# 1. Ultralytics data YAML: `yolo train data=configs/data_bdd.yaml` on Kaggle, with the
+#    data-prep kernel output attached (kernel_sources: ["anish2906/aiml04-data-prep"]).
+#    `path` is where Kaggle mounts that output (verified by kaggle/data_check).
+# 2. Settings for scripts/data/prepare_bdd.py (the `prep:` block; Ultralytics ignores it).
+path: /kaggle/input/notebooks/anish2906/aiml04-data-prep/bdd_yolo
+train: images/train
+val: images/val
+nc: 9
+names:
+  0: car
+  1: truck
+  2: bus
+  3: person
+  4: rider
+  5: bicycle
+  6: motorcycle
+  7: traffic light
+  8: traffic sign
+
+prep:
+  # Kaggle mounts attached datasets at /kaggle/input/datasets/<owner>/<slug>/ (probed 2026-11-09).
+  input_root: /kaggle/input/datasets
+  out_dir: /kaggle/working/bdd_yolo
+  source:
+    # Images + det_20 ("det_v2") box labels. Kaggle lists the licence as CC0, but the data is
+    # BDD100K, licensed for non-commercial research (https://doc.bdd100k.com/license.html).
+    dataset: awsaf49/bdd100k-dataset            # 6.9 GB: 100k/{train 70k,val 10k,test 20k}
+    images_train: awsaf49/bdd100k-dataset/bdd100k/bdd100k/images/100k/train
+    images_val: awsaf49/bdd100k-dataset/bdd100k/bdd100k/images/100k/val
+    labels_train: awsaf49/bdd100k-dataset/labels/det_v2_train_release.json
+    labels_val: awsaf49/bdd100k-dataset/labels/det_v2_val_release.json
+    # Fallback for frame attributes (weather/timeofday/scene) if the det_v2 files lack them:
+    # the 2018 release labels from solesensei/solesensei_bdd100k (8.2 GB, licence "other" = BDD).
+    attributes_dataset: solesensei/solesensei_bdd100k
+    attributes_train: solesensei/solesensei_bdd100k/bdd100k_labels_release/bdd100k/labels/bdd100k_labels_images_train.json
+    attributes_val: solesensei/solesensei_bdd100k/bdd100k_labels_release/bdd100k/labels/bdd100k_labels_images_val.json
+  train_size: 20000          # stratified by (timeofday, weather)
+  min_per_stratum: 1
+  seed: 42
+  max_side: 1280             # BDD images are 1280x720, so they are copied unchanged
+  jpeg_quality: 90           # only used if an image is resized
+  min_box_px: 1.0            # drop boxes thinner than this after clipping
