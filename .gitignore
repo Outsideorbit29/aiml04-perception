@@ -31,3 +31,6 @@ ros2_ws/log/
 kaggle.json
 access_token
 .claude/settings.local.json
+
+# test fixtures are the only media allowed in git (<= 5 MB total)
+!tests/fixtures/*.mp4
