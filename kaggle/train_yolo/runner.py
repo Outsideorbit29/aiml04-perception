@@ -15,7 +15,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "main"  # branch, tag or commit SHA to run
-MODE = "smoke"  # smoke | train | resume
+MODE = "train"  # smoke | train | resume
 JOB_CMD = ["python", "-m", "scripts.train_yolo", "--config", "configs/yolo_bdd.yaml"]
 if MODE != "train":
     JOB_CMD.append(f"--{MODE}")
