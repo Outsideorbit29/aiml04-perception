@@ -1,0 +1,13 @@
+{
+  "id": "anish2906/aiml04-smoke-test",
+  "title": "aiml04-smoke-test",
+  "code_file": "runner.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}

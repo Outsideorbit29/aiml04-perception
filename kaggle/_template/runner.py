@@ -12,7 +12,7 @@ import sys
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "main"  # branch, tag or commit SHA to run
 JOB_CMD = ["python", "-c", "import torch; print('cuda', torch.cuda.is_available())"]
-WORKDIR = "/kaggle/working/repo"
+WORKDIR = "/kaggle/temp/repo"  # outside /kaggle/working so the code is not saved as job output
 
 
 def sh(cmd: list[str], **kw) -> None:

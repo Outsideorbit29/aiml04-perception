@@ -48,7 +48,7 @@ The plan uses about 22 GPU-hours spread across two weeks: training ~15 h, evals 
 Online:
 - [x] M0.1 Create the GitHub repo (public, so Kaggle can clone it without a token) and push this scaffold: github.com/Outsideorbit29/aiml04-perception
 - [x] M0.2 Kaggle account: phone verified, 30 h/week GPU quota available (username `anish2906`). The `WANDB_API_KEY` secret is attached per notebook on the first job push (see `kaggle/README.md`).
-- [ ] M0.3 Kaggle API token: Settings → API Tokens → Generate New Token, saved to `%USERPROFILE%\.kaggle\access_token` (you do this yourself). Kaggle CLI is installed.
+- [x] M0.3 Kaggle API token saved in `%USERPROFILE%\.kaggle\access_token`. The Kaggle CLI works, and `kaggle/smoke_test` ran on a Tesla T4 on 2026-11-09.
 - [ ] M0.4 W&B: `wandb login`, project `aiml04-perception`
 - [x] M0.5 GitHub Actions workflow running `pytest` and `ruff` on push
 - [x] M0.6 Scaffold the package layout from ARCHITECTURE.md section 5, plus `perception/types.py` with tests and the `kaggle/_template` runner
