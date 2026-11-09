@@ -6,7 +6,9 @@ repo, installs `requirements.txt`, and runs a single command on Kaggle's GPU.
 | Folder | Milestone | Owner agent |
 |---|---|---|
 | `_template/` | – | copy this to start a new job |
-| `data_prep/` | M1 | data-engineer |
+| `data_probe/` | M1 | data-engineer: lists the layout of candidate datasets (CPU) |
+| `data_prep/` | M1 | data-engineer: BDD100K to YOLO subset, EDA, fixtures (CPU, `anish2906/aiml04-data-prep`) |
+| `data_check/` | M1 | data-engineer: 1 tiny epoch on the prepared data (GPU, under 10 min) |
 | `train_yolo/` | M2 | detection-tracking |
 | `eval_track/` | M2 | detection-tracking |
 | `eval_lanes/`, `eval_depth/` | M3, M4 | lane-depth |
@@ -20,6 +22,17 @@ kaggle kernels push -p kaggle/<job>
 kaggle kernels status anish2906/aiml04-<job>
 kaggle kernels output anish2906/aiml04-<job> -p runs/<job>   # only if outputs are needed locally
 ```
+
+## Dataset mounts and chaining jobs
+- Attached datasets are mounted at `/kaggle/input/datasets/<owner>/<slug>/` (probed 2026-11-09),
+  not `/kaggle/input/<slug>/`. Scripts take paths from `configs/data_*.yaml` or CLI flags.
+- The BDD YOLO data is the **output of the data-prep kernel**, not a separate dataset (kernels
+  have no Kaggle API credentials). Later jobs attach it with
+  `"kernel_sources": ["anish2906/aiml04-data-prep"]` and use `configs/data_bdd.yaml`, or run
+  `python -m scripts.data.check_data_yaml` to write a YAML with the real mount path.
+- The data-prep output holds about 60k files. Don't run `kaggle kernels output` on it: listing
+  that many files trips the API rate limit. The small artifacts (EDA, fixtures, summaries) are
+  copied into the `data_check` job output instead.
 
 ## W&B
 Project `aiml04-perception`, entity `anish-grd2004-vellore-institute-of-technology` (the account's
