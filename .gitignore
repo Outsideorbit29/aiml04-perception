@@ -1,0 +1,32 @@
+# data, models, outputs
+data/
+models/
+runs/
+wandb/
+media/
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+*.bag
+*.db3
+*.mp4
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ros2
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# secrets / local
+.env
+kaggle.json
+.claude/settings.local.json
