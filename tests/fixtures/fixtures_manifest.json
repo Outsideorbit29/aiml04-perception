@@ -1,0 +1,70 @@
+{
+ "images": [
+  {
+   "file": "images/bdd_0_b1df722f-5bcc3db7.jpg",
+   "source_name": "b1df722f-5bcc3db7.jpg",
+   "timeofday": "daytime",
+   "weather": "clear",
+   "n_boxes": 22,
+   "size": [
+    320,
+    180
+   ]
+  },
+  {
+   "file": "images/bdd_1_b1ca8418-84a133a0.jpg",
+   "source_name": "b1ca8418-84a133a0.jpg",
+   "timeofday": "night",
+   "weather": "clear",
+   "n_boxes": 7,
+   "size": [
+    320,
+    180
+   ]
+  },
+  {
+   "file": "images/bdd_2_b1e1a7b8-65ec7612.jpg",
+   "source_name": "b1e1a7b8-65ec7612.jpg",
+   "timeofday": "daytime",
+   "weather": "rainy",
+   "n_boxes": 15,
+   "size": [
+    320,
+    180
+   ]
+  },
+  {
+   "file": "images/bdd_3_b20eae11-149766ce.jpg",
+   "source_name": "b20eae11-149766ce.jpg",
+   "timeofday": "night",
+   "weather": "rainy",
+   "n_boxes": 16,
+   "size": [
+    320,
+    180
+   ]
+  },
+  {
+   "file": "images/bdd_4_b1d7b3ac-afa57f22.jpg",
+   "source_name": "b1d7b3ac-afa57f22.jpg",
+   "timeofday": "dawn/dusk",
+   "weather": "clear",
+   "n_boxes": 4,
+   "size": [
+    320,
+    180
+   ]
+  }
+ ],
+ "clip": {
+  "file": "clip_kitti.mp4",
+  "source": "/kaggle/input/datasets/leducnhuan/kitti-tracking/kitti_tracking/training/image_02/0000",
+  "frames": 30,
+  "frames_read_back": 30,
+  "fps": 10.0,
+  "size": [
+   480,
+   144
+  ]
+ }
+}

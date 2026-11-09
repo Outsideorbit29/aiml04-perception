@@ -35,7 +35,7 @@ The plan uses about 22 GPU-hours spread across two weeks: training ~15 h, evals 
 | Milestone | Dates | Where | Agent | Exit criteria |
 |---|---|---|---|---|
 | M0 Setup | Nov 9–10 | ☁ + 💻 | main + sim-ros-integrator | Kaggle/W&B/GitHub ready, CARLA runs, WSL2 ROS2 talks to it |
-| M1 Data | Nov 10–11 | ☁ | data-engineer | BDD subset in YOLO format as a private Kaggle dataset, EDA notebook |
+| M1 Data | Nov 9 ✅ | ☁ | data-engineer | BDD subset in YOLO format (data-prep kernel output), EDA, class decision |
 | M2 Detect + Track | Nov 11–14 | ☁ | detection-tracking | Fine-tuned YOLO with mAP logged, ByteTrack video, MOT metrics |
 | M3 Lanes | Nov 13–15 | ☁ | lane-depth | Classical + learned lanes and a comparison table |
 | M4 Depth + Distance | Nov 15–16 | ☁ | lane-depth | Metric distance with error table vs KITTI GT |
@@ -59,11 +59,12 @@ On the laptop (one short session):
 - Exit: `docs/SETUP.md` steps verified end to end.
 
 ## M1 – Data (Nov 10–11) ☁ [data-engineer]
-- [ ] M1.1 Attach BDD100K and KITTI to a Kaggle notebook as Kaggle datasets (community uploads; check the licence and contents) or download them inside the notebook
-- [ ] M1.2 Build the 20k train subset (stratified by weather/time of day), convert to YOLO format, and save it as private Kaggle dataset `aiml04-bdd-yolo`
-- [ ] M1.3 EDA notebook: class counts, box sizes, day/night split, sample grids; download only the plots to `docs/figures/`
-- [ ] M1.4 Decide class handling (merge rider into person? oversample motorcycle?) and record it in EXPERIMENTS.md
-- [ ] M1.5 Tiny fixtures (5 images + labels, a 3-second clip) committed to `tests/fixtures/`. These are the only data files on the laptop.
+- [x] M1.1 BDD100K (`awsaf49/bdd100k-dataset`) and KITTI with velodyne (`garymk/kitti-3d-object-detection-dataset`) attached on Kaggle; licences checked (see EXPERIMENTS.md decisions)
+- [x] M1.2 20k train subset (stratified by time of day × weather, seed 42) + 10k val converted to YOLO; stored as the output of kernel `anish2906/aiml04-data-prep` (attach via `kernel_sources`) instead of a separate dataset
+- [x] M1.3 EDA (script `scripts/data/eda_bdd.py` on Kaggle): plots and summary in `docs/figures/`
+- [x] M1.4 Class handling decided: keep 9 classes, repeat-factor sampling for rare classes (EXPERIMENTS.md)
+- [x] M1.5 Fixtures committed to `tests/fixtures/` (5 BDD images + labels, 3 s KITTI clip, 516 KB). Sanity training job `aiml04-data-check` passed.
+- Moved to M4.4: KITTI depth-eval pairs (image, calib, projected LiDAR per box).
 
 ## M2 – Detection and tracking (Nov 11–14) ☁ [detection-tracking]
 - [ ] M2.1 Baseline: COCO-pretrained YOLO11s zero-shot on BDD val, mAP logged
