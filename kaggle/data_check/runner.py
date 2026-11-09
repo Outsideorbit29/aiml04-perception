@@ -13,6 +13,13 @@ import sys
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "main"  # branch, tag or commit SHA to run
 RESOLVED = "/kaggle/working/data_bdd_resolved.yaml"
+COPY_ARTIFACTS = (
+    "set -e; Y=$(find /kaggle/input -path '*bdd_yolo/data.yaml' | head -1); "
+    'P=$(dirname "$(dirname "$Y")"); A=/kaggle/working/m1_artifacts; mkdir -p $A; '
+    'cp -r "$P/eda" "$P/fixtures" $A/; cp "$P/bdd_yolo/meta/prep_summary.json" $A/; '
+    "cat $A/prep_summary.json; cat $A/eda/eda_summary.md; cat $A/fixtures/fixtures_manifest.json; "
+    "du -sh $A/*"
+)
 # M1 sanity check (GPU, <10 min): the data-prep output trains with Ultralytics.
 JOB_CMDS = [
     [
@@ -31,6 +38,9 @@ JOB_CMDS = [
         "--out",
         RESOLVED,
     ],
+    # Copy the small data-prep artifacts into this job's output: the data-prep output has ~60k
+    # files, and listing it through the API hits the rate limit.
+    ["bash", "-c", COPY_ARTIFACTS],
     [
         "yolo",
         "train",
