@@ -1,0 +1,63 @@
+# Camera models for geometric distance (M4.2). Read by perception.depth.load_camera(path, name).
+#
+# Flat-ground pinhole model: a box bottom at image row v sees the road at the angle
+#   alpha = pitch + atan((v - cy) / fy)          below the horizontal, so
+#   Z = height_m / tan(alpha)                    (= fy * h / (v - v_horizon) at zero pitch),
+# where v_horizon = cy - fy * tan(pitch). Z is the forward (longitudinal) distance from the camera
+# to the ground-contact point, which equals camera-frame depth at zero pitch.
+# Conventions: pitch_deg > 0 means the camera is tilted DOWN towards the road (horizon above cy).
+# fx/fy/cx/cy in pixels at width x height; a frame of another size is rescaled linearly.
+#
+# Uncertainty (used to weight geometric vs MiDaS and as Kalman measurement noise):
+#   std(Z) = Z^2 / h * sqrt((sigma_v_px / fy)^2 + sigma_pitch_rad^2)
+# sigma_v_px: error of the box bottom row (detector + contact point); sigma_pitch_deg: unknown
+# pitch from suspension / road slope. Both are per camera.
+
+kitti:
+  # KITTI rectified cam2 (image_2). The eval takes fx/fy/cx/cy and the image size from each
+  # frame's calib P2 and image (they vary slightly by drive date); these are the 2011_09_26
+  # values for other uses. Height 1.65 m from the KITTI setup paper (Geiger et al. 2013).
+  width: 1242
+  height: 375
+  fx: 721.5377
+  fy: 721.5377
+  cx: 609.5593
+  cy: 172.854
+  height_m: 1.65
+  pitch_deg: 0.0          # rectified frame is close to level; check the geometric signed bias
+  sigma_v_px: 2.0
+  sigma_pitch_deg: 0.5
+
+carla:
+  # CARLA ego RGB camera (ARCHITECTURE.md 3.7): 800x450, 90 deg horizontal FOV, no distortion.
+  # fx = fy = (800 / 2) / tan(45 deg) = 400, principal point at the image centre.
+  # PLACEHOLDER mount: there is no configs/carla*.yaml yet (M5). Height 1.6 m and zero pitch
+  # match the assumption in configs/lanes_carla.yaml; set both to the spawn transform used by
+  # sim/ (camera z above ground and pitch) in M5. With zero pitch the horizon is at y = 225.
+  width: 800
+  height: 450
+  fx: 400.0
+  fy: 400.0
+  cx: 400.0
+  cy: 225.0
+  height_m: 1.6           # PLACEHOLDER, set from the M5 camera spawn transform
+  pitch_deg: 0.0          # PLACEHOLDER, set from the M5 camera spawn transform
+  sigma_v_px: 1.5
+  sigma_pitch_deg: 0.3
+
+bdd:
+  # BDD100K dashcams (1280x720). BDD publishes no per-image intrinsics or mount height; all
+  # values here are PLACEHOLDERS for offline demos only (never used for reported metrics).
+  # fx ~ 1000 px is a typical 1280 px dashcam (~65 deg HFOV). Pitch is set so the horizon sits
+  # at y = 0.47 H (vanishing row measured in M3, configs/lanes_bdd.yaml):
+  # pitch = atan((cy - 0.47 * 720) / fy) = atan(21.6 / 1000) = 1.24 deg.
+  width: 1280
+  height: 720
+  fx: 1000.0              # PLACEHOLDER
+  fy: 1000.0              # PLACEHOLDER
+  cx: 640.0
+  cy: 360.0
+  height_m: 1.3           # PLACEHOLDER (dashcam behind the windscreen of a passenger car)
+  pitch_deg: 1.24
+  sigma_v_px: 3.0
+  sigma_pitch_deg: 1.0
