@@ -14,9 +14,13 @@ Add one row per run as soon as it finishes. W&B project: `aiml04-perception`.
 ## Tracking (M2)
 | Date | Tracker | Detector | Clip set | MOTA | IDF1 | ID sw | FPS | W&B |
 |---|---|---|---|---|---|---|---|---|
+| 2026-11-13 | ByteTrack default (buffer 30, consecutive 1) | YOLO11s BDD, agnostic NMS | KITTI tracking 0000/0001/0004/0011/0013/0015/0016/0017 (2,358 frames), IoU 0.5 | 52.3 | 65.7 | 310 | 52 (T4) | [qvrkp7t1](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/qvrkp7t1) |
+| 2026-11-13 | **ByteTrack tuned (buffer 60, consecutive 2) — new default** | same | same | **52.5** | **67.4** | **176** | 52 (T4) | [qvrkp7t1](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/qvrkp7t1) |
 | 2026-11-12 | ByteTrack (supervision) | YOLO11s BDD, agnostic NMS | KITTI tracking 0000, 0001, 0011 (754 frames) | – (M2.6) | – (M2.6) | – | 52 (det 15.9 ms + track 3.2 ms, T4) | [f4sdcuqk](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/f4sdcuqk) |
 
 KITTI videos are qualitative only (no MOT metrics yet). Fragmentation is visible: seq 0000 has 75 unique ids over 154 frames with ~7 objects active, and 23 tracks are shorter than 3 frames. M2.6 measures this properly (MOTA/IDF1/ID switches); if ID switches are high, try a longer `lost_track_buffer` and a lower activation threshold before trying DeepSORT.
+
+**M2.6 tracker sweep (6 configs, same cached detections).** Requiring 2 matched frames before a track gets an id removes most one-frame ghost tracks: ID switches 310 → 176, unique ids 972 → 591, tracks shorter than 3 frames 220 → 67, IDF1 65.7 → 67.4, MOTA unchanged (52.3 → 52.5). Cost: recall 67.7 → 64.6 and a new object appears one frame later (50 ms at 20 Hz in CARLA), acceptable for AEB at urban speeds. Longer buffers alone and a lower activation threshold made things slightly worse. By group: vehicles MOTA 63.7 / IDF1 75.7, pedestrians 38.5 / 54.9 (recall 50%; KITTI Cyclist boxes include the bike while BDD rider boxes don't, so part of the pedestrian gap is label mismatch). Ground truth is KITTI tracking, not BDD MOT (not available on Kaggle); classes are mapped in `configs/tracker_mot.yaml`, matching ignores class.
 
 ## Lanes (M3)
 | Date | Method | Eval set | IoU | F1 | Night F1 | FPS | W&B |
