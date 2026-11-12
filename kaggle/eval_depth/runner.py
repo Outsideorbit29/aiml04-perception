@@ -19,7 +19,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "m4-depth"  # branch, tag or commit SHA to run; set back to "main" before merging
-MODE = "smoke"  # smoke | full
+MODE = "full"  # smoke | full
 EXTRA = ["--smoke"] if MODE == "smoke" else []
 JOB_CMDS = [
     ["python", "-m", "scripts.eval_depth", "--config", "configs/depth_eval.yaml", *EXTRA],
