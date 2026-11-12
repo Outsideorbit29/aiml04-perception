@@ -67,8 +67,8 @@ On the laptop (one short session):
 - Moved to M4.4: KITTI depth-eval pairs (image, calib, projected LiDAR per box).
 
 ## M2 – Detection and tracking (Nov 11–14) ☁ [detection-tracking]
-- [ ] M2.1 Baseline: COCO-pretrained YOLO11s zero-shot on BDD val, mAP logged
-- [ ] M2.2 Fine-tune YOLO11s on Kaggle (640, batch 32 on T4 or P100, AMP, ~50 epochs). Split into 2 sessions with `resume=True`. The checkpoint is saved every epoch as a W&B artifact so a session timeout loses nothing.
+- [x] M2.1 Baseline: COCO-pretrained YOLO11s zero-shot on BDD val, mAP logged (mAP@0.5 0.361 on 7 shared classes)
+- [x] M2.2 Fine-tune YOLO11s on Kaggle (640, batch 32 on T4 or P100, AMP, ~50 epochs). Split into 2 sessions with `resume=True`. The checkpoint is saved every epoch as a W&B artifact so a session timeout loses nothing. Done 2026-11-09: 50 epochs in one 4.6 h session, mAP@0.5 0.553 / mAP@0.5:0.95 0.309.
 - [ ] M2.3 Evaluate: per-class AP, confusion matrix, failure gallery (night, small objects)
 - [ ] M2.4 `Detector` class with torch backend and a config switch for onnx/trt (filled in M6)
 - [ ] M2.5 ByteTrack integration through the `Tracker` class; annotated video rendered on Kaggle

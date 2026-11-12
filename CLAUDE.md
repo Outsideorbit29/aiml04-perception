@@ -39,6 +39,29 @@ Rules for delegation:
 - After an agent finishes, run `qa-reviewer` on its changes before ticking the milestone.
 - Safe parallel pairs: `data-engineer` + `sim-ros-integrator` (M1 with M5.1 setup), `detection-tracking` + `lane-depth` (M2 with M3).
 
+## Progress snapshot (update at the end of every session)
+Full checklist is in `PLAN.md`; numbers are in `docs/EXPERIMENTS.md`. This is the short version.
+
+_Last updated: 2026-11-12_
+
+| Milestone | Status | Notes |
+|---|---|---|
+| M0 Setup | Done except M0.7–M0.8 | GitHub, Kaggle, W&B, CI working. CARLA + WSL2/ROS2 local setup still open (needs user, laptop). |
+| M1 Data | Done | 20k BDD subset + 10k val in YOLO format (kernel `anish2906/aiml04-data-prep`), EDA, fixtures, class decision. |
+| M2 Detection/tracking | M2.1–M2.2 done | YOLO11s fine-tuned: mAP@0.5 **0.553** (zero-shot 0.361), W&B run `6euheeu2`, artifact `yolo11s-bdd-best`. Next: M2.3 eval gallery, M2.4 `Detector`, M2.5 ByteTrack, M2.6 MOT eval. |
+| M3 Lanes | Not started | Planned Nov 13–15. |
+| M4 Depth/distance | Not started | Planned Nov 15–16. |
+| M5 CARLA + ROS2 | Not started | Needs M0.7–M0.8 first. |
+| M6 ONNX/TensorRT | Not started | |
+| M7 Deliverables | Not started | |
+
+**Schedule:** about one day behind PLAN.md (M2 tracking work should have started Nov 11).
+
+Useful facts learned so far:
+- The Kaggle CLI is at `C:\Users\anish\AppData\Roaming\Python\Python314\Scripts\kaggle.exe` (not on PATH).
+- Fetch only small outputs from a job: `kaggle kernels output <ref> -p <dir> --file-pattern '\.(log|json|csv|yaml)$'`.
+- A 50-epoch YOLO11s run on 20k images at 640 takes ~4.6 h on a Kaggle T4 (fits one session).
+
 ## Claude-specific notes
 - **Keep the laptop load as low as possible. This is the user's explicit request.** Training, dataset downloads, dataset-wide evals, exports and benchmarks run on Kaggle, tests run in GitHub Actions, and metrics go to W&B. Write code locally, push it, launch it with `kaggle kernels push`, and monitor from W&B. Don't run GPU jobs or long processes on the laptop.
 - The laptop runs only: CARLA + ROS2 sessions (30 minutes or less, ask the user first), the one-time local TensorRT engine build, and demo recording.
