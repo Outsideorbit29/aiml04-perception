@@ -470,7 +470,8 @@ def main(argv: Iterable[str] | None = None) -> None:
                 table.add_data(r["name"], g, s, *[m[k] for k in METRICS.values()])
     run.log({"mot_metrics": table})
     summary: dict[str, Any] = {"best_config": best["name"], "det_ms": det_mean}
-    for tag, r in (("default", rows[0]), ("best", best)):
+    default = next((r for r in rows if r["name"] == "default"), rows[0])
+    for tag, r in (("baseline", rows[0]), ("default", default), ("best", best)):
         for k in ("mota", "idf1", "idsw", "mt", "ml", "fp", "fn"):
             summary[f"{tag}/{k}"] = r["metrics"]["all"]["overall"][k]
         summary[f"{tag}/fps_det_track"] = r["fps"]
