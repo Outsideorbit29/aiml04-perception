@@ -68,7 +68,7 @@ Definitions are in `.claude/agents/`. Each agent writes only to the paths it own
 | Agent | Owns (write access) | Milestones |
 |---|---|---|
 | `data-engineer` | `scripts/data/`, `notebooks/eda*.ipynb`, `configs/data_*.yaml`, `kaggle/data_prep/` | M1 |
-| `detection-tracking` | `perception/detection/`, `perception/tracking/`, `scripts/train_yolo.py`, `configs/yolo_*.yaml`, `configs/tracker*.yaml`, `kaggle/train_yolo/`, `kaggle/eval_track/` | M2 |
+| `detection-tracking` | `perception/detection/`, `perception/tracking/`, `scripts/train_yolo.py`, `configs/yolo_*.yaml`, `configs/tracker*.yaml`, `kaggle/train_yolo/`, `kaggle/eval_track/`, `kaggle/eval_mot/`, `scripts/eval_detection.py`, `scripts/eval_tracking.py`, `scripts/eval_mot.py` | M2 |
 | `lane-depth` | `perception/lanes/`, `perception/depth/`, `perception/fusion/`, `configs/lanes*.yaml`, `configs/depth*.yaml`, `kaggle/eval_lanes/`, `kaggle/eval_depth/` | M3, M4 |
 | `sim-ros-integrator` | `ros2_ws/`, `sim/`, `configs/carla*.yaml`, `perception/pipeline.py`, `kaggle/sim_eval/` | M5 |
 | `edge-optimizer` | `deploy/`, `configs/bench*.yaml`, `docs/benchmarks.md`, `kaggle/export_bench/` | M6 |
