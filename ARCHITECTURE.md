@@ -102,7 +102,7 @@ class weighting or oversampling for rare classes (rider, motorcycle).
 ### 3.3 Tracking (`perception/tracking/`)
 - **ByteTrack** is the default (`supervision` implementation, so the laptop runtime needs no PyTorch; config in `configs/tracker.yaml`). **DeepSORT** (`deep-sort-realtime`) is the comparison.
 - `Tracker.update(detections, frame) -> list[Track]`, which keeps the track id, class, bbox history and age.
-- Metrics on a BDD100K MOT subset: MOTA, IDF1, ID switches (TrackEval), plus FPS.
+- Metrics on KITTI tracking training sequences (BDD100K MOT is not on Kaggle): MOTA, IDF1, ID switches (`motmetrics`, IoU 0.5), plus FPS. See `scripts/eval_mot.py` and `configs/tracker_mot.yaml`.
 
 ### 3.4 Lane detection (`perception/lanes/`)
 | Approach | Method | Strength |
