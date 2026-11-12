@@ -2,7 +2,8 @@
 
     fusion = DistanceFusion(load_depth_config("configs/depth.yaml"),
                             load_camera("configs/camera.yaml", "carla"))
-    frame = fusion.update(tracks, lanes, stamp, frame_id, inv_depth=est.maybe_estimate(img))
+    inv = est.maybe_estimate(img)                       # None on skipped frames
+    frame = fusion.update(tracks, lanes, stamp, frame_id, img.shape[:2], inv_depth=inv)
 
 Per object (only classes in ``fusion.object_classes``; traffic lights/signs have no ground
 contact and would otherwise become false lead objects):
@@ -13,7 +14,9 @@ contact and would otherwise become false lead objects):
 3. Per-frame alignment ``1/Z = s*m + t`` on anchors = confident, near objects with a valid
    geometric distance (``anchors``). If no fit is possible, the last fit is reused for up to
    ``fusion.reuse_alignment_frames`` frames; MiDaS never yields a distance without a fit.
-4. Inverse-variance fusion of the geometric and aligned-MiDaS distances.
+4. Inverse-variance fusion of the geometric and aligned-MiDaS distances. The aligned-MiDaS
+   std is never below the camera's geometric inverse-depth noise (the anchors' own error), and
+   exactly determined fits are inflated (perception.depth.Alignment.inv_std).
 5. Per-track Kalman filter (perception.fusion.kalman) -> distance, std, closing speed, TTC.
 6. ``in_ego_lane`` = ``LaneResult.contains(box bottom-centre)``.
 Objects with no distance at all (no geometric, no aligned MiDaS, no live filter) are left out
@@ -49,6 +52,8 @@ class Measurement:
     midas: Estimate | None  # aligned MiDaS distance
     fused: Estimate | None
     anchor: bool  # used to fit the alignment
+    align_mode: str | None = None  # mode of the fit that produced ``midas`` (affine | scale)
+    align_anchors: int = 0  # anchors in that fit
 
 
 def fuse(estimates: list[Estimate | None]) -> Estimate | None:
@@ -156,9 +161,18 @@ class DistanceFusion:
             if a is not None and math.isfinite(m[i]):
                 z = float(a.to_depth(m[i]))
                 if math.isfinite(z):
-                    midas = (z, float(a.depth_std(z)))
+                    midas = (z, float(a.depth_std(z, cam.inv_depth_std())))
             out.append(
-                Measurement(d, geo[i], float(m[i]), midas, fuse([geo[i], midas]), bool(anchor[i]))
+                Measurement(
+                    d,
+                    geo[i],
+                    float(m[i]),
+                    midas,
+                    fuse([geo[i], midas]),
+                    bool(anchor[i]),
+                    a.mode if midas is not None else None,
+                    a.n_anchors if midas is not None else 0,
+                )
             )
         return out, align
 

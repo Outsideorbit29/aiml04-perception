@@ -9,8 +9,11 @@ process noise is white acceleration with std ``accel_std`` (m/s^2).
   ``Tracker.reset()``: a filter is created on the first measurement of an id;
 - an id that has not been measured for more than ``max_gap_s`` restarts from scratch, and filters
   older than ``max_age_s`` are pruned on every ``prune()``;
-- id switches (the id jumps to another object) show up as a class change or as an innovation
-  outside the ``gate_chi2`` gate; both restart the filter instead of blending two objects;
+- id switches (the id jumps to another object) show up as a class change (immediate restart) or
+  as innovations outside the ``gate_chi2`` gate. A single gated measurement is treated as an
+  outlier: the filter coasts on its prediction (closing speed and TTC survive one bad MiDaS or
+  box). ``gate_restart_count`` consecutive gated measurements mean a different object, and the
+  filter restarts from the latest one instead of blending two objects;
 - a stamp that does not advance (dt <= 0) restarts the filter.
 TTC is reported only after ``min_updates_for_ttc`` measurements and when the closing speed is
 above ``min_closing_speed_mps``; otherwise it is None. Pure numpy.
@@ -32,6 +35,7 @@ REQUIRED_KEYS = (
     "max_age_s",
     "min_updates_for_ttc",
     "min_closing_speed_mps",
+    "gate_restart_count",
 )
 
 
@@ -42,6 +46,7 @@ class FilterOutput:
     closing_speed_mps: float  # positive = getting closer
     ttc_s: float | None
     restarted: bool  # True if this call created or re-created the filter
+    coasted: bool = False  # True if the measurement was gated out and the prediction returned
 
 
 class DistanceKalman:
@@ -55,6 +60,7 @@ class DistanceKalman:
         self.last_meas = stamp  # time of the last measurement
         self.cls = cls
         self.updates = 1
+        self.gated = 0  # consecutive measurements rejected by the innovation gate
 
     def predict(self, stamp: float) -> None:
         dt = stamp - self.stamp
@@ -81,7 +87,7 @@ class DistanceKalman:
         self.last_meas = self.stamp
         self.updates += 1
 
-    def output(self, restarted: bool) -> FilterOutput:
+    def output(self, restarted: bool, coasted: bool = False) -> FilterOutput:
         d = float(self.x[0])
         closing = -float(self.x[1])
         ttc = None
@@ -91,7 +97,8 @@ class DistanceKalman:
             and d > 0
         ):
             ttc = d / closing
-        return FilterOutput(d, math.sqrt(max(self.P[0, 0], 0.0)), closing, ttc, restarted)
+        std = math.sqrt(max(self.P[0, 0], 0.0))
+        return FilterOutput(d, std, closing, ttc, restarted, coasted)
 
 
 class FilterBank:
@@ -104,10 +111,12 @@ class FilterBank:
         self.cfg = cfg
         self.filters: dict[int, DistanceKalman] = {}
         self.restarts = 0  # gate / class / time restarts of existing ids (diagnostics)
+        self.coasts = 0  # measurements gated out as outliers (diagnostics)
 
     def reset(self) -> None:
         self.filters.clear()
         self.restarts = 0
+        self.coasts = 0
 
     def __contains__(self, track_id: int) -> bool:
         return track_id in self.filters
@@ -115,15 +124,23 @@ class FilterBank:
     def update(self, track_id: int, cls: int, stamp: float, z: float, r_std: float) -> FilterOutput:
         """Fuse measurement z (std r_std) for ``track_id`` at ``stamp``."""
         f = self.filters.get(track_id)
-        if f is not None and self._must_restart(f, cls, stamp, z, r_std):
+        if f is not None and self._must_restart(f, cls, stamp):
             self.restarts += 1
             f = None
-        if f is None:
-            f = DistanceKalman(self.cfg, z, r_std, stamp, cls)
-            self.filters[track_id] = f
-            return f.output(restarted=True)
-        f.update(z, r_std)
-        return f.output(restarted=False)
+        if f is not None:
+            f.predict(stamp)
+            if f.nis(z, r_std) <= float(self.cfg["gate_chi2"]):
+                f.gated = 0
+                f.update(z, r_std)
+                return f.output(restarted=False)
+            f.gated += 1
+            if f.gated < int(self.cfg["gate_restart_count"]):
+                self.coasts += 1
+                return f.output(restarted=False, coasted=True)
+            self.restarts += 1  # persistent jump: a different object now carries this id
+        f = DistanceKalman(self.cfg, z, r_std, stamp, cls)
+        self.filters[track_id] = f
+        return f.output(restarted=True)
 
     def predict_only(self, track_id: int, stamp: float) -> FilterOutput | None:
         """Prediction for a track without a measurement this frame (None if unknown/stale)."""
@@ -140,11 +157,7 @@ class FilterBank:
         for i in stale:
             del self.filters[i]
 
-    def _must_restart(
-        self, f: DistanceKalman, cls: int, stamp: float, z: float, r_std: float
-    ) -> bool:
+    def _must_restart(self, f: DistanceKalman, cls: int, stamp: float) -> bool:
+        """Class change, time going backwards / not advancing, or a gap longer than max_gap_s."""
         gap = stamp - f.last_meas
-        if cls != f.cls or stamp < f.stamp or gap <= 0 or gap > float(self.cfg["max_gap_s"]):
-            return True
-        f.predict(stamp)
-        return f.nis(z, r_std) > float(self.cfg["gate_chi2"])
+        return cls != f.cls or stamp < f.stamp or gap <= 0 or gap > float(self.cfg["max_gap_s"])

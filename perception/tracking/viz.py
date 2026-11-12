@@ -36,7 +36,13 @@ def draw_tracks(
         ty = max(y1, th + base)
         cv2.rectangle(out, (x1, ty - th - base), (x1 + tw, ty), color, -1)
         cv2.putText(
-            out, label, (x1, ty - base), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 1,
+            out,
+            label,
+            (x1, ty - base),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (0, 0, 0),
+            1,
             cv2.LINE_AA,
         )
         if trail and len(t.history) > 1:

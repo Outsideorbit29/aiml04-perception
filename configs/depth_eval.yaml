@@ -33,6 +33,8 @@ gt:
   primary: lidar
   min_points: 5                         # fewer points -> "no LiDAR support" (counted, skipped)
   percentile: 50
+  percentile_low: 10                    # also reported: near-surface GT (cars seen at an angle
+                                        # have their median behind the nearest face)
   box3d_margin_m: 0.2
   ground_clearance_m: 0.1
   min_depth_m: 1.0                      # drop LiDAR points closer than this (behind/at camera)

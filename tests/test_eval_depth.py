@@ -161,6 +161,11 @@ def test_summarize_coverage_and_common_subset():
     assert s["all"]["common"]["b"]["absrel"] == pytest.approx(0.05)
     md = markdown_table(s, ["a", "b"], "methods")
     assert md.count("\n") == 1 + 2 * 4
+    # extra rows (e.g. MiDaS split by fit mode) do not shrink the common subset
+    recs[1]["a@scale"] = 22.0
+    s2 = summarize(recs, ["a", "b", "a@scale"], "gt", [[0, 10], [10, 30], [30, 60]], ["a", "b"])
+    assert s2["all"]["n_common"] == 1 and set(s2["all"]["common"]) == {"a", "b"}
+    assert s2["all"]["methods"]["a@scale"]["n"] == 1
 
 
 def test_overlays_render():

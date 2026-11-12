@@ -17,7 +17,8 @@ Ground truth per object:
   ``box3d_margin_m``, ground hits within ``ground_clearance_m`` of the box bottom dropped) are
   the object's surface; GT = ``gt.percentile`` of their camera z. Objects with fewer than
   ``gt.min_points`` such points have no LiDAR support: counted (by bin, class, occlusion) and
-  not scored.
+  not scored. ``lidar_low`` = ``gt.percentile_low`` of the same points (nearest surface) is
+  reported as well, to see how much of a bias is the median sitting behind the near face.
 * ``label_z`` (secondary): label_2 ``location`` z, the bottom centre of the 3D box (camera
   frame, y down). It is about half the object length behind the visible surface, so all
   methods look biased short against it; reported for completeness and as a geometry check
@@ -32,7 +33,10 @@ Methods (all metric distances, MiDaS is never reported unaligned):
   objects' geometric distances (``anchors``, ``alignment``). With ``leave_one_out`` an anchor's
   own MiDaS distance comes from a fit on the other anchors, so it is never scored against a
   fit that contains its own geometric estimate. Fewer than ``alignment.min_points_affine``
-  anchors -> scale-only fit; none -> no estimate (coverage < 100 %).
+  anchors (or anchors spanning < ``min_spread_ratio`` in depth) -> scale-only fit; none -> no
+  estimate (coverage < 100 %). Each object records the mode and anchor count of the fit that
+  produced its distance (``<model>_mode``), and ``<model>@affine`` / ``<model>@scale`` rows
+  split the scores by mode.
 * ``fused_<model>``: inverse-variance mean of geometric and aligned <model>, as in
   perception.fusion.DistanceFusion (no Kalman: KITTI object frames are independent).
 
@@ -77,6 +81,7 @@ from perception.types import Detection
 from scripts.eval_lanes import find_input, git_sha, gpu_name
 
 ALL_BIN = "all"
+ALIGN_MODES = ("affine", "scale")  # perception.depth.Alignment.mode
 
 # ---------------------------------------------------------------- KITTI helpers (pure)
 
@@ -191,20 +196,31 @@ def in_box3d(pts_rect: np.ndarray, obj: KittiObject, margin: float, clearance: f
     )
 
 
-def gt_lidar_distance(
+def object_lidar_depths(
     uv: np.ndarray, pts_rect: np.ndarray, obj: KittiObject, gcfg: dict[str, Any]
-) -> tuple[float, int]:
-    """(GT distance or NaN, number of supporting LiDAR points) for one object."""
+) -> np.ndarray:
+    """Camera z of the LiDAR points inside the 2D box and the (enlarged) 3D label box."""
     x1, y1, x2, y2 = obj.bbox
     in2d = (uv[:, 0] >= x1) & (uv[:, 0] <= x2) & (uv[:, 1] >= y1) & (uv[:, 1] <= y2)
     cand = pts_rect[in2d]
-    sel = cand[
-        in_box3d(cand, obj, float(gcfg["box3d_margin_m"]), float(gcfg["ground_clearance_m"]))
-    ]
-    n = int(len(sel))
-    if n < int(gcfg["min_points"]):
-        return float("nan"), n
-    return float(np.percentile(sel[:, 2], float(gcfg["percentile"]))), n
+    m = in_box3d(cand, obj, float(gcfg["box3d_margin_m"]), float(gcfg["ground_clearance_m"]))
+    return cand[m, 2]
+
+
+def gt_lidar_distance(
+    uv: np.ndarray,
+    pts_rect: np.ndarray,
+    obj: KittiObject,
+    gcfg: dict[str, Any],
+    percentile: float | None = None,
+) -> tuple[float, int]:
+    """(GT distance or NaN, number of supporting LiDAR points) for one object; the distance is
+    ``percentile`` (default ``gcfg["percentile"]``) of the object's LiDAR depths."""
+    z = object_lidar_depths(uv, pts_rect, obj, gcfg)
+    if z.size < int(gcfg["min_points"]):
+        return float("nan"), int(z.size)
+    q = float(gcfg["percentile"] if percentile is None else percentile)
+    return float(np.percentile(z, q)), int(z.size)
 
 
 def bin_label(d: float, bins: Sequence[Sequence[float]]) -> str | None:
@@ -230,9 +246,16 @@ def error_stats(pred: np.ndarray, gt: np.ndarray) -> dict[str, float | int]:
 
 
 def summarize(
-    records: list[dict], methods: Sequence[str], gt_key: str, bins: Sequence[Sequence[float]]
+    records: list[dict],
+    methods: Sequence[str],
+    gt_key: str,
+    bins: Sequence[Sequence[float]],
+    common_methods: Sequence[str] | None = None,
 ) -> dict[str, dict]:
-    """{bin: {"n_gt", "methods": {m: stats + coverage}, "common": {m: stats}}}."""
+    """{bin: {"n_gt", "methods": {m: stats + coverage}, "common": {m: stats}}}. The common
+    subset (objects every one of ``common_methods``, default ``methods``, estimated) is scored
+    for ``common_methods`` only."""
+    common_methods = list(methods if common_methods is None else common_methods)
     lo, hi = bins[0][0], bins[-1][1]
     groups: dict[str, list[dict]] = {f"{a:g}-{b:g}": [] for a, b in bins}
     groups[ALL_BIN] = []
@@ -253,9 +276,9 @@ def summarize(
             st = error_stats([r[m] for r in ok], [r[gt_key] for r in ok])
             st["coverage"] = len(ok) / len(rs) if rs else None
             entry["methods"][m] = st
-        common = [r for r in rs if all(r.get(m) is not None for m in methods)]
+        common = [r for r in rs if all(r.get(m) is not None for m in common_methods)]
         entry["n_common"] = len(common)
-        for m in methods:
+        for m in common_methods:
             entry["common"][m] = error_stats([r[m] for r in common], [r[gt_key] for r in common])
         out[name] = entry
     return out
@@ -470,6 +493,7 @@ def build_frame(
     records = []
     for i, (o, ms) in enumerate(zip(keep, meas, strict=True)):
         gl, n = gt_lidar_distance(uv, rect, o, gcfg)
+        gl_low, _ = gt_lidar_distance(uv, rect, o, gcfg, float(gcfg["percentile_low"]))
         records.append(
             {
                 "frame": fid,
@@ -481,6 +505,7 @@ def build_frame(
                 "truncated": o.truncated,
                 "n_lidar": n,
                 "gt_lidar": gl if math.isfinite(gl) else None,
+                "gt_lidar_low": gl_low if math.isfinite(gl_low) else None,
                 "gt_label_z": float(o.location[2]),
                 "geometric": ms.geometric[0] if ms.geometric else None,
                 "geometric_std": ms.geometric[1] if ms.geometric else None,
@@ -531,6 +556,11 @@ def run_model(
             rec[f"{name}_raw"] = ms.midas_value if math.isfinite(ms.midas_value) else None
             rec[name] = ms.midas[0] if ms.midas else None
             rec[f"fused_{name}"] = ms.fused[0] if ms.fused else None
+            # fit that produced this object's MiDaS distance (leave-one-out fit for anchors)
+            rec[f"{name}_mode"] = ms.align_mode
+            rec[f"{name}_fit_anchors"] = ms.align_anchors
+            for mode in ALIGN_MODES:
+                rec[f"{name}@{mode}"] = rec[name] if ms.align_mode == mode else None
         if fr["id"] in debug_ids:
             small = cv2.resize(inv, (inv.shape[1] // 2, inv.shape[0] // 2))
             maps[fr["id"]] = small
@@ -691,11 +721,14 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     ran = [m for m in cfg["models"] if m not in failed]
     methods = ["geometric", *ran, *(f"fused_{m}" for m in ran)]
+    # MiDaS rows split by the alignment mode that produced each object's distance
+    by_mode = [f"{m}@{mode}" for m in ran for mode in ALIGN_MODES]
     bins = cfg["bins"]
     results = {
         "setup": info,
         "methods": methods,
-        "primary": summarize(records, methods, "gt_lidar", bins),
+        "primary": summarize(records, [*methods, *by_mode], "gt_lidar", bins, methods),
+        "lidar_low": summarize(records, methods, "gt_lidar_low", bins),
         "label_z": summarize(records, methods, "gt_label_z", bins),
         "beyond_last_bin": sum(1 for r in records if (r["gt_lidar"] or 0) > bins[-1][1]),
     }
@@ -723,6 +756,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         "",
         "## GT = LiDAR, common subset (objects every method estimated)",
         markdown_table(results["primary"], methods, "common"),
+        "",
+        "## GT = LiDAR, MiDaS split by alignment mode (affine vs scale-only fit)",
+        markdown_table(results["primary"], by_mode, "methods"),
+        "",
+        f"## GT = LiDAR p{cfg['gt']['percentile_low']:g} (near surface), each method",
+        markdown_table(results["lidar_low"], methods, "methods"),
         "",
         "## GT = label_2 location z (secondary, box centre: expect negative bias)",
         markdown_table(results["label_z"], methods, "methods"),
@@ -752,7 +791,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         pred_files.append(p)
 
     rows = []
-    for gt_name in ("primary", "label_z"):
+    for gt_name in ("primary", "lidar_low", "label_z"):
         for b, entry in results[gt_name].items():
             for m in methods:
                 st = entry["methods"][m]

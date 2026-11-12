@@ -52,9 +52,14 @@ alignment:                  # perception.depth.ScaleAligner: 1/Z = s*m + t
   huber_k: 1.5              # IRLS Huber threshold in robust-sigma units
   reject_k: 3.0             # final inlier threshold in robust-sigma units
   irls_iters: 5
-  sigma_floor: 0.003        # 1/m: floor of the residual scale and of the aligned depth std
-                            # (geometric inverse-depth noise is ~0.005 1/m for KITTI)
+  sigma_floor: 0.003        # 1/m: floor of the IRLS residual scale; the aligned depth std is
+                            # also floored at the camera's geometric inverse-depth std
+                            # (CameraModel.inv_depth_std, ~0.0055 1/m for KITTI)
   min_inv_depth: 0.005      # 1/Z below this (Z > 200 m) -> no MiDaS distance
+  min_spread_ratio: 1.5     # affine only if farthest / nearest anchor >= this, else scale-only
+                            # (anchors at similar depths make the slope arbitrary)
+  no_dof_inflation: 2.0     # exactly determined fit (no spare anchor): std = this x the camera's
+                            # geometric inverse-depth std (the aligned std never goes below it)
 
 fusion:
   object_classes: [car, truck, bus, person, rider, bicycle, motorcycle]  # road users only
@@ -63,7 +68,8 @@ fusion:
 kalman:                     # perception.fusion.FilterBank (per track id)
   accel_std: 3.0            # m/s^2 white-acceleration process noise
   init_velocity_std: 10.0   # m/s, velocity is unknown on the first measurement
-  gate_chi2: 16.0           # innovation NIS above this = id switch -> restart (4 sigma)
+  gate_chi2: 16.0           # innovation NIS above this (4 sigma) = outlier: coast on prediction
+  gate_restart_count: 2     # this many gated measurements in a row = id switch -> restart
   max_gap_s: 1.0            # no measurement for longer -> restart on the next one
   max_age_s: 2.0            # prune filters older than this
   min_updates_for_ttc: 3    # TTC only after this many measurements

@@ -109,8 +109,11 @@ class CameraModel:
 
     def distance_std(self, z: float) -> float:
         """1-sigma error of a flat-ground distance z from row noise and pitch noise."""
-        rel = math.hypot(self.sigma_v_px / self.fy, self.sigma_pitch_rad)
-        return z * z / self.height_m * rel
+        return z * z * self.inv_depth_std()
+
+    def inv_depth_std(self) -> float:
+        """1-sigma error of 1/Z for a flat-ground distance (1/m), the same at every distance."""
+        return math.hypot(self.sigma_v_px / self.fy, self.sigma_pitch_rad) / self.height_m
 
     def row_of_distance(self, z: float) -> float:
         """Inverse of ground_distance: image row of the ground point at forward distance z."""

@@ -10,7 +10,8 @@ constant (std(1/Z) = std(Z) / Z^2 = sqrt((sigma_v / fy)^2 + sigma_pitch^2) / h),
 equal weight. Robustness: iteratively reweighted least squares with Huber weights (residual
 scale from the MAD, floored at ``sigma_floor``), then one refit on the inliers.
 
-With fewer than ``min_points_affine`` anchors the shift cannot be estimated; we fall back to a
+With fewer than ``min_points_affine`` anchors, or anchors spanning less than
+``min_spread_ratio`` (farthest / nearest distance), the shift cannot be estimated; we fall back to a
 scale-only fit (t = 0, s = median(1/(Z m))) if ``allow_scale_only``. With no anchors there is no
 alignment and MiDaS gives no metric distance. Pure numpy.
 """
@@ -30,12 +31,15 @@ REQUIRED_KEYS = (
     "irls_iters",
     "sigma_floor",
     "min_inv_depth",
+    "min_spread_ratio",
+    "no_dof_inflation",
 )
 
 
 @dataclass(frozen=True)
 class Alignment:
-    """Fitted ``1/Z = s*m + t``. ``rms`` is the inlier residual RMS in 1/m."""
+    """Fitted ``1/Z = s*m + t``. ``rms`` is the inlier residual RMS in 1/m; ``dof`` = inliers
+    minus fitted parameters (0 = exactly determined, the residual says nothing)."""
 
     s: float
     t: float
@@ -43,8 +47,10 @@ class Alignment:
     n_anchors: int
     n_inliers: int
     mode: str  # "affine" | "scale"
+    dof: int
     sigma_floor: float
     min_inv_depth: float
+    no_dof_inflation: float
 
     def inv_depth(self, m: np.ndarray | float) -> np.ndarray:
         return self.s * np.asarray(m, dtype=np.float64) + self.t
@@ -55,10 +61,23 @@ class Alignment:
         with np.errstate(divide="ignore", invalid="ignore"):
             return np.where(inv > self.min_inv_depth, 1.0 / inv, np.nan)
 
-    def depth_std(self, z: np.ndarray | float) -> np.ndarray:
-        """1-sigma error of an aligned depth z: the inverse-depth residual propagated to Z."""
+    def inv_std(self, min_inv_std: float = 0.0) -> float:
+        """1-sigma error of an aligned inverse depth (1/m).
+
+        The anchors' own geometric noise ``min_inv_std`` (CameraModel.inv_depth_std) is a lower
+        bound: the fit cannot be more accurate than the distances it was fitted to. With spare
+        anchors (dof > 0) the unbiased residual RMS is used above that bound; an exactly
+        determined fit has no residual information and gets ``no_dof_inflation`` times the bound.
+        """
+        bound = max(min_inv_std, self.sigma_floor)
+        if self.dof <= 0:
+            return self.no_dof_inflation * bound
+        return max(self.rms * float(np.sqrt(self.n_inliers / self.dof)), bound)
+
+    def depth_std(self, z: np.ndarray | float, min_inv_std: float = 0.0) -> np.ndarray:
+        """1-sigma error of an aligned depth z: ``inv_std`` propagated, std(Z) = Z^2 std(1/Z)."""
         z = np.asarray(z, dtype=np.float64)
-        return z * z * max(self.rms, self.sigma_floor)
+        return z * z * self.inv_std(min_inv_std)
 
 
 class ScaleAligner:
@@ -77,6 +96,8 @@ class ScaleAligner:
         self.iters = int(cfg["irls_iters"])
         self.sigma_floor = float(cfg["sigma_floor"])
         self.min_inv_depth = float(cfg["min_inv_depth"])
+        self.min_spread = float(cfg["min_spread_ratio"])
+        self.no_dof_inflation = float(cfg["no_dof_inflation"])
 
     def fit(self, m: np.ndarray, z: np.ndarray) -> Alignment | None:
         """Fit on anchors with MiDaS values ``m`` and metric depths ``z`` (same length)."""
@@ -87,7 +108,10 @@ class ScaleAligner:
         ok = np.isfinite(m) & np.isfinite(z) & (z > 0)
         m, y = m[ok], 1.0 / z[ok]
         n = m.size
-        if n >= self.min_affine:
+        # Affine needs anchors spread in depth; nearly equal depths make the slope arbitrary and
+        # the fit extrapolates wildly to other distances.
+        spread = float(z[ok].max() / z[ok].min()) if n else 0.0
+        if n >= self.min_affine and spread >= self.min_spread:
             res = self._fit_affine(m, y)
             if res is not None:
                 return res
@@ -99,7 +123,19 @@ class ScaleAligner:
         if not np.isfinite(s) or not np.isfinite(t) or s <= 0:
             return None
         rms = float(np.sqrt(np.mean(r * r))) if r.size else 0.0
-        return Alignment(s, t, rms, n, int(r.size), mode, self.sigma_floor, self.min_inv_depth)
+        n_params = 2 if mode == "affine" else 1
+        return Alignment(
+            s,
+            t,
+            rms,
+            n,
+            int(r.size),
+            mode,
+            int(r.size) - n_params,
+            self.sigma_floor,
+            self.min_inv_depth,
+            self.no_dof_inflation,
+        )
 
     def _scale(self, r: np.ndarray) -> float:
         mad = 1.4826 * float(np.median(np.abs(r - np.median(r))))

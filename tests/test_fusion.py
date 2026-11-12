@@ -21,6 +21,7 @@ KF = {
     "max_age_s": 2.0,
     "min_updates_for_ttc": 3,
     "min_closing_speed_mps": 0.5,
+    "gate_restart_count": 2,
 }
 CAM = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.5, 0.0, 1.0, 0.0)
 CFG = {
@@ -35,6 +36,8 @@ CFG = {
         "irls_iters": 5,
         "sigma_floor": 1e-4,
         "min_inv_depth": 1e-3,
+        "min_spread_ratio": 1.5,
+        "no_dof_inflation": 2.0,
     },
     "fusion": {"object_classes": ["car", "person"], "reuse_alignment_frames": 2},
     "kalman": KF,
@@ -77,12 +80,15 @@ def test_id_gap_switch_and_prune():
     assert bank.predict_only(7, 0.6) is not None
     out = bank.update(7, 0, 0.7, 30.0 - 0.5 * 7, 0.3)
     assert not out.restarted
-    # id switch to an object 15 m further away: innovation gate restarts the filter
+    # id switch to an object 15 m further away: the first jump is gated out (coast), the second
+    # consecutive one restarts the filter on the new object
     out = bank.update(7, 0, 0.8, 30.0 - 0.5 * 8 + 15.0, 0.3)
-    assert out.restarted and out.distance_m == pytest.approx(41.0)
-    assert bank.restarts == 1
-    # class change on the same id also restarts
-    assert bank.update(7, 3, 0.9, 41.0, 0.3).restarted
+    assert out.coasted and not out.restarted and out.distance_m == pytest.approx(26.0, abs=0.3)
+    out = bank.update(7, 0, 0.9, 30.0 - 0.5 * 9 + 15.0, 0.3)
+    assert out.restarted and out.distance_m == pytest.approx(40.5)
+    assert bank.restarts == 1 and bank.coasts == 1
+    # class change on the same id restarts at once
+    assert bank.update(7, 3, 1.0, 40.5, 0.3).restarted
     # long gap: restart; unknown id: no prediction; stale ids pruned
     assert bank.update(7, 3, 2.5, 41.0, 0.3).restarted
     assert bank.predict_only(99, 2.5) is None
@@ -93,6 +99,22 @@ def test_id_gap_switch_and_prune():
     assert bank.update(8, 0, 0.0, 10.0, 0.3).restarted
     bank.reset()
     assert not bank.filters
+
+
+def test_single_outlier_keeps_closing_speed_and_ttc():
+    bank = FilterBank(KF)
+    dt, v = 0.05, 8.0
+    for k in range(40):
+        out = bank.update(1, 0, k * dt, 40.0 - v * k * dt, 0.2)
+    before = out
+    # one frame where the distance doubles (bad box / MiDaS): coast on the prediction
+    out = bank.update(1, 0, 40 * dt, 2.0 * (40.0 - v * 40 * dt), 0.2)
+    assert out.coasted and not out.restarted
+    assert out.closing_speed_mps == pytest.approx(v, abs=0.5) and out.ttc_s is not None
+    out = bank.update(1, 0, 41 * dt, 40.0 - v * 41 * dt, 0.2)  # back to normal: no restart
+    assert not out.restarted and not out.coasted
+    assert out.ttc_s == pytest.approx((40.0 - v * 41 * dt) / v, rel=0.1)
+    assert before.ttc_s is not None and bank.restarts == 0
 
 
 def test_fuse_inverse_variance():

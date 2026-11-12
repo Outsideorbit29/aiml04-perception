@@ -42,6 +42,8 @@ ALIGN = {
     "irls_iters": 5,
     "sigma_floor": 1e-4,
     "min_inv_depth": 1e-3,
+    "min_spread_ratio": 1.5,
+    "no_dof_inflation": 2.0,
 }
 
 
@@ -78,6 +80,7 @@ def test_rows_at_or_above_horizon_have_no_distance():
     # min angle: 1 deg below the horizontal is ~7 px at f=400
     assert CAM.ground_distance(228.0, min_angle_rad=math.radians(1.0)) is None
     assert CAM.ground_distance(240.0, min_angle_rad=math.radians(1.0)) is not None
+    assert CAM.inv_depth_std() == pytest.approx(1.0 / 400.0 / 1.5)
 
 
 def test_intrinsics_from_projection_and_rescale():
@@ -150,6 +153,41 @@ def test_alignment_fallbacks():
     # far values beyond 1/min_inv_depth give NaN instead of a huge distance
     a = al.fit([100.0, 50.0, 25.0], [5.0, 10.0, 20.0])
     assert np.isnan(a.to_depth(0.01))
+
+
+def test_affine_needs_depth_spread():
+    """Three noisy anchors at ~10 m and a target at 30 m: an affine fit extrapolates wildly, so
+    anchors spanning less than min_spread_ratio fall back to the scale-only fit."""
+    z = np.array([10.0, 10.4, 10.8])
+    m = (1.0 / z) / 0.002  # MiDaS with zero shift
+    m_target = (1.0 / 30.0) / 0.002
+    for seed in (0, 3, 5):
+        z_geo = z * (1 + np.random.default_rng(seed).normal(0, 0.03, 3))  # 3 % geometric noise
+        a = ScaleAligner(ALIGN).fit(m, z_geo)
+        assert a.mode == "scale"
+        assert a.to_depth(m_target) == pytest.approx(30.0, rel=0.03)
+        forced = ScaleAligner({**ALIGN, "min_spread_ratio": 0.0}).fit(m, z_geo)
+        assert forced.mode == "affine"
+        assert not abs(forced.to_depth(m_target) - 30.0) / 30.0 < 0.3
+
+
+def test_aligned_std_floors_and_dof():
+    z = np.array([5.0, 10.0, 20.0])
+    m = 500.0 / z
+    exact = ScaleAligner({**ALIGN, "min_points_affine": 3}).fit(m[:2], z[:2])  # 2 pts: scale
+    assert exact.mode == "scale" and exact.dof == 1
+    a3 = ScaleAligner(ALIGN).fit(m, z)
+    assert a3.mode == "affine" and a3.dof == 1 and a3.rms == pytest.approx(0.0, abs=1e-12)
+    cam_inv = 0.005
+    # a perfect fit is never trusted more than the geometric distances it was fitted to
+    assert a3.inv_std(cam_inv) == pytest.approx(cam_inv)
+    assert a3.depth_std(10.0, cam_inv) == pytest.approx(100.0 * cam_inv)
+    # exactly determined (1 anchor, scale-only): inflated
+    one = ScaleAligner(ALIGN).fit(m[:1], z[:1])
+    assert one.dof == 0 and one.inv_std(cam_inv) == pytest.approx(2.0 * cam_inv)
+    # spare anchors with real residuals: unbiased RMS above the floor is used
+    noisy = ScaleAligner({**ALIGN, "reject_k": 100.0}).fit(m, z * [1.0, 1.3, 1.0])
+    assert noisy.dof == 1 and noisy.inv_std(1e-6) > noisy.rms > 0
 
 
 def test_alignment_rejects_bad_config():
