@@ -12,6 +12,7 @@ import sys
 
 import numpy as np
 import pytest
+import yaml
 
 from perception.depth import (
     CameraModel,
@@ -21,6 +22,7 @@ from perception.depth import (
     load_depth_config,
     sample_box,
 )
+from perception.depth.camera import REPO_ROOT
 
 CAM = CameraModel(
     width=800,
@@ -262,7 +264,7 @@ def test_importing_depth_and_fusion_does_not_import_torch():
         "import sys; import perception.depth, perception.fusion; "
         "assert 'torch' not in sys.modules and 'onnxruntime' not in sys.modules"
     )
-    subprocess.run([sys.executable, "-c", code], check=True)
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=REPO_ROOT)
 
 
 def test_shipped_configs_load():
@@ -273,5 +275,8 @@ def test_shipped_configs_load():
     for name in ("kitti", "carla", "bdd"):
         cam = load_camera("configs/camera.yaml", name)
         assert 0 < cam.horizon_row < cam.height
+    # fusion matches classes by name: every kept class must be a detector class name
+    names = set(yaml.safe_load((REPO_ROOT / "configs/data_bdd.yaml").read_text())["names"].values())
+    assert set(cfg["fusion"]["object_classes"]) <= names
     carla = load_camera("configs/camera.yaml", "carla")
     assert carla.fx == pytest.approx(carla.width / 2 / math.tan(math.radians(45)))

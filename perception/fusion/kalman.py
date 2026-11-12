@@ -9,11 +9,13 @@ process noise is white acceleration with std ``accel_std`` (m/s^2).
   ``Tracker.reset()``: a filter is created on the first measurement of an id;
 - an id that has not been measured for more than ``max_gap_s`` restarts from scratch, and filters
   older than ``max_age_s`` are pruned on every ``prune()``;
-- id switches (the id jumps to another object) show up as a class change (immediate restart) or
-  as innovations outside the ``gate_chi2`` gate. A single gated measurement is treated as an
-  outlier: the filter coasts on its prediction (closing speed and TTC survive one bad MiDaS or
-  box). ``gate_restart_count`` consecutive gated measurements mean a different object, and the
-  filter restarts from the latest one instead of blending two objects;
+- id switches (the id jumps to another object) show up as innovations outside the
+  ``gate_chi2`` gate. A class change restarts the filter only if ``restart_on_class_change``
+  (off by default: ByteTrack ignores class, so car/truck flips on one object are common).
+  A single gated measurement is treated as an outlier: the filter coasts on its prediction
+  (closing speed and TTC survive one bad MiDaS value or box). ``gate_restart_count``
+  consecutive gated measurements mean a different object, and the filter restarts from the
+  latest one instead of blending two objects;
 - a stamp that does not advance (dt <= 0) restarts the filter.
 TTC is reported only after ``min_updates_for_ttc`` measurements and when the closing speed is
 above ``min_closing_speed_mps``; otherwise it is None. Pure numpy.
@@ -36,6 +38,7 @@ REQUIRED_KEYS = (
     "min_updates_for_ttc",
     "min_closing_speed_mps",
     "gate_restart_count",
+    "restart_on_class_change",
 )
 
 
@@ -158,6 +161,11 @@ class FilterBank:
             del self.filters[i]
 
     def _must_restart(self, f: DistanceKalman, cls: int, stamp: float) -> bool:
-        """Class change, time going backwards / not advancing, or a gap longer than max_gap_s."""
+        """Time going backwards / not advancing, a gap longer than max_gap_s, or (if
+        ``restart_on_class_change``) a class change."""
         gap = stamp - f.last_meas
-        return cls != f.cls or stamp < f.stamp or gap <= 0 or gap > float(self.cfg["max_gap_s"])
+        flip = cls != f.cls
+        f.cls = cls
+        if flip and bool(self.cfg["restart_on_class_change"]):
+            return True
+        return stamp < f.stamp or gap <= 0 or gap > float(self.cfg["max_gap_s"])

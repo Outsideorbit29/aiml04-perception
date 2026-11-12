@@ -22,6 +22,7 @@ KF = {
     "min_updates_for_ttc": 3,
     "min_closing_speed_mps": 0.5,
     "gate_restart_count": 2,
+    "restart_on_class_change": False,
 }
 CAM = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.5, 0.0, 1.0, 0.0)
 CFG = {
@@ -87,8 +88,10 @@ def test_id_gap_switch_and_prune():
     out = bank.update(7, 0, 0.9, 30.0 - 0.5 * 9 + 15.0, 0.3)
     assert out.restarted and out.distance_m == pytest.approx(40.5)
     assert bank.restarts == 1 and bank.coasts == 1
-    # class change on the same id restarts at once
-    assert bank.update(7, 3, 1.0, 40.5, 0.3).restarted
+    # class change restarts at once only when configured
+    strict = FilterBank({**KF, "restart_on_class_change": True})
+    strict.update(7, 0, 0.0, 40.0, 0.3)
+    assert strict.update(7, 3, 0.1, 40.0, 0.3).restarted
     # long gap: restart; unknown id: no prediction; stale ids pruned
     assert bank.update(7, 3, 2.5, 41.0, 0.3).restarted
     assert bank.predict_only(99, 2.5) is None
@@ -115,6 +118,18 @@ def test_single_outlier_keeps_closing_speed_and_ttc():
     assert not out.restarted and not out.coasted
     assert out.ttc_s == pytest.approx((40.0 - v * 41 * dt) / v, rel=0.1)
     assert before.ttc_s is not None and bank.restarts == 0
+
+
+def test_class_flip_keeps_filter_state():
+    """car -> truck -> car on one track (ByteTrack ignores class): closing speed survives."""
+    bank = FilterBank(KF)
+    dt, v = 0.05, 6.0
+    for k in range(40):
+        cls = 1 if k in (30, 31, 35) else 0
+        out = bank.update(1, cls, k * dt, 30.0 - v * k * dt, 0.2)
+        assert not (k > 0 and out.restarted)
+    assert out.closing_speed_mps == pytest.approx(v, abs=0.5) and out.ttc_s is not None
+    assert bank.restarts == 0
 
 
 def test_fuse_inverse_variance():

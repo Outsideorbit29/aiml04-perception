@@ -70,6 +70,8 @@ kalman:                     # perception.fusion.FilterBank (per track id)
   init_velocity_std: 10.0   # m/s, velocity is unknown on the first measurement
   gate_chi2: 16.0           # innovation NIS above this (4 sigma) = outlier: coast on prediction
   gate_restart_count: 2     # this many gated measurements in a row = id switch -> restart
+  restart_on_class_change: false  # ByteTrack ignores class; car/truck flips on one object are
+                                  # common, and the gate already catches a real id switch
   max_gap_s: 1.0            # no measurement for longer -> restart on the next one
   max_age_s: 2.0            # prune filters older than this
   min_updates_for_ttc: 3    # TTC only after this many measurements

@@ -714,7 +714,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             }
             print(traceback.format_exc(), flush=True)
             for r in records:  # no partial results from a failed model
-                for key in (name, f"fused_{name}", f"{name}_raw"):
+                keys = [name, f"fused_{name}", f"{name}_raw", f"{name}_mode"]
+                keys += [f"{name}_fit_anchors", *(f"{name}@{mode}" for mode in ALIGN_MODES)]
+                for key in keys:
                     r.pop(key, None)
             free_gpu()
     info["models"] = model_info
