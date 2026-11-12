@@ -46,13 +46,13 @@ def _line_through(p_bottom: np.ndarray, p_top: np.ndarray) -> LineFn:
     return lambda y: x0 + slope * (np.asarray(y, dtype=np.float64) - y0)
 
 
-def _painted_road() -> tuple[np.ndarray, LineFn, LineFn]:
+def _painted_road(h: int = H, w: int = W) -> tuple[np.ndarray, LineFn, LineFn]:
     """Grey road with two white straight lane lines that lie on the warp trapezoid edges."""
-    img = np.full((H, W, 3), 90, np.uint8)
-    src = frac_to_px(SRC, W, H)
+    img = np.full((h, w, 3), 90, np.uint8)
+    src = frac_to_px(SRC, w, h)
     left_x = _line_through(src[3], src[0])
     right_x = _line_through(src[2], src[1])
-    y0, y1 = 0.58 * (H - 1), H - 1.0
+    y0, y1 = 0.58 * (h - 1), h - 1.0
     for fx in (left_x, right_x):
         p0 = (int(round(fx(y0))), int(round(y0)))
         p1 = (int(round(fx(y1))), int(round(y1)))
@@ -162,6 +162,71 @@ def test_synthetic_road_recovers_both_lines(cfg):
     assert res.contains(mid, y)
     assert not res.contains(left_x(y) - 30, y)
     assert not res.contains(right_x(y) + 30, y)
+
+
+@pytest.mark.parametrize(
+    "shape_hw",
+    [(180, 320), (375, 1242), (450, 800), (720, 1280)],
+    ids=["bdd_fixture", "kitti", "carla", "bdd_full"],
+)
+def test_synthetic_road_non_default_sizes(cfg, shape_hw):
+    # Fractional config must give the same image-space result at every aspect ratio
+    # (checks BEV <-> image back-projection is not tied to 640x360).
+    h, w = shape_hw
+    cfg["smoothing"]["enabled"] = False
+    img, left_x, right_x = _painted_road(h, w)
+    res = build_lane_detector(cfg).detect(img)
+    _check_result_types(res, (h, w))
+    assert res.left is not None and res.right is not None
+    assert res.confidence >= 7 / 9 - 1e-9
+    ys = np.linspace(0.64 * (h - 1), 0.88 * (h - 1), 20)
+    tol = max(3.0, 0.005 * w)
+    assert np.abs(res.left.x_at(ys) - left_x(ys)).max() < tol
+    assert np.abs(res.right.x_at(ys) - right_x(ys)).max() < tol
+
+
+def test_one_detector_handles_frame_size_change(cfg):
+    # LaneFitter caches the warp/ROI per size; a new size must rebuild them, not reuse stale ones.
+    cfg["smoothing"]["enabled"] = False
+    det = build_lane_detector(cfg)
+    for h, w in ((H, W), (450, 800), (H, W)):
+        img, left_x, right_x = _painted_road(h, w)
+        res = det.detect(img)
+        _check_result_types(res, (h, w))
+        assert res.left is not None and res.right is not None
+        y = 0.8 * (h - 1)
+        assert abs(float(res.left.x_at(y)) - float(left_x(y))) < max(3.0, 0.005 * w)
+
+
+def test_single_image_mode_has_no_state_leak(cfg):
+    # M3.3 BDD eval: independent images. With smoothing off, a blank image after a road image
+    # must give no lanes; with every_n_frames > 1, reset() must force a fresh inference.
+    cfg["smoothing"]["enabled"] = False
+    det = build_lane_detector(cfg)
+    img, _, _ = _painted_road()
+    blank = np.full((H, W, 3), 90, np.uint8)
+    assert det.detect(img).left is not None
+    assert det.detect(blank).left is None
+
+    cfg["classical"]["every_n_frames"] = 2
+    det = build_lane_detector(cfg)
+    assert det.detect(img).left is not None
+    det.reset()
+    assert det.detect(blank).left is None
+
+
+def test_ego_mask_spans_only_measured_rows(cfg):
+    cfg["smoothing"]["enabled"] = False
+    img, left_x, right_x = _painted_road()
+    det = build_lane_detector(cfg)
+    res = det.detect(img)
+    assert res.ego_mask is not None
+    y_top = int(np.ceil(det.last_debug["y_top"]))
+    assert not res.ego_mask[:y_top].any()  # nothing above the bird's-eye region (sky)
+    y = int(0.8 * (H - 1))
+    row = np.flatnonzero(res.ego_mask[y])
+    assert row.size > 0
+    assert abs(row[0] - left_x(y)) <= 3 and abs(row[-1] - right_x(y)) <= 3
 
 
 def test_blank_road_gives_no_lanes(cfg):
