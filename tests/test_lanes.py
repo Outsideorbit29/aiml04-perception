@@ -502,7 +502,7 @@ def test_yolop_mocked_recovers_lines(cfg, shape_hw):
     tol = max(4.0, 0.006 * w)
     assert np.abs(res.left.x_at(ys) - left_x(ys)).max() < tol
     assert np.abs(res.right.x_at(ys) - right_x(ys)).max() < tol
-    assert set(det.last_timing_ms) == {"pre_ms", "model_ms", "post_ms"}
+    assert set(det.last_timing_ms) == {"pre_ms", "model_ms", "post_ms", "binary_ms", "fit_ms"}
 
 
 def test_yolop_every_n_frames_and_stateless(cfg):
@@ -649,10 +649,12 @@ def test_stratified_sample_is_deterministic():
 def test_aggregate_and_markdown_table():
     from scripts.eval_lanes import aggregate, markdown_table, timing_stats
 
-    def m(inter, union, tp, fp, fn):
+    def m(inter, union, tp, fp, fn, gt_px=1, pred_none=False):
         return {
             "inter": inter,
             "union": union,
+            "gt_px": gt_px,
+            "pred_none": pred_none,
             "tp": tp,
             "fp": fp,
             "fn": fn,
@@ -672,15 +674,18 @@ def test_aggregate_and_markdown_table():
             "timeofday": "daytime",
             "weather": "clear",
             "geometry": "straight",
-            "classical": m(0, 0, 0, 0, 0),
-            "yolop": m(0, 4, 0, 2, 0),
+            "classical": m(0, 0, 0, 0, 0, gt_px=0, pred_none=True),
+            "yolop": m(0, 4, 0, 2, 0, gt_px=0),  # prediction where GT is empty
         },
     ]
     rows = aggregate(recs, ["classical", "yolop"])
     top = {r["method"]: r for r in rows if r["group"] == "all"}
     assert top["classical"]["iou_mean"] == pytest.approx(0.5)  # 2nd image skipped (empty)
-    assert top["yolop"]["iou_mean"] == pytest.approx(0.5)
-    assert top["yolop"]["iou_micro"] == pytest.approx(1 / 3)
+    # GT-empty images are excluded from IoU (not scored 0) and counted instead
+    assert top["yolop"]["iou_mean"] == pytest.approx(1.0)
+    assert top["yolop"]["iou_micro"] == pytest.approx(1.0)
+    assert top["yolop"]["gt_empty"] == 1 and top["yolop"]["fp_mask"] == 1
+    assert top["classical"]["pred_none"] == 1 and top["classical"]["fp_mask"] == 0
     assert top["classical"]["lane_f1"] == pytest.approx(0.5)
     assert top["yolop"]["lane_f1"] == pytest.approx(4 / 6)
     fps = {"classical": {**timing_stats([100.0, 10.0, 20.0], 1), "device": "CPU"}}

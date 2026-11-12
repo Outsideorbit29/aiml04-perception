@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import copy
 import importlib
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -95,6 +96,7 @@ class LaneDetector(ABC):
         self.smoother = LaneSmoother(cfg["smoothing"])
         self.make_ego_mask = bool(cfg.get("ego_mask", True))
         self.last_debug: dict = {}
+        self.last_timing_ms: dict[str, float] = {}  # stage times of the last backend run
         self._frame_idx = 0
         self._last: LaneResult | None = None
         self._frame_hw: tuple[int, int] | None = None
@@ -136,7 +138,17 @@ class LaneDetector(ABC):
         """HxW bool mask of lane-marking pixels in image coordinates."""
 
     def _infer(self, frame_bgr: np.ndarray, smooth: bool = True) -> LaneResult:
-        return self._lanes_from_binary(self.lane_binary(frame_bgr), smooth=smooth)
+        """Backend binary + shared fit. Fills `last_timing_ms` with `binary_ms` (whole backend
+        stage) and `fit_ms`; backends may add finer keys (YOLOP: pre/model/post)."""
+        self.last_timing_ms = {}
+        t0 = time.perf_counter()
+        binary = self.lane_binary(frame_bgr)
+        t1 = time.perf_counter()
+        res = self._lanes_from_binary(binary, smooth=smooth)
+        self.last_timing_ms.update(
+            {"binary_ms": 1e3 * (t1 - t0), "fit_ms": 1e3 * (time.perf_counter() - t1)}
+        )
+        return res
 
     def _lanes_from_binary(self, binary: np.ndarray, smooth: bool = True) -> LaneResult:
         h, w = binary.shape

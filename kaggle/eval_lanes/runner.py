@@ -8,7 +8,9 @@ BDD val images come from awsaf49/bdd100k-dataset; lane and drivable-area labels 
 label file in solesensei/solesensei_bdd100k. YOLOP ONNX weights are downloaded from the
 hustvl/YOLOP GitHub repo inside the job (internet on); nothing is downloaded to the laptop.
 Outputs: /kaggle/working/m3_lanes (results.json, per_image.jsonl, lanes_comparison.md,
-lanes_failures.jpg) plus one W&B run (project aiml04-perception, group lanes).
+lanes_failures.jpg; smoke also debug/*.jpg overlays) plus one W&B run (project
+aiml04-perception, group lanes). Check results.json "gt_geometry" and the diagnostics table
+(GT empty / no pred) before launching the full run.
 """
 
 import glob

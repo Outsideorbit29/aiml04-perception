@@ -44,7 +44,7 @@ yolop:                     # M3.2: pretrained YOLOP ONNX (hustvl/YOLOP), lane-li
   every_n_frames: 2          # allowed by the latency budget (ARCHITECTURE.md section 6)
   weights: models/yolop-640-640.onnx   # local path (gitignored); the Kaggle eval overrides it
   weights_url: https://github.com/hustvl/YOLOP/raw/main/weights/yolop-640-640.onnx
-  sha256: null               # pin after the first Kaggle run (eval logs the hash)
+  sha256: cd66a3e0087a7258ae07768cc02cb742eed93865727ae4c9baf969b8fa190696  # 2026-11-12
   min_weight_bytes: 1000000  # a smaller download is an LFS pointer / error page
   providers: [CUDAExecutionProvider, CPUExecutionProvider]  # first available wins
   input_size: [640, 640]     # model input W, H (fixed in this ONNX export)

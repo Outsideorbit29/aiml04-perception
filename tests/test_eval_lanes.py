@@ -1,0 +1,311 @@
+"""M3.3 lane-eval GT handling (scripts/eval_lanes.py) on tiny synthetic BDD-2018-style label dicts.
+
+Covers poly2d parsing (x, y order, Bezier, dict-or-list), drivable-area rasterisation, label to
+image rescaling, the "GT empty" vs "no prediction" accounting, the band/warp consistency check
+and the BDD camera config. CPU only, nothing is downloaded.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from pathlib import Path
+
+import cv2
+import numpy as np
+import pytest
+import yaml
+
+from perception.lanes import build_lane_detector, load_lane_config
+from perception.lanes.threshold import frac_to_px
+from perception.types import LaneResult, Polyline
+from scripts.eval_lanes import (
+    aggregate,
+    band_slice,
+    check_band_matches_warp,
+    direct_area_mask,
+    ego_boundaries,
+    evaluate_image,
+    flatten_poly2d,
+    gt_geometry,
+    label_scale,
+    lane_polylines,
+    markdown_table,
+    spread_indices,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
+LH, LW = 720, 1280  # BDD label pixel frame
+MCFG = {
+    "band_frac": [0.58, 0.74],
+    "band_rows": 30,
+    "lane_tol_px": 20,
+    "min_gt_rows": 5,
+    "gt_ref_frac": 0.74,
+    "gt_min_bottom_frac": 0.55,
+    "bezier_steps": 8,
+    "exclude_lane_types": ["crosswalk"],
+    "curve_px": 15,
+}
+
+# Ego lane: straight lines through a vanishing point at (640, 340), in 1280x720 label pixels.
+VP = (640.0, 340.0)
+LEFT_BOTTOM, RIGHT_BOTTOM = (340.0, 600.0), (940.0, 600.0)
+
+
+def _x_on(p_bottom: tuple[float, float], y: np.ndarray | float) -> np.ndarray:
+    (x0, y0), (xv, yv) = p_bottom, VP
+    return x0 + (xv - x0) * (np.asarray(y, dtype=np.float64) - y0) / (yv - y0)
+
+
+def _lane_label(vertices, types=None, direction="parallel", lane_type="single white", wrap=False):
+    poly = {"vertices": vertices, "types": types or "L" * len(vertices), "closed": False}
+    return {
+        "category": "lane",
+        "attributes": {"laneDirection": direction, "laneType": lane_type, "laneStyle": "solid"},
+        "poly2d": poly if wrap else [poly],
+        "id": 1,
+    }
+
+
+def _area_label(vertices, area_type="direct", types=None):
+    return {
+        "category": "drivable area",
+        "attributes": {"areaType": area_type},
+        "poly2d": [{"vertices": vertices, "types": types or "L" * len(vertices), "closed": True}],
+        "id": 2,
+    }
+
+
+def _frame(labels: list[dict], name: str = "f.jpg") -> dict:
+    return {
+        "name": name,
+        "attributes": {"weather": "clear", "scene": "highway", "timeofday": "daytime"},
+        "timestamp": 10000,
+        "labels": labels,
+    }
+
+
+def _ego_frame() -> dict:
+    y_top, y_bot = 400.0, 600.0
+    lt, rt = float(_x_on(LEFT_BOTTOM, y_top)), float(_x_on(RIGHT_BOTTOM, y_top))
+    return _frame(
+        [
+            # direct area = trapezoid between the two ego lines, rows 400..600
+            _area_label(
+                [[lt, y_top], [rt, y_top], [RIGHT_BOTTOM[0], y_bot], [LEFT_BOTTOM[0], y_bot]]
+            ),
+            _area_label([[0, 450], [200, 450], [100, 700]], area_type="alternative"),
+            _lane_label([[LEFT_BOTTOM[0], y_bot], [lt, y_top]]),
+            _lane_label([[RIGHT_BOTTOM[0], y_bot], [rt, y_top]]),
+            _lane_label([[0, 640], [1279, 640]], direction="vertical", lane_type="crosswalk"),
+        ]
+    )
+
+
+# ---------------------------------------------------------------- parsing and rasterisation
+
+
+def test_vertices_are_x_then_y():
+    # Wide, short rectangle: x 100..1100, y 500..700. Swapped axes would give a tall thin box.
+    f = _frame([_area_label([[100, 500], [1100, 500], [1100, 700], [100, 700]])])
+    m = direct_area_mask(f, (LH, LW), 8)
+    assert m.shape == (LH, LW)
+    assert m[600, 1000] and m[510, 120] and not m[300, 600] and not m[600, 1200]
+    assert abs(int(m.sum()) - 1001 * 201) < 0.01 * 1001 * 201
+
+
+def test_only_direct_area_is_ego_gt():
+    f = _frame(
+        [
+            _area_label([[0, 400], [300, 400], [300, 700], [0, 700]], area_type="alternative"),
+            _area_label([[500, 400], [800, 400], [800, 700], [500, 700]]),
+        ]
+    )
+    m = direct_area_mask(f, (LH, LW), 8)
+    assert m[550, 650] and not m[550, 150]
+
+
+def test_closed_bezier_polygon_follows_curve():
+    # Square whose top edge is a cubic Bezier bulging upwards to y ~ 325 at x = 640.
+    verts = [[440, 600], [440, 400], [540, 300], [740, 300], [840, 400], [840, 600]]
+    f = _frame([_area_label(verts, types="LLCCLL")])
+    m = direct_area_mask(f, (LH, LW), 16)
+    assert m[340, 640]  # inside the bulge, above the straight chord y = 400
+    assert not m[310, 640]  # above the curve's apex (y = 325)
+    pts = flatten_poly2d(verts, "LLCCLL", True, 16)
+    assert pts[:, 1].min() == pytest.approx(325.0, abs=1.0)
+
+
+def test_lane_polylines_filters_and_accepts_dict_poly2d():
+    f = _frame(
+        [
+            _lane_label([[300, 700], [600, 400]], wrap=True),  # poly2d as a dict, not a list
+            _lane_label([[0, 650], [1279, 650]], direction="vertical"),
+            _lane_label([[900, 700], [700, 400]], lane_type="crosswalk"),
+            _lane_label([[1000, 700], [900, 550], [800, 500], [700, 400]], types="LCCL"),
+            {"category": "car", "box2d": {"x1": 0, "y1": 0, "x2": 5, "y2": 5}},
+        ]
+    )
+    lanes = lane_polylines(f, 8, ["crosswalk"])
+    assert len(lanes) == 2
+    assert all(np.all(np.diff(p[:, 1]) >= 0) for p in lanes)  # sorted by y (top first)
+    assert lanes[1].shape[0] == 9  # L + 8 Bezier samples
+
+
+def test_label_scale_rescales_mask_and_lanes():
+    f = _ego_frame()
+    hw = (360, 640)
+    sc = label_scale(hw, [LW, LH])
+    assert sc == (0.5, 0.5)
+    assert label_scale((LH, LW), [LW, LH]) == (1.0, 1.0)
+    full = direct_area_mask(f, (LH, LW), 8)
+    half = direct_area_mask(f, hw, 8, sc)
+    ref = cv2.resize(full.astype(np.uint8), (640, 360), interpolation=cv2.INTER_NEAREST) > 0
+    assert (half ^ ref).mean() < 0.01
+    lanes = lane_polylines(f, 8, ["crosswalk"], sc)
+    assert max(p[:, 1].max() for p in lanes) == pytest.approx(300.0)
+    left, right = ego_boundaries(lanes, hw, 0.74, 0.55)
+    assert left is not None and right is not None
+    assert left[-1, 0] == pytest.approx(LEFT_BOTTOM[0] / 2)
+
+
+def test_gt_geometry_recovers_vanishing_row_and_width():
+    f = _ego_frame()
+    hw = (LH, LW)
+    mask = direct_area_mask(f, hw, 8)
+    lanes = lane_polylines(f, 8, ["crosswalk"])
+    sides = ego_boundaries(lanes, hw, 0.74, 0.55)
+    rows = np.linspace(0.58 * (LH - 1), 0.74 * (LH - 1), 30)
+    g = gt_geometry(mask, sides, rows)
+    assert g["vp_y"] == pytest.approx(VP[1] / (LH - 1), abs=1e-3)
+    y_b = rows[-1]
+    width = (_x_on(RIGHT_BOTTOM, y_b) - _x_on(LEFT_BOTTOM, y_b)) / LW
+    assert g["width_bottom"] == pytest.approx(float(width), abs=1e-3)
+    assert g["direct_top"] == pytest.approx(400 / (LH - 1), abs=2e-3)
+    assert g["direct_bottom"] == pytest.approx(600 / (LH - 1), abs=2e-3)
+
+
+# ---------------------------------------------------------------- per-image accounting
+
+
+class FixedDetector:
+    """Returns a fixed LaneResult; mimics the detector attributes the eval reads."""
+
+    def __init__(self, res: LaneResult, hw: tuple[int, int]) -> None:
+        self.res = res
+        self.last_debug = {"binary": np.zeros(hw, bool), "y_top": None, "y_bottom": None}
+        self.last_timing_ms = {"binary_ms": 1.0, "fit_ms": 2.0}
+
+    def detect(self, img, stateless=False):
+        assert stateless
+        return self.res
+
+
+def _poly_through(p_bottom) -> Polyline:
+    # x = a*y^2 + b*y + c with a = 0 through p_bottom and the vanishing point
+    (x0, y0), (xv, yv) = p_bottom, VP
+    b = (xv - x0) / (yv - y0)
+    return Polyline(np.array([0.0, b, x0 - b * y0]))
+
+
+def test_evaluate_image_perfect_prediction_and_counts():
+    f = _ego_frame()
+    hw = (LH, LW)
+    gt = direct_area_mask(f, hw, 8)
+    perfect = LaneResult(_poly_through(LEFT_BOTTOM), _poly_through(RIGHT_BOTTOM), gt.copy(), 1.0)
+    dets = {
+        "good": FixedDetector(perfect, hw),
+        "none": FixedDetector(LaneResult(None, None, None, 0.0), hw),
+    }
+    timings: dict = defaultdict(list)
+    img = np.zeros((LH, LW, 3), np.uint8)
+    rec, vis, g = evaluate_image(dets, img, f, MCFG, timings, [LW, LH], keep_vis=True)
+    assert rec["gt_sides"] == 2 and rec["geometry"] == "straight" and not rec["label_scaled"]
+    good, none = rec["good"], rec["none"]
+    assert good["gt_px"] > 0 and good["inter"] == good["union"] == good["gt_px"]
+    assert (good["tp"], good["fp"], good["fn"]) == (2, 0, 0)
+    assert none["pred_none"] and none["inter"] == 0 and (none["tp"], none["fn"]) == (0, 2)
+    assert set(vis) == {"good", "none"} and timings["good/fit_ms"] == [2.0]
+    rows = aggregate([rec], ["good", "none"])
+    top = {r["method"]: r for r in rows if r["group"] == "all"}
+    assert top["good"]["iou_mean"] == pytest.approx(1.0)
+    assert top["none"]["iou_mean"] == pytest.approx(0.0)  # GT present, no prediction -> 0
+    assert top["none"]["pred_none"] == 1 and top["none"]["iou_when_pred"] is None
+
+
+def test_gt_empty_in_band_is_excluded_not_zero():
+    # Direct area only above the band (rows 300..380 < 0.58 * 719 = 417) -> nothing to score.
+    f = _frame([_area_label([[500, 300], [800, 300], [800, 380], [500, 380]])])
+    hw = (LH, LW)
+    band = np.zeros(hw, bool)
+    band[band_slice(LH, MCFG["band_frac"])] = True
+    pred = LaneResult(None, None, band, 0.5)
+    dets = {"m": FixedDetector(pred, hw)}
+    rec, _, _ = evaluate_image(dets, np.zeros((LH, LW, 3), np.uint8), f, MCFG, defaultdict(list))
+    assert rec["m"]["gt_px"] == 0 and rec["geometry"] == "no_gt"
+    top = [r for r in aggregate([rec], ["m"]) if r["group"] == "all"][0]
+    assert top["iou_mean"] is None and top["iou_images"] == 0
+    assert top["gt_empty"] == 1 and top["fp_mask"] == 1
+
+
+def test_markdown_has_diagnostics_and_stage_columns():
+    f = _ego_frame()
+    hw = (LH, LW)
+    dets = {"m": FixedDetector(LaneResult(None, None, None, 0.0), hw)}
+    rec, _, _ = evaluate_image(dets, np.zeros((LH, LW, 3), np.uint8), f, MCFG, defaultdict(list))
+    rows = aggregate([rec], ["m"])
+    fps = {"m": {"frames": 1, "mean_ms": 3.0, "fit_mean_ms": 2.0, "device": "CPU"}}
+    md = markdown_table(rows, ["m"], fps, [])
+    assert "| GT empty | GT sides | no pred m |" in md
+    assert "| Backend ms | Model ms | Fit ms |" in md and "| 2.0 |" in md
+
+
+def test_spread_indices_cover_range():
+    assert spread_indices(30, 8)[0] == 0 and spread_indices(30, 8)[-1] == 29
+    assert len(spread_indices(30, 8)) == 8
+    assert spread_indices(3, 8) == [0, 1, 2] and spread_indices(0, 8) == []
+
+
+# ---------------------------------------------------------------- configs
+
+
+def test_eval_band_matches_bdd_warp():
+    cfg = yaml.safe_load((ROOT / "configs" / "lanes_eval.yaml").read_text())
+    lcfg = load_lane_config(cfg["lanes_config"])
+    check_band_matches_warp(cfg["metrics"]["band_frac"], lcfg)
+    assert cfg["metrics"]["gt_ref_frac"] == cfg["metrics"]["band_frac"][1]
+    with pytest.raises(ValueError):
+        check_band_matches_warp([0.62, 0.90], lcfg)
+
+
+def test_bdd_warp_sides_meet_at_bdd_horizon():
+    src = np.asarray(
+        load_lane_config(ROOT / "configs" / "lanes_bdd.yaml")["fitting"]["warp"]["src"]
+    )
+    (tlx, tly), (trx, try_), (brx, bry), (blx, bly) = src
+    for (xb, yb), (xt, yt) in (((blx, bly), (tlx, tly)), ((brx, bry), (trx, try_))):
+        y_at_centre = yb + (0.5 - xb) * (yt - yb) / (xt - xb)
+        assert y_at_centre == pytest.approx(0.47, abs=0.01)
+
+
+def test_bdd_config_recovers_synthetic_bdd_road():
+    """Lines through the BDD vanishing point, hood below 0.78 H: both sides and a mask."""
+    cfg = load_lane_config(ROOT / "configs" / "lanes_bdd.yaml")
+    cfg["method"] = "classical"
+    h, w = 360, 640
+    img = np.full((h, w, 3), 90, np.uint8)
+    src = frac_to_px(cfg["fitting"]["warp"]["src"], w, h)
+    y0, y1 = 0.56 * (h - 1), 0.78 * (h - 1)
+    for b, t in ((src[3], src[0]), (src[2], src[1])):
+        slope = (t[0] - b[0]) / (t[1] - b[1])
+        p0 = (int(round(b[0] + slope * (y0 - b[1]))), int(round(y0)))
+        p1 = (int(round(b[0] + slope * (y1 - b[1]))), int(round(y1)))
+        cv2.line(img, p0, p1, (255, 255, 255), 4)
+    img[int(y1) + 1 :] = 20  # dark hood
+    det = build_lane_detector(cfg)
+    res = det.detect(img, stateless=True)
+    assert res.left is not None and res.right is not None and res.ego_mask is not None
+    (tlx, tly), (blx, bly) = src[0], src[3]
+    ys = np.linspace(tly, bly, 10)
+    true_left = blx + (ys - bly) * (tlx - blx) / (tly - bly)
+    assert np.abs(res.left.x_at(ys) - true_left).max() < 6
