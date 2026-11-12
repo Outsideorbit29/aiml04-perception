@@ -119,3 +119,22 @@ def test_eval_configs_reference_existing_files():
             if key in cfg:
                 assert (ROOT / cfg[key]).exists(), (cfg_file, key)
         assert cfg["wandb"]["weights_artifact"].startswith("yolo11s-bdd-best:")
+
+
+# ---------- added by qa-reviewer (M2.3-M2.5 gate) ----------
+def test_gt_from_yolo_exact_pixels():
+    """Normalised cx, cy, w, h -> pixel xyxy on a 1280x720 BDD frame (no xywh/xyxy mix-up)."""
+    gt = gt_from_yolo("3 0.5 0.5 0.25 0.5\n\n8 0.1 0.2 0.1 0.1\n", 1280, 720)
+    assert gt.cls.tolist() == [3, 8]
+    np.testing.assert_allclose(gt.boxes[0], [480, 180, 800, 540])
+    np.testing.assert_allclose(gt.boxes[1], [64, 108, 192, 180])
+    assert gt_from_yolo("", 1280, 720).boxes.shape == (0, 4)
+
+
+def test_match_image_one_prediction_per_gt_and_iou_threshold():
+    gt = np.array([[0, 0, 10, 10]], np.float32)
+    preds = np.array([[0, 0, 10, 10], [0, 0, 10, 10], [0, 0, 10, 4]], np.float32)
+    gt_hit, tp = match_image(gt, np.array([0]), preds, np.array([0.5, 0.9, 0.95]),
+                             np.array([0, 0, 0]), 0.5)
+    # the 0.95 box has IoU 0.4 < 0.5; of the two exact boxes only the higher score is a TP
+    assert gt_hit.tolist() == [True] and tp.tolist() == [False, True, False]

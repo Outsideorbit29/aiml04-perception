@@ -89,3 +89,37 @@ def test_draw_tracks_does_not_modify_input():
     out = draw_tracks(frame, [tk])
     assert out.shape == frame.shape and out.any() and not frame.any()
     assert id_color(1) != id_color(2)
+
+
+# ---------- added by qa-reviewer (M2.3-M2.5 gate) ----------
+def test_detection_order_does_not_swap_track_association():
+    """Track.det must be the detection ByteTrack matched, whatever order the detector emits."""
+    tr = Tracker(CFG)
+    by_id: dict[int, list[np.ndarray]] = {}
+    for t in range(10):
+        dets = scene(t)
+        if t % 2:
+            dets = dets[::-1]
+        for tk in tr.update(dets, None):
+            by_id.setdefault(tk.track_id, []).append(tk.det.bbox_xyxy)
+            np.testing.assert_allclose(tk.history[-1], tk.det.bbox_xyxy)
+    assert len(by_id) == 2
+    for boxes in by_id.values():  # each id follows one smoothly moving object
+        steps = np.abs(np.diff(np.stack(boxes)[:, 0]))
+        assert steps.max() <= 3.0 + 1e-6
+
+
+def test_low_score_detection_extends_but_never_starts_a_track():
+    """ByteTrack second pass: 0.1 < score < activation threshold keeps an existing id alive."""
+    tr = Tracker(CFG)
+    for t in range(5):
+        (tid,) = [tk.track_id for tk in tr.update([det(10 + 3 * t, 50)], None)]
+    low = det(10 + 3 * 5, 50, score=0.15)
+    tracks = tr.update([low], None)
+    assert [tk.track_id for tk in tracks] == [tid]
+    assert tracks[0].det is low and tracks[0].det.score == pytest.approx(0.15)
+    assert tracks[0].age == 5
+
+    fresh = Tracker(CFG)
+    for _ in range(5):
+        assert fresh.update([det(200, 100, cls=3, score=0.15)], None) == []

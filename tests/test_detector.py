@@ -182,3 +182,38 @@ def test_exported_backend_shares_pre_and_post_processing():
     out = det.detect(fixture_frame())
     assert len(out) == 1 and out[0].cls_name == "person"
     np.testing.assert_allclose(out[0].bbox_xyxy, [40, 30, 120, 90], atol=1e-4)
+
+
+# ---------- added by qa-reviewer (M2.3-M2.5 gate) ----------
+@pytest.mark.parametrize("hw", [(720, 1280), (375, 1242), (450, 800)])  # BDD, KITTI, CARLA
+def test_letterbox_scale_boxes_round_trip_on_real_shapes(hw):
+    """A box drawn on the frame must map back to itself after letterbox -> scale_boxes.
+
+    Non-integer ratios and odd padding (KITTI: 193 px content in 640, top pad 223) are where
+    an off-by-one in the pad or a swapped (left, top) would show up.
+    """
+    h, w = hw
+    img = np.zeros((h, w, 3), np.uint8)
+    x1, y1, x2, y2 = int(w * 0.30), int(h * 0.40), int(w * 0.55), int(h * 0.80)
+    img[y1:y2, x1:x2] = 255
+    out, r, pad = letterbox(img, 640)
+    assert out.shape == (640, 640, 3)
+    ys, xs = np.nonzero(out[:, :, 0] > 127)
+    found = np.array([[xs.min(), ys.min(), xs.max() + 1, ys.max() + 1]], np.float32)
+    back = scale_boxes(found, r, pad, (h, w))[0]
+    np.testing.assert_allclose(back, [x1, y1, x2, y2], atol=2.5)
+
+
+def test_importing_core_packages_pulls_no_torch_ultralytics_or_supervision():
+    """The laptop ROS2 runtime has no PyTorch: imports must stay lazy (AGENTS.md section 2)."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, perception.detection, perception.tracking, perception.tracking.viz;"
+        "bad = [m for m in ('torch', 'ultralytics', 'supervision') if m in sys.modules];"
+        "print(','.join(bad)); sys.exit(1 if bad else 0)"
+    )
+    root = Path(__file__).parents[1]
+    res = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True)
+    assert res.returncode == 0, f"eagerly imported: {res.stdout.strip()} {res.stderr[-500:]}"
