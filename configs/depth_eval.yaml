@@ -1,0 +1,81 @@
+# M4.4: distance eval vs KITTI LiDAR. Used by scripts/eval_depth.py, run on Kaggle by
+# kaggle/eval_depth. Nothing here runs on the laptop.
+depth_config: configs/depth.yaml        # runtime settings (sampling, anchors, alignment, ...)
+camera: {config: configs/camera.yaml, name: kitti}  # height/pitch/sigmas; fx/fy/cx/cy and the
+                                         # image size come from each frame's calib P2 and image
+data_config: configs/data_kitti.yaml    # input_root + object.{image,calib,label,velodyne}_dir
+search_root: /kaggle/input              # fallback search if a data_config path is missing
+search_depth: 6
+
+sample:
+  seed: 42
+  n_frames: 1000                        # random frames of KITTI object training (7481)
+
+objects:                                # GT objects scored (KITTI label_2)
+  class_map:                            # KITTI type -> runtime class name; others skipped
+    Car: car                            # (DontCare, Misc, Tram are never scored)
+    Van: car
+    Truck: truck
+    Pedestrian: person
+    Person_sitting: person
+    Cyclist: rider
+  min_box_h_px: 25                      # KITTI "moderate" height
+  max_occluded: 1                       # 0 visible, 1 partly, 2 largely occluded, 3 unknown
+  max_truncated: 0.3
+
+gt:
+  # Primary GT = LiDAR: velodyne points projected to image_2 (P2 * R0_rect * Tr_velo_to_cam)
+  # that fall inside the 2D box AND inside the 3D label box (enlarged by box3d_margin_m, points
+  # less than ground_clearance_m above the box bottom dropped); distance = `percentile` of
+  # their rectified camera z. This is the depth of the visible surface, which is what the box
+  # bottom row (geometric) and MiDaS observe. Secondary GT = label_2 location z (centre of the
+  # 3D box bottom), which is about half the object length further for a car seen from behind.
+  primary: lidar
+  min_points: 5                         # fewer points -> "no LiDAR support" (counted, skipped)
+  percentile: 50
+  box3d_margin_m: 0.2
+  ground_clearance_m: 0.1
+  min_depth_m: 1.0                      # drop LiDAR points closer than this (behind/at camera)
+
+bins: [[0, 10], [10, 30], [30, 60]]     # metres of GT distance; > 60 m counted, not scored
+
+models: [midas_small, dpt_hybrid]
+estimator: {backend: torch, half: false, device: null}
+model_overrides:                        # KITTI frames are ~1242x375 (aspect 3.3)
+  midas_small: {input_hw: [256, 832]}
+  dpt_hybrid: {input_hw: [384, 1248]}
+leave_one_out: true                     # anchors are aligned without themselves (see script)
+
+fps:
+  warmup_frames: 5                      # first frames of each model excluded from timing
+  model_bench:                          # model-only latency on a fixed tensor (incl. live size)
+    runs: 50
+    warmup: 10
+    sizes:
+      midas_small: [[256, 448], [256, 832]]   # 256x448 = live CARLA 800x450 input
+      dpt_hybrid: [[384, 672], [384, 1248]]
+
+debug:                                  # overlays in out_dir/debug (forced on by --smoke)
+  enabled: false
+  n_images: 12
+  max_depth_m: 60.0                     # colour range of LiDAR points and depth insets
+  point_radius: 1
+  box_thickness: 2
+  font_scale: 0.45
+  text_thickness: 1
+  inset_height: 150                     # MiDaS map strip height per model (px)
+  jpeg_quality: 88
+  horizon_color: [0, 255, 255]          # BGR: horizon row of the camera model
+  gt_color: [0, 255, 0]                 # BGR: GT boxes
+  nolidar_color: [0, 0, 255]            # BGR: GT boxes without LiDAR support
+  skipped_color: [128, 128, 128]        # BGR: boxes filtered out (class, size, occlusion)
+
+out_dir: /kaggle/working/m4_depth
+wandb:
+  project: aiml04-perception
+  group: depth
+  name: depth-kitti
+
+smoke:                                  # --smoke: quick check of the whole job
+  n_frames: 24
+  debug: true
