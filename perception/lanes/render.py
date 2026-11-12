@@ -43,11 +43,14 @@ def draw_lanes(
     y_top: float,
     viz: dict,
     y_bottom: float | None = None,
+    synthesized: Polyline | None = None,
 ) -> np.ndarray:
     """Return a copy of the frame with the ego-lane mask and both boundaries drawn.
 
     Boundaries are drawn on the same rows as the ego mask (`y_top`..`y_bottom`), so the overlay
-    never shows the polynomial extrapolated below the measured region.
+    never shows the polynomial extrapolated below the measured region. `synthesized` (the
+    single-side fallback boundary, `detector.last_debug["synthesized_line"]`) is drawn thin in
+    `viz["synth_color"]` so it is never mistaken for a measured line.
     """
     out = frame_bgr.copy()
     if result.ego_mask is not None:
@@ -60,6 +63,8 @@ def draw_lanes(
         _draw_polyline(out, result.left, y_top, viz["left_color"], thickness, y_bottom)
     if result.right is not None:
         _draw_polyline(out, result.right, y_top, viz["right_color"], thickness, y_bottom)
+    if synthesized is not None:
+        _draw_polyline(out, synthesized, y_top, viz["synth_color"], 1, y_bottom)
     return out
 
 
@@ -67,7 +72,8 @@ def _render(detector: LaneDetector, frame: np.ndarray, viz: dict) -> np.ndarray:
     result = detector.detect(frame)
     y_top = float(detector.last_debug.get("y_top", 0.0))
     y_bottom = detector.last_debug.get("y_bottom")
-    return draw_lanes(frame, result, y_top, viz, y_bottom)
+    syn = detector.last_debug.get("synthesized_line")
+    return draw_lanes(frame, result, y_top, viz, y_bottom, syn)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -93,7 +99,14 @@ def main(argv: list[str] | None = None) -> None:
                 continue
             result = detector.detect(frame, stateless=True)
             dbg = detector.last_debug
-            vis = draw_lanes(frame, result, dbg["y_top"], cfg["viz"], dbg["y_bottom"])
+            vis = draw_lanes(
+                frame,
+                result,
+                dbg["y_top"],
+                cfg["viz"],
+                dbg["y_bottom"],
+                dbg.get("synthesized_line"),
+            )
             cv2.imwrite(str(out_dir / f"lanes_{path.stem}.jpg"), vis)
         print(f"wrote {min(len(files), args.max_frames)} overlays to {out_dir}")
 

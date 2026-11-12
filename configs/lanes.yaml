@@ -5,6 +5,15 @@
 
 method: classical          # classical | yolop. Same LaneResult output either way.
 ego_mask: true             # fill the polygon between left and right boundaries into LaneResult.ego_mask
+# Single-side fallback: if only one boundary is found, synthesize the other by shifting the found
+# one by a nominal lane width in the bird's-eye view, so ego_mask (and LaneResult.contains) still
+# work. The synthesized side is never put in LaneResult.left/right (those stay measured-only), so
+# "ego_mask set but one side None" marks a one-sided mask; it also lowers LaneResult.confidence.
+single_side_fallback: true
+fallback_lane_width_frac: 0.50  # lane width, fraction of bird's-eye width: the warp src bottom
+                                # (x 0.20-0.80) is assumed to be one lane and maps to dst 0.25-0.75.
+                                # Must lie inside fitting.lane_width_frac (checked at start-up).
+fallback_conf_mult: 0.5         # synthesized side confidence = this * found side confidence
 
 # Shared by every backend: a backend produces an image-space lane binary, then this stage warps
 # it to a bird's-eye view, runs the sliding-window search and fits x = a*y^2 + b*y + c.
@@ -60,5 +69,6 @@ viz:                       # overlay colours (BGR) for perception.lanes.render
   right_color: [0, 0, 255]
   mask_color: [0, 255, 0]
   mask_alpha: 0.3
+  synth_color: [0, 140, 255]   # orange (BGR): synthesized fallback boundary, drawn thin
   line_thickness: 2
   fallback_fps: 10.0         # output video FPS when the input clip reports none

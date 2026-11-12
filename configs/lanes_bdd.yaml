@@ -19,3 +19,14 @@ fitting:
   warp:                    # order TL, TR, BR, BL; dst inherited (x 0.25-0.75 in BEV)
     src: [[0.378, 0.58], [0.622, 0.58], [0.80, 0.74], [0.20, 0.74]]
   lane_width_frac: [0.18, 0.65]  # expected ego lane ~0.33 W in BEV (0.25 was at the edge)
+
+# Single-side fallback (M3.3 follow-up). Many BDD frames show only one marking (parked cars,
+# dense traffic, unmarked streets). In the 30-image smoke (W&B 68ujhdyl) 22/30 YOLOP images had
+# no mask, and the debug overlays showed correct single sides among them (e.g. debug/03).
+# Width: the smoke's gt_geometry width_bottom median is 0.447 W (image, row 0.74, n = 14 images
+# with both GT sides; p10-p90 0.21-0.81). At row 0.74 the warp maps src x 0.20-0.80 onto dst
+# 0.25-0.75 (x 5/6), so 0.447 * 5/6 = 0.37 of the bird's-eye width. Re-check with the
+# 500-image gt_geometry stats.
+single_side_fallback: true
+fallback_lane_width_frac: 0.37
+fallback_conf_mult: 0.5

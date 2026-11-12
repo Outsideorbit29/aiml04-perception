@@ -9,6 +9,15 @@ Two calling modes:
   State is reset automatically when the frame size changes.
 - Independent images (dataset eval): `detect(frame, stateless=True)` always runs the backend,
   skips smoothing and the result cache, and leaves the video state untouched. No `reset()` needed.
+
+Single-side fallback (`single_side_fallback: true` in the config): when only one boundary is
+found, the other is synthesized by offsetting the found one by `fallback_lane_width_frac` of the
+bird's-eye width, so the ego mask can still be built. The synthesized side is NOT returned in
+`LaneResult.left/right`; those always hold measured boundaries only. So a result with an
+`ego_mask` but one side `None` means "mask built from one measured side". Its confidence is
+the mean of the found side's confidence and `fallback_conf_mult` times it. The synthesized
+polyline is available for overlays as `last_debug["synthesized_line"]` (side name in
+`last_debug["synthesized_side"]`).
 """
 
 from __future__ import annotations
@@ -22,9 +31,9 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from perception.lanes.fitting import LaneFitter, ego_mask_from_polylines
+from perception.lanes.fitting import LaneFitter, ego_mask_from_polylines, offset_in_birdseye
 from perception.lanes.smoothing import LaneSmoother
-from perception.types import LaneResult
+from perception.types import LaneResult, Polyline
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -95,6 +104,18 @@ class LaneDetector(ABC):
         self.fitter = LaneFitter(cfg["fitting"])
         self.smoother = LaneSmoother(cfg["smoothing"])
         self.make_ego_mask = bool(cfg.get("ego_mask", True))
+        self.fallback = bool(cfg.get("single_side_fallback", False))
+        if self.fallback:
+            self.fallback_width_frac = float(cfg["fallback_lane_width_frac"])
+            self.fallback_conf_mult = float(cfg["fallback_conf_mult"])
+            lo, hi = (float(v) for v in cfg["fitting"]["lane_width_frac"])
+            if not lo <= self.fallback_width_frac <= hi:
+                raise ValueError(
+                    f"fallback_lane_width_frac {self.fallback_width_frac} is outside "
+                    f"fitting.lane_width_frac [{lo}, {hi}]"
+                )
+            if not 0.0 <= self.fallback_conf_mult <= 1.0:
+                raise ValueError(f"fallback_conf_mult {self.fallback_conf_mult} not in [0, 1]")
         self.last_debug: dict = {}
         self.last_timing_ms: dict[str, float] = {}  # stage times of the last backend run
         self._frame_idx = 0
@@ -162,12 +183,50 @@ class LaneDetector(ABC):
             c_l = float(fit.conf_left) if left is not None else 0.0
             c_r = float(fit.conf_right) if right is not None else 0.0
         mask = None
+        syn_side: str | None = None
+        syn_line: Polyline | None = None
         if self.make_ego_mask and left is not None and right is not None:
             mask = ego_mask_from_polylines(left, right, (h, w), fit.y_top, fit.y_bottom)
+        elif self.make_ego_mask and self.fallback and (left is None) != (right is None):
+            syn_side, syn_line, mask = self._single_side_mask(
+                left, right, fit.y_top, fit.y_bottom, (h, w)
+            )
+            if mask is not None:  # synthesized side: lower confidence, never in left/right
+                if syn_side == "right":
+                    c_r = self.fallback_conf_mult * c_l
+                else:
+                    c_l = self.fallback_conf_mult * c_r
+            else:
+                syn_side, syn_line = None, None
         self.last_debug = {
             "binary": binary,
             "y_top": fit.y_top,
             "y_bottom": fit.y_bottom,
+            "synthesized_side": syn_side,
+            "synthesized_line": syn_line,
             **fit.debug,
         }
         return LaneResult(left, right, mask, float(0.5 * (c_l + c_r)))
+
+    def _single_side_mask(
+        self,
+        left: Polyline | None,
+        right: Polyline | None,
+        y_top: float,
+        y_bottom: float,
+        shape_hw: tuple[int, int],
+    ) -> tuple[str, Polyline | None, np.ndarray | None]:
+        """(synthesized side name, its polyline, ego mask) from the one measured side."""
+        warp = self.fitter.warp
+        assert warp is not None
+        found = left if left is not None else right
+        assert found is not None
+        side = "right" if left is not None else "left"
+        sign = 1.0 if side == "right" else -1.0
+        offset = sign * self.fallback_width_frac * (shape_hw[1] - 1)
+        n = int(self.cfg["fitting"]["refit_samples"])
+        syn = offset_in_birdseye(found, warp, y_top, y_bottom, offset, n)
+        if syn is None:
+            return side, None, None
+        pair = (found, syn) if side == "right" else (syn, found)
+        return side, syn, ego_mask_from_polylines(*pair, shape_hw, y_top, y_bottom)

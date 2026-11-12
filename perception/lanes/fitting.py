@@ -39,6 +39,39 @@ class BirdsEyeWarp:
         pts = np.asarray(pts_xy, dtype=np.float64).reshape(-1, 1, 2)
         return cv2.perspectiveTransform(pts, self.Minv).reshape(-1, 2)
 
+    def to_birdseye(self, pts_xy: np.ndarray) -> np.ndarray:
+        """Map (N, 2) image points to bird's-eye coordinates."""
+        pts = np.asarray(pts_xy, dtype=np.float64).reshape(-1, 1, 2)
+        return cv2.perspectiveTransform(pts, self.M).reshape(-1, 2)
+
+
+def offset_in_birdseye(
+    line: Polyline,
+    warp: BirdsEyeWarp,
+    y_top: float,
+    y_bottom: float,
+    offset_px: float,
+    n_samples: int,
+) -> Polyline | None:
+    """The boundary parallel to `line` at `offset_px` (+ = right) in the bird's-eye view.
+
+    Used by the single-side fallback: `line` is sampled on image rows `y_top`..`y_bottom` (the
+    warp source rows), shifted horizontally in the bird's-eye view, where a lane has constant
+    width, and mapped back to an image-space x = a*y^2 + b*y + c fit.
+    """
+    ys = np.linspace(float(y_top), float(y_bottom), max(int(n_samples), 3))
+    xs = np.asarray(line.x_at(ys), dtype=np.float64)
+    bev = warp.to_birdseye(np.stack([xs, ys], axis=1))
+    bev[:, 0] += float(offset_px)
+    pts = warp.to_image(bev)
+    pts = pts[np.all(np.isfinite(pts), axis=1)]
+    if pts.shape[0] < 3:
+        return None
+    coeffs = fit_poly(pts[:, 0], pts[:, 1], 3)
+    if coeffs is None or not np.all(np.isfinite(coeffs)):
+        return None
+    return Polyline(coeffs)
+
 
 def find_lane_bases(binary: np.ndarray, histogram_frac: float) -> tuple[int | None, int | None]:
     """Column-histogram peaks of the bottom part of a bird's-eye mask, one per image half."""

@@ -18,3 +18,8 @@ fitting:
     src: [[0.43, 0.62], [0.57, 0.62], [0.75, 0.90], [0.25, 0.90]]
 
 # Thresholds (classical.threshold) are inherited; retune them in M5 only if the overlay fails.
+
+# Single-side fallback: the warp above puts a 3.5 m lane at x 0.25-0.75 of the bird's-eye view.
+single_side_fallback: true
+fallback_lane_width_frac: 0.50
+fallback_conf_mult: 0.5

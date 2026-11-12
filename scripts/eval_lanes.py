@@ -16,7 +16,10 @@ Metrics (all scored inside the row band ``metrics.band_frac``, which must equal 
 rows of ``lanes_config``, i.e. the part of the image both methods model; checked at start-up):
 
 * **Ego-lane IoU.** Prediction: ``LaneResult.ego_mask`` (region between the fitted left and
-  right boundaries; ``None`` if either side is missing). Ground truth: union of the BDD
+  right boundaries). With ``single_side_fallback`` a mask is also built when only one side is
+  measured (the other is synthesized at a nominal lane width, see perception/lanes/base.py);
+  those images are counted as ``synth``. ``iou_measured`` is the old behaviour: a mask that
+  used a synthesized side counts as no prediction (IoU 0). Ground truth: union of the BDD
   ``drivable area`` polygons with ``areaType == "direct"`` (the ego vehicle's own lane). Per
   image IoU = |P & G| / |P | G| over the band rows. Images whose GT is empty inside the band are
   excluded from IoU (counted as ``gt_empty``; a prediction there is counted as ``fp_mask``).
@@ -29,11 +32,14 @@ rows of ``lanes_config``, i.e. the part of the image both methods model; checked
   ``gt_min_bottom_frac``, rank them by their x at row ``gt_ref_frac`` (linear extrapolation
   below the last vertex). The GT left boundary is the closest one left of the image centre, the
   GT right boundary the closest one right of it (so each image has 0-2 GT boundaries). A GT
-  boundary counts only if it covers at least ``min_gt_rows`` of the ``band_rows`` sampled rows.
+  boundary is *scorable* only if it covers at least ``min_gt_rows`` of the ``band_rows`` sampled
+  rows; a side whose GT boundary exists but is shorter is *ignored* (no TP/FP/FN, counted as
+  ``gt_short``): the marking is there but cannot be scored in the band. Only *measured* sides
+  are predictions (``LaneResult.left/right``; synthesized fallback sides never count).
   For each side: predicted and GT -> distance = mean |x_pred(y) - x_gt(y)| over the GT-covered
   sampled rows; distance <= ``lane_tol_px`` is a TP, otherwise one FP and one FN. Prediction
-  without GT -> FP; GT without prediction -> FN. F1 = 2TP / (2TP + FP + FN), pooled over sides
-  and images.
+  without any GT boundary -> FP; GT without prediction -> FN. F1 = 2TP / (2TP + FP + FN), pooled
+  over sides and images.
 * **Speed.** Per image after ``fps.warmup_runs`` untimed calls on the first image: ``total_ms``
   = wall time of ``detect`` (pre/post-processing and polyline fit included, disk I/O excluded),
   split into ``binary_ms`` (backend stage), ``fit_ms`` (shared warp + sliding window + fit) and
@@ -41,9 +47,11 @@ rows of ``lanes_config``, i.e. the part of the image both methods model; checked
   the GPU (onnxruntime CUDA provider), same Kaggle session. YOLOP also gets a model-only
   micro-benchmark on a fixed tensor (``model_bench``: plain run and CUDA I/O binding).
 
-Breakdowns: overall, timeofday, weather and geometry (``curve`` when a GT boundary deviates more
-than ``curve_px`` from its chord inside the band, ``straight`` otherwise, ``no_gt`` without GT
-boundaries). Diagnostics per group: ``gt_empty``, ``pred_none``, ``fp_mask`` and the GT geometry
+Breakdowns: overall, timeofday, weather and geometry (``curve`` when a scorable GT boundary
+deviates more than ``curve_px`` from its chord inside the band, ``straight`` otherwise, ``no_gt``
+without a scorable GT boundary; ``gt_sides`` counts scorable boundaries with the same rule).
+Diagnostics per group: ``gt_empty``, ``pred_none``, ``fp_mask``, ``synth``, ``gt_short`` and the
+GT geometry
 (median vanishing row, lane width, drivable-area extent) used to set the warp. Outputs in
 ``out_dir``: results.json, per_image.jsonl, lanes_comparison.md, lanes_failures.jpg and, with
 ``debug.enabled`` (always on with --smoke), ``debug/*.jpg`` overlays; the same go to W&B.
@@ -74,7 +82,7 @@ from perception.lanes.base import (
     merge_config,
     resolve_path,
 )
-from perception.types import Polyline
+from perception.types import LaneResult, Polyline
 
 GROUPS = ("all", "timeofday", "weather", "geometry")
 STAGES = ("binary_ms", "model_ms", "fit_ms")
@@ -225,14 +233,22 @@ def check_band_matches_warp(band_frac: Sequence[float], lcfg: dict, tol: float =
         )
 
 
-def geometry_of(gt_sides: Sequence[np.ndarray | None], rows: np.ndarray, curve_px: float) -> str:
-    """``curve`` if any GT boundary deviates > curve_px from its chord inside the band."""
+def scorable(pts: np.ndarray | None, rows: np.ndarray, min_rows: int) -> bool:
+    """A GT boundary is scored only if it covers at least ``min_rows`` of the sampled rows."""
+    return pts is not None and x_on_rows(pts, rows)[0].size >= max(int(min_rows), 1)
+
+
+def geometry_of(
+    gt_sides: Sequence[np.ndarray | None], rows: np.ndarray, curve_px: float, min_rows: int = 3
+) -> str:
+    """``curve`` if any scorable GT boundary (>= ``min_rows`` band rows, at least 3) deviates
+    > curve_px from its chord inside the band; ``no_gt`` if no boundary is scorable."""
     seen = False
     for pts in gt_sides:
         if pts is None:
             continue
         r, x = x_on_rows(pts, rows)
-        if r.size < 3:
+        if r.size < max(int(min_rows), 3):
             continue
         seen = True
         chord = x[0] + (x[-1] - x[0]) * (r - r[0]) / (r[-1] - r[0])
@@ -283,19 +299,18 @@ class SideScore:
     fp: int = 0
     fn: int = 0
     err_px: float | None = None
+    ignored: int = 0  # GT boundary exists but covers < min_rows band rows: not scored
 
 
 def score_side(
     pred: Polyline | None, gt: np.ndarray | None, rows: np.ndarray, tol_px: float, min_rows: int
 ) -> SideScore:
     """Score one boundary (definition in the module docstring)."""
-    gt_rows = gt_x = None
-    if gt is not None:
-        gt_rows, gt_x = x_on_rows(gt, rows)
-        if gt_rows.size < min_rows:
-            gt_rows = gt_x = None
-    if gt_rows is None:
+    if gt is None:
         return SideScore(fp=int(pred is not None))
+    gt_rows, gt_x = x_on_rows(gt, rows)
+    if gt_rows.size < min_rows:
+        return SideScore(ignored=1)
     if pred is None:
         return SideScore(fn=1)
     err = float(np.mean(np.abs(np.asarray(pred.x_at(gt_rows)) - gt_x)))
@@ -374,13 +389,18 @@ class Tally:
     pred_none: int = 0
     fp_mask: int = 0
     gt_sides: int = 0
+    gt_short: int = 0
+    synth: int = 0
+    iou_meas_sum: float = 0.0
 
     def add(self, m: dict) -> None:
         """``m``: one method's per-image record (see ``evaluate_image``)."""
         self.n += 1
         self.pred_none += int(m["pred_none"])
+        self.synth += int(m.get("synth", False))
         if m["gt_px"] > 0:
             iou = m["inter"] / m["union"]
+            self.iou_meas_sum += m.get("inter_meas", m["inter"]) / m.get("union_meas", m["union"])
             self.inter += m["inter"]
             self.union += m["union"]
             self.iou_sum += iou
@@ -397,6 +417,7 @@ class Tally:
         self.errs.extend(m["errs"])
         self.both += int(m["both"])
         self.gt_sides += int(m.get("gt_sides", 0))
+        self.gt_short += int(m.get("gt_short", 0))
 
     def row(self) -> dict:
         p = self.tp / (self.tp + self.fp) if self.tp + self.fp else None
@@ -407,6 +428,7 @@ class Tally:
             "iou_mean": self.iou_sum / self.iou_n if self.iou_n else None,
             "iou_micro": self.inter / self.union if self.union else None,
             "iou_when_pred": self.iou_pred_sum / self.iou_pred_n if self.iou_pred_n else None,
+            "iou_measured": self.iou_meas_sum / self.iou_n if self.iou_n else None,
             "lane_f1": 2 * self.tp / denom if denom else None,
             "lane_precision": p,
             "lane_recall": r,
@@ -417,6 +439,8 @@ class Tally:
             "pred_none": self.pred_none,
             "fp_mask": self.fp_mask,
             "gt_sides": self.gt_sides,
+            "gt_short": self.gt_short,
+            "synth": self.synth,
         }
 
 
@@ -427,7 +451,8 @@ def aggregate(records: Sequence[dict], methods: Sequence[str]) -> list[dict]:
         keys = {"all": "all", **{g: rec[g] for g in GROUPS if g != "all"}}
         for m in methods:
             for g, k in keys.items():
-                tallies[(m, g, k)].add({**rec[m], "gt_sides": rec.get("gt_sides", 0)})
+                extra = {key: rec.get(key, 0) for key in ("gt_sides", "gt_short")}
+                tallies[(m, g, k)].add({**rec[m], **extra})
     order = {g: i for i, g in enumerate(GROUPS)}
     rows = [{"method": m, "group": g, "key": k, **t.row()} for (m, g, k), t in tallies.items()]
     return sorted(rows, key=lambda r: (order[r["group"]], r["key"], methods.index(r["method"])))
@@ -478,13 +503,14 @@ def markdown_table(
     for r in rows:
         by_key[(r["group"], r["key"])][r["method"]] = r
     head = ["Group", "Subset", "N"]
-    head += [f"IoU {m}" for m in methods] + [f"F1 {m}" for m in methods]
-    head += [f"P/R {m}" for m in methods]
+    head += [f"IoU {m}" for m in methods] + [f"IoU measured-only {m}" for m in methods]
+    head += [f"F1 {m}" for m in methods] + [f"P/R {m}" for m in methods]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for (g, k), per in by_key.items():
         n = next(iter(per.values()))["n"]
         cells = [g, k, str(n)]
         cells += [_fmt(per.get(m, {}).get("iou_mean")) for m in methods]
+        cells += [_fmt(per.get(m, {}).get("iou_measured")) for m in methods]
         cells += [_fmt(per.get(m, {}).get("lane_f1")) for m in methods]
         cells += [
             f"{_fmt(per.get(m, {}).get('lane_precision'), 2)}/"
@@ -493,15 +519,17 @@ def markdown_table(
         ]
         lines.append("| " + " | ".join(cells) + " |")
 
-    head = ["Group", "Subset", "N", "GT empty", "GT sides"]
-    head += [f"no pred {m}" for m in methods] + [f"IoU when pred {m}" for m in methods]
+    head = ["Group", "Subset", "N", "GT empty", "GT sides", "GT short"]
+    head += [f"no pred {m}" for m in methods] + [f"synth {m}" for m in methods]
+    head += [f"IoU when pred {m}" for m in methods]
     head += [f"both sides {m}" for m in methods]
     lines += ["", "| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for (g, k), per in by_key.items():
         first = next(iter(per.values()))
         cells = [g, k, str(first["n"]), str(first.get("gt_empty", "-"))]
-        cells.append(str(first.get("gt_sides", "-")))
+        cells += [str(first.get("gt_sides", "-")), str(first.get("gt_short", "-"))]
         cells += [str(per.get(m, {}).get("pred_none", "-")) for m in methods]
+        cells += [str(per.get(m, {}).get("synth", "-")) for m in methods]
         cells += [_fmt(per.get(m, {}).get("iou_when_pred")) for m in methods]
         cells += [_fmt(per.get(m, {}).get("both_sides_rate"), 2) for m in methods]
         lines.append("| " + " | ".join(cells) + " |")
@@ -661,7 +689,9 @@ def debug_tiles(
     for m, v in vis.items():
         out = img.copy()
         _tint(out, v["binary"], fig["binary_color"], 0.7)
-        out = draw_lanes(out, v["result"], v["y_top"] or 0.0, lcfg["viz"], v["y_bottom"])
+        out = draw_lanes(
+            out, v["result"], v["y_top"] or 0.0, lcfg["viz"], v["y_bottom"], v.get("synth_line")
+        )
         _gt_lines(out, gt["sides"], fig["gt_color"], 1)
         _band_lines(out, band, fig["band_color"])
         r = rec[m]
@@ -670,6 +700,7 @@ def debug_tiles(
             _label(
                 out,
                 f"{m} IoU {iou:.2f} {'NO MASK ' if r['pred_none'] else ''}"
+                f"{'SYN-' + r['synth_side'][0].upper() + ' ' if r.get('synth_side') else ''}"
                 f"TP{r['tp']} FP{r['fp']} FN{r['fn']}",
             )
         )
@@ -699,6 +730,27 @@ def spread_indices(n: int, k: int) -> list[int]:
 # ---------------------------------------------------------------- main
 
 
+def measured_sides(
+    res: LaneResult, synthesized_side: str | None
+) -> tuple[Polyline | None, Polyline | None, str | None]:
+    """(left, right, synthesized side name or None) with any synthesized side removed.
+
+    The lane detectors never put a synthesized fallback side into ``LaneResult.left/right``, so
+    a mask with exactly one side ``None`` is a one-sided (fallback) mask. A side the detector
+    reports as synthesized (``last_debug["synthesized_side"]``) is dropped here as well, so F1
+    stays measured-only even if a backend did return it.
+    """
+    left, right = res.left, res.right
+    syn = synthesized_side if res.ego_mask is not None else None
+    if syn is None and res.ego_mask is not None and (left is None) != (right is None):
+        syn = "right" if left is not None else "left"
+    if syn == "left":
+        left = None
+    elif syn == "right":
+        right = None
+    return left, right, syn
+
+
 def evaluate_image(
     detectors: dict,
     img: np.ndarray,
@@ -719,6 +771,9 @@ def evaluate_image(
         lanes, hw, float(mcfg["gt_ref_frac"]), float(mcfg["gt_min_bottom_frac"])
     )
     rows = band_rows(hw, mcfg["band_frac"], mcfg["band_rows"])
+    tol, min_rows = float(mcfg["lane_tol_px"]), int(mcfg["min_gt_rows"])
+    n_scorable = int(scorable(gl, rows, min_rows)) + int(scorable(gr, rows, min_rows))
+    n_found = int(gl is not None) + int(gr is not None)
     gt_px = int(np.count_nonzero(gt_mask[band_slice(hw[0], mcfg["band_frac"])]))
     tod, weather, scene = frame_attrs(frame)
     rec: dict[str, Any] = {
@@ -728,35 +783,45 @@ def evaluate_image(
         "timeofday": tod,
         "weather": weather,
         "scene": scene,
-        "geometry": geometry_of((gl, gr), rows, float(mcfg["curve_px"])),
-        "gt_sides": int(gl is not None) + int(gr is not None),
+        "geometry": geometry_of((gl, gr), rows, float(mcfg["curve_px"]), min_rows),
+        "gt_sides": n_scorable,  # scorable GT boundaries (same rule as F1 and geometry)
+        "gt_short": n_found - n_scorable,  # GT boundary present but too short in the band
         "n_lane_labels": len(lanes),
         "gt_geom": gt_geometry(gt_mask, (gl, gr), rows),
     }
     vis: dict[str, dict] = {}
-    tol, min_rows = float(mcfg["lane_tol_px"]), int(mcfg["min_gt_rows"])
     for m, det in detectors.items():
         t0 = time.perf_counter()
         res = det.detect(img, stateless=True)
         timings[m].append(1e3 * (time.perf_counter() - t0))
         for k, v in (getattr(det, "last_timing_ms", None) or {}).items():
             timings[f"{m}/{k}"].append(v)
+        dbg = getattr(det, "last_debug", None) or {}
+        left, right, syn = measured_sides(res, dbg.get("synthesized_side"))
         inter, union = band_iou_counts(res.ego_mask, gt_mask, mcfg["band_frac"])
-        sides = [
-            score_side(res.left, gl, rows, tol, min_rows),
-            score_side(res.right, gr, rows, tol, min_rows),
+        # Measured-only IoU (behaviour before the single-side fallback): a mask that used a
+        # synthesized side counts as no prediction.
+        meas_mask = None if syn else res.ego_mask
+        inter_m, union_m = band_iou_counts(meas_mask, gt_mask, mcfg["band_frac"])
+        sides = [  # only measured sides are predictions; synthesized ones never score
+            score_side(left, gl, rows, tol, min_rows),
+            score_side(right, gr, rows, tol, min_rows),
         ]
         rec[m] = {
             "inter": inter,
             "union": union,
             "gt_px": gt_px,
             "pred_none": res.ego_mask is None,
+            "synth": syn is not None,
+            "synth_side": syn,
+            "inter_meas": inter_m,
+            "union_meas": union_m,
             "tp": sum(s.tp for s in sides),
             "fp": sum(s.fp for s in sides),
             "fn": sum(s.fn for s in sides),
             "errs": [s.err_px for s in sides if s.err_px is not None],
-            "both": res.left is not None and res.right is not None,
-            "n_sides": int(res.left is not None) + int(res.right is not None),
+            "both": left is not None and right is not None,
+            "n_sides": int(left is not None) + int(right is not None),
             "y_top": det.last_debug.get("y_top"),
             "y_bottom": det.last_debug.get("y_bottom"),
         }
@@ -770,6 +835,7 @@ def evaluate_image(
                 "binary": binary.copy(),
                 "y_top": det.last_debug.get("y_top"),
                 "y_bottom": det.last_debug.get("y_bottom"),
+                "synth_line": dbg.get("synthesized_line") if syn else None,
             }
     return rec, vis, {"mask": gt_mask, "sides": (gl, gr)}
 
@@ -944,14 +1010,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         print(f"{n_scaled} images were not {label_wh}; GT rescaled to the image", flush=True)
 
     bench = info.get("yolop_model_bench") or {}
+    fallback_note = (
+        f"on (lane width {lcfg.get('fallback_lane_width_frac')} of the bird's-eye width, "
+        f"confidence x{lcfg.get('fallback_conf_mult')})"
+        if lcfg.get("single_side_fallback")
+        else "off"
+    )
     notes = [
         f"BDD100K val, {len(records)} images (seed {cfg['sample']['seed']}, stratified by "
         f"timeofday {dict(quotas)}); each image independent (`detect(stateless=True)`); "
         f"camera geometry {cfg['lanes_config']}.",
         f"IoU: ego_mask vs BDD drivable area 'direct', rows {mcfg['band_frac']} of the image "
-        "height; mean of per-image IoU over images with GT in the band (no prediction = 0).",
-        f"F1: left/right ego boundaries vs the nearest BDD parallel lane lines, TP if mean x "
-        f"error <= {mcfg['lane_tol_px']} px over the band; P/R = precision/recall.",
+        "height; mean of per-image IoU over images with GT in the band (no prediction = 0). "
+        f"Single-side fallback {fallback_note}: masks with one synthesized side are counted "
+        "in 'synth'; 'IoU measured-only' scores those images as no prediction (old behaviour).",
+        f"F1: measured left/right ego boundaries only (synthesized sides never count) vs the "
+        f"nearest BDD parallel lane lines, TP if mean x error <= {mcfg['lane_tol_px']} px over "
+        f"the band; P/R = precision/recall. GT sides = scorable GT boundaries (>= "
+        f"{mcfg['min_gt_rows']} of {mcfg['band_rows']} band rows); 'GT short' boundaries exist "
+        "but are too short in the band and are not scored; geometry 'no_gt' = no scorable GT.",
         f"Speed: detect() wall time after {warmup_runs} warm-up calls, incl. pre/post-processing "
         "and polyline fit; Backend = binary stage, Model = onnxruntime session.run, Fit = shared "
         "warp + sliding window + polyfit. Classical on CPU, YOLOP (ONNX Runtime FP32) on GPU.",
@@ -985,6 +1062,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "iou_mean",
             "iou_micro",
             "iou_when_pred",
+            "iou_measured",
+            "synth",
             "lane_f1",
             "lane_precision",
             "lane_recall",
@@ -1006,7 +1085,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     }
     caption = (
         "GT tile: magenta direct area, yellow GT boundaries. Method tiles: cyan lane binary, "
-        "green predicted ego lane, blue/red predicted left/right, thin yellow GT; grey band"
+        "green predicted ego lane, blue/red predicted left/right, thin orange synthesized "
+        "(single-side fallback, label SYN-L/R), thin yellow GT; grey band"
     )
     if fig_path:
         log["failures"] = wandb.Image(str(fig_path), caption=caption)

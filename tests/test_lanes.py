@@ -283,6 +283,142 @@ def test_detector_holds_lanes_over_missing_frames_then_drops(cfg):
     assert det.detect(blank).left is None
 
 
+# ---------------------------------------------------------------- single-side fallback
+
+
+def _one_line_road(side: str, h: int = H, w: int = W) -> tuple[np.ndarray, LineFn, LineFn]:
+    """Like `_painted_road`, but only the `side` ("left" | "right") line is painted."""
+    img = np.full((h, w, 3), 90, np.uint8)
+    src = frac_to_px(SRC, w, h)
+    left_x = _line_through(src[3], src[0])
+    right_x = _line_through(src[2], src[1])
+    fx = left_x if side == "left" else right_x
+    y0, y1 = 0.58 * (h - 1), h - 1.0
+    p0 = (int(round(fx(y0))), int(round(y0)))
+    p1 = (int(round(fx(y1))), int(round(y1)))
+    cv2.line(img, p0, p1, (255, 255, 255), 5)
+    return img, left_x, right_x
+
+
+def test_offset_in_birdseye_maps_one_trapezoid_edge_to_the_other():
+    # The warp maps the src trapezoid edges to dst x 0.25 / 0.75, so shifting the left edge by
+    # 0.5 of the bird's-eye width must land on the right edge in the image.
+    from perception.lanes.fitting import BirdsEyeWarp, offset_in_birdseye
+
+    warp = BirdsEyeWarp(SRC, DST, (H, W))
+    src = frac_to_px(SRC, W, H)
+    left_x, right_x = _line_through(src[3], src[0]), _line_through(src[2], src[1])
+    ys = np.linspace(src[0][1], src[3][1], 30)
+    left = Polyline(fit_poly(left_x(ys), ys, 3))
+    right = offset_in_birdseye(left, warp, ys[0], ys[-1], 0.5 * (W - 1), 30)
+    assert right is not None
+    np.testing.assert_allclose(right.x_at(ys), right_x(ys), atol=1.0)
+    back = offset_in_birdseye(right, warp, ys[0], ys[-1], -0.5 * (W - 1), 30)
+    np.testing.assert_allclose(back.x_at(ys), left_x(ys), atol=1.0)
+
+
+@pytest.mark.parametrize("found", ["left", "right"])
+def test_single_side_fallback_mask_between_found_and_offset_line(cfg, found):
+    cfg["smoothing"]["enabled"] = False
+    cfg.update(single_side_fallback=True, fallback_lane_width_frac=0.5, fallback_conf_mult=0.5)
+    img, left_x, right_x = _one_line_road(found)
+    det = build_lane_detector(cfg)
+    res = det.detect(img, stateless=True)
+    _check_result_types(res, (H, W))
+    missing = "right" if found == "left" else "left"
+    # Contract: only the measured side is in the result; the synthesized one is not.
+    assert getattr(res, found) is not None and getattr(res, missing) is None
+    assert res.ego_mask is not None
+    assert det.last_debug["synthesized_side"] == missing
+    syn = det.last_debug["synthesized_line"]
+    assert isinstance(syn, Polyline)
+
+    # Width 0.5 == the dst lane width, so the synthesized line is the other trapezoid edge and
+    # the mask spans found line .. offset line on every measured row.
+    other_x = right_x if found == "left" else left_x
+    y_top = int(np.ceil(det.last_debug["y_top"]))
+    y_bottom = int(np.floor(det.last_debug["y_bottom"]))
+    ys = np.arange(y_top, y_bottom + 1)
+    np.testing.assert_allclose(syn.x_at(ys), other_x(ys), atol=4.0)
+    for y in ys[:: max(1, ys.size // 8)]:
+        row = np.flatnonzero(res.ego_mask[y])
+        assert row.size > 0
+        lo, hi = sorted((float(getattr(res, found).x_at(y)), float(syn.x_at(y))))
+        assert abs(row[0] - lo) <= 2 and abs(row[-1] - hi) <= 2
+    assert not res.ego_mask[:y_top].any() and not res.ego_mask[y_bottom + 1 :].any()
+    y = 0.8 * (H - 1)
+    assert res.contains(0.5 * (left_x(y) + right_x(y)), y)
+
+    # Confidence: mean of the found side and 0.5 x the found side, vs 0.5 x found without it.
+    cfg_off = copy.deepcopy(cfg)
+    cfg_off["single_side_fallback"] = False
+    off = build_lane_detector(cfg_off).detect(img, stateless=True)
+    assert res.confidence == pytest.approx(1.5 * off.confidence)
+    assert res.confidence < 0.75 + 1e-9  # never as confident as two measured sides
+
+
+def test_single_side_fallback_disabled_restores_old_behaviour(cfg):
+    cfg["smoothing"]["enabled"] = False
+    cfg["single_side_fallback"] = False
+    img, _, _ = _one_line_road("left")
+    det = build_lane_detector(cfg)
+    res = det.detect(img, stateless=True)
+    assert res.left is not None and res.right is None
+    assert res.ego_mask is None  # old behaviour: no mask without both sides
+    assert det.last_debug["synthesized_side"] is None
+    assert det.last_debug["synthesized_line"] is None
+    # Two measured sides are unaffected by the flag.
+    both, _, _ = _painted_road()
+    on = copy.deepcopy(cfg)
+    on["single_side_fallback"] = True
+    r_off = build_lane_detector(cfg).detect(both, stateless=True)
+    r_on = build_lane_detector(on).detect(both, stateless=True)
+    assert np.array_equal(r_off.ego_mask, r_on.ego_mask)
+    assert r_off.confidence == r_on.confidence
+
+
+def test_single_side_fallback_never_fires_on_blank_road(cfg):
+    cfg["smoothing"]["enabled"] = False
+    cfg["single_side_fallback"] = True
+    det = build_lane_detector(cfg)
+    res = det.detect(np.full((H, W, 3), 90, np.uint8), stateless=True)
+    assert res.ego_mask is None and res.confidence == 0.0
+    assert det.last_debug["synthesized_side"] is None
+
+
+def test_single_side_fallback_rejects_implausible_width(cfg):
+    cfg.update(single_side_fallback=True, fallback_lane_width_frac=0.9)  # > lane_width_frac max
+    with pytest.raises(ValueError):
+        build_lane_detector(cfg)
+
+
+def test_fallback_keys_in_every_lane_config():
+    for name, width in (("lanes.yaml", 0.5), ("lanes_bdd.yaml", 0.37), ("lanes_carla.yaml", 0.5)):
+        c = load_lane_config(ROOT / "configs" / name)
+        assert c["single_side_fallback"] is True
+        assert c["fallback_lane_width_frac"] == pytest.approx(width)
+        assert 0.0 < c["fallback_conf_mult"] < 1.0
+        lo, hi = c["fitting"]["lane_width_frac"]
+        assert lo <= c["fallback_lane_width_frac"] <= hi
+
+
+def test_overlay_draws_synthesized_line_in_its_own_colour(cfg):
+    from perception.lanes.render import draw_lanes
+
+    cfg["smoothing"]["enabled"] = False
+    cfg["single_side_fallback"] = True
+    img, _, _ = _one_line_road("left")
+    det = build_lane_detector(cfg)
+    res = det.detect(img, stateless=True)
+    dbg = det.last_debug
+    viz = {**cfg["viz"], "mask_alpha": 0.0}
+    plain = draw_lanes(img, res, dbg["y_top"], viz, dbg["y_bottom"])
+    with_syn = draw_lanes(img, res, dbg["y_top"], viz, dbg["y_bottom"], dbg["synthesized_line"])
+    changed = np.any(with_syn != plain, axis=2)
+    assert changed.any()
+    assert np.all(with_syn[changed] == np.asarray(viz["synth_color"], np.uint8))
+
+
 # ---------------------------------------------------------------- smoother unit tests
 
 
@@ -603,9 +739,9 @@ def test_score_side_cases():
     assert (s.tp, s.fp, s.fn) == (0, 1, 1)
     assert score_side(None, gt, rows, 10, 5).fn == 1
     assert score_side(near, None, rows, 10, 5).fp == 1
-    short = np.array([[50.0, 85.0], [50.0, 99.0]])  # covers < 5 sampled rows -> no GT
+    short = np.array([[50.0, 85.0], [50.0, 99.0]])  # GT exists but covers < 5 sampled rows
     s = score_side(near, short, rows, 10, 5)
-    assert (s.tp, s.fp, s.fn) == (0, 1, 0)
+    assert (s.tp, s.fp, s.fn, s.ignored) == (0, 0, 0, 1)  # not scorable: neither TP nor FP
     s = score_side(None, None, rows, 10, 5)
     assert (s.tp, s.fp, s.fn) == (0, 0, 0)
 

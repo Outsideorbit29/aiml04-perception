@@ -1,8 +1,9 @@
 """M3.3 lane-eval GT handling (scripts/eval_lanes.py) on tiny synthetic BDD-2018-style label dicts.
 
 Covers poly2d parsing (x, y order, Bezier, dict-or-list), drivable-area rasterisation, label to
-image rescaling, the "GT empty" vs "no prediction" accounting, the band/warp consistency check
-and the BDD camera config. CPU only, nothing is downloaded.
+image rescaling, the "GT empty" vs "no prediction" accounting, single-side fallback scoring
+(F1 measured-only, IoU with and without the fallback), short-GT / no_gt accounting, the
+band/warp consistency check and the BDD camera config. CPU only, nothing is downloaded.
 """
 
 from __future__ import annotations
@@ -256,7 +257,8 @@ def test_markdown_has_diagnostics_and_stage_columns():
     rows = aggregate([rec], ["m"])
     fps = {"m": {"frames": 1, "mean_ms": 3.0, "fit_mean_ms": 2.0, "device": "CPU"}}
     md = markdown_table(rows, ["m"], fps, [])
-    assert "| GT empty | GT sides | no pred m |" in md
+    assert "| GT empty | GT sides | GT short | no pred m | synth m |" in md
+    assert "| IoU m | IoU measured-only m | F1 m |" in md
     assert "| Backend ms | Model ms | Fit ms |" in md and "| 2.0 |" in md
 
 
@@ -264,6 +266,133 @@ def test_spread_indices_cover_range():
     assert spread_indices(30, 8)[0] == 0 and spread_indices(30, 8)[-1] == 29
     assert len(spread_indices(30, 8)) == 8
     assert spread_indices(3, 8) == [0, 1, 2] and spread_indices(0, 8) == []
+
+
+# ---------------------------------------------------------------- single-side fallback scoring
+
+
+def _left_half_mask(hw: tuple[int, int]) -> np.ndarray:
+    """Ego mask between the GT left line and the image centre (stand-in for a fallback mask)."""
+    h, w = hw
+    m = np.zeros(hw, bool)
+    for y in range(h):
+        x0 = int(np.ceil(_x_on(LEFT_BOTTOM, y)))
+        m[y, max(x0, 0) : w // 2] = True
+    return m
+
+
+def test_f1_excludes_synthesized_side_and_iou_reports_both():
+    f = _ego_frame()
+    hw = (LH, LW)
+    left = _poly_through(LEFT_BOTTOM)
+    mask = _left_half_mask(hw)
+    # Detector contract: synthesized side is not in the result, only in last_debug.
+    fallback = FixedDetector(LaneResult(left, None, mask, 0.6), hw)
+    fallback.last_debug["synthesized_side"] = "right"
+    # A backend that wrongly returns its synthesized side (far off the GT right line): the eval
+    # must still not score it, because last_debug marks it as synthesized.
+    leaky = FixedDetector(LaneResult(left, Polyline(np.array([0, 0, 5.0])), mask, 0.6), hw)
+    leaky.last_debug["synthesized_side"] = "right"
+    # Same measured side, no fallback: the old behaviour.
+    old = FixedDetector(LaneResult(left, None, None, 0.5), hw)
+    dets = {"fallback": fallback, "leaky": leaky, "old": old}
+    img = np.zeros((LH, LW, 3), np.uint8)
+    rec, vis, _ = evaluate_image(dets, img, f, MCFG, defaultdict(list), keep_vis=True)
+
+    for m in ("fallback", "leaky", "old"):
+        r = rec[m]
+        assert (r["tp"], r["fp"], r["fn"]) == (1, 0, 1), m  # right side: FN, never TP/FP
+        assert not r["both"] and r["n_sides"] == 1
+    for m in ("fallback", "leaky"):
+        r = rec[m]
+        assert r["synth"] and r["synth_side"] == "right" and not r["pred_none"]
+        assert r["inter"] > 0  # fallback mask is scored for IoU
+        assert r["inter_meas"] == 0 and r["union_meas"] == r["gt_px"]  # measured-only: none
+    assert not rec["old"]["synth"] and rec["old"]["pred_none"]
+
+    top = {r["method"]: r for r in aggregate([rec], list(dets)) if r["group"] == "all"}
+    assert top["fallback"]["synth"] == 1 and top["old"]["synth"] == 0
+    assert top["fallback"]["iou_mean"] > 0.3
+    assert top["fallback"]["iou_measured"] == pytest.approx(0.0)
+    assert top["old"]["iou_measured"] == pytest.approx(top["old"]["iou_mean"]) == 0.0
+    assert top["fallback"]["lane_f1"] == top["old"]["lane_f1"] == pytest.approx(2 / 3)
+
+
+def test_one_sided_mask_without_debug_flag_is_detected_as_synth():
+    # Inferred from the result alone: mask present, exactly one side None.
+    f = _ego_frame()
+    hw = (LH, LW)
+    det = FixedDetector(LaneResult(None, _poly_through(RIGHT_BOTTOM), _left_half_mask(hw), 0.6), hw)
+    rec, _, _ = evaluate_image(
+        {"m": det}, np.zeros((LH, LW, 3), np.uint8), f, MCFG, defaultdict(list)
+    )
+    assert rec["m"]["synth"] and rec["m"]["synth_side"] == "left"
+    assert (rec["m"]["tp"], rec["m"]["fp"], rec["m"]["fn"]) == (1, 0, 1)
+
+
+def test_real_detector_fallback_through_eval():
+    """BDD config, one painted line: the eval sees a synth mask and scores one measured side."""
+    cfg = load_lane_config(ROOT / "configs" / "lanes_bdd.yaml")
+    cfg["method"] = "classical"
+    h, w = LH, LW
+    img = np.full((h, w, 3), 90, np.uint8)
+    y0, y1 = 0.56 * (h - 1), 0.78 * (h - 1)
+    lt, lb = float(_x_on(LEFT_BOTTOM, y0)), float(_x_on(LEFT_BOTTOM, y1))
+    cv2.line(img, (int(lb), int(y1)), (int(lt), int(y0)), (255, 255, 255), 8)
+    img[int(y1) + 1 :] = 20
+    rec, _, _ = evaluate_image(
+        {"classical": build_lane_detector(cfg)}, img, _ego_frame(), MCFG, defaultdict(list)
+    )
+    r = rec["classical"]
+    assert r["synth"] and r["synth_side"] == "right" and not r["pred_none"]
+    assert r["tp"] == 1 and r["fp"] == 0 and r["fn"] == 1
+    assert r["inter"] > 0 and r["inter_meas"] == 0
+
+
+# ---------------------------------------------------------------- no_gt / short GT accounting
+
+
+def test_short_gt_side_is_not_counted_as_gt_or_scored():
+    # Left GT line ends just inside the band top (0.58 * 719 = 417): ranked as the left ego
+    # boundary (reaches below 0.55 H) but covers < min_gt_rows band rows -> not scorable.
+    # Right side has no GT at all.
+    f = _frame(
+        [
+            _area_label([[300, 420], [900, 420], [900, 530], [300, 530]]),
+            _lane_label([[420, 422], [560, 300]]),
+        ]
+    )
+    hw = (LH, LW)
+    pred_left = Polyline(np.array([0.0, 0.0, 415.0]))
+    pred_right = Polyline(np.array([0.0, 0.0, 900.0]))
+    det = FixedDetector(LaneResult(pred_left, pred_right, None, 0.5), hw)
+    rec, _, _ = evaluate_image(
+        {"m": det}, np.zeros((LH, LW, 3), np.uint8), f, MCFG, defaultdict(list)
+    )
+    assert rec["gt_sides"] == 0 and rec["gt_short"] == 1  # GT sides now match "no_gt"
+    assert rec["geometry"] == "no_gt"
+    assert (rec["m"]["tp"], rec["m"]["fp"], rec["m"]["fn"]) == (0, 1, 0)  # only the right FP
+    top = [r for r in aggregate([rec], ["m"]) if r["group"] == "geometry"][0]
+    assert top["key"] == "no_gt" and top["gt_sides"] == 0 and top["gt_short"] == 1
+
+
+def test_no_gt_group_has_no_scorable_sides():
+    # Every image in "no_gt" must contribute 0 GT sides and 0 FN (recall undefined).
+    ego = _ego_frame()
+    short = _frame([_lane_label([[420, 422], [560, 300]])], name="s.jpg")
+    empty = _frame([], name="e.jpg")
+    hw = (LH, LW)
+    det = FixedDetector(LaneResult(None, None, None, 0.0), hw)
+    img = np.zeros((LH, LW, 3), np.uint8)
+    recs = [
+        evaluate_image({"m": det}, img, fr, MCFG, defaultdict(list))[0]
+        for fr in (ego, short, empty)
+    ]
+    assert [r["geometry"] for r in recs] == ["straight", "no_gt", "no_gt"]
+    rows = {r["key"]: r for r in aggregate(recs, ["m"]) if r["group"] == "geometry"}
+    assert rows["no_gt"]["n"] == 2 and rows["no_gt"]["gt_sides"] == 0
+    assert rows["no_gt"]["lane_recall"] is None
+    assert rows["straight"]["gt_sides"] == 2 and rows["straight"]["lane_recall"] == 0.0
 
 
 # ---------------------------------------------------------------- configs
