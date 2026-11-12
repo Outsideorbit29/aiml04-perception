@@ -1,0 +1,14 @@
+# Tracker settings (M2.5). Read by perception.tracking.Tracker(cfg).
+# ByteTrack from `supervision` (no torch, so it also runs in the laptop ROS2 runtime).
+type: bytetrack                   # bytetrack | deepsort (M2.7 stretch, not implemented)
+frame_rate: 20                    # CARLA runs at 20 Hz; eval jobs override (KITTI is 10 fps)
+track_activation_threshold: 0.25  # first-pass matching uses scores above this; 0.1-0.25 boxes
+                                  # only extend tracks (second pass). A NEW track needs
+                                  # score >= this + 0.1 (supervision adds 0.1), i.e. 0.35
+lost_track_buffer: 60             # frames a lost track is kept, defined at 30 fps (M2.6 sweep)
+minimum_matching_threshold: 0.8   # max (1 - IoU) cost for a match
+minimum_consecutive_frames: 2     # M2.6 sweep: halves ID switches, costs ~3 pts recall. A new id
+                                  # appears on its 3rd consecutive match (2 frames = 100 ms at
+                                  # 20 Hz after first detection); the first 2 frames after
+                                  # reset() return no tracks
+history_len: 30                   # boxes kept in Track.history

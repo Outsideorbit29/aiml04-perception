@@ -1,0 +1,26 @@
+# M2.5 annotated tracking video on KITTI tracking clips. Used by scripts/eval_tracking.py,
+# run on Kaggle by kaggle/eval_track (dataset leducnhuan/kitti-tracking is attached there).
+detector_config: configs/yolo_detector.yaml
+tracker_config: configs/tracker.yaml
+data_config: configs/data_kitti.yaml     # tracking.image_dir under input_root
+search: /kaggle/input                    # fallback search for kitti_tracking/training/image_02
+weights_dir: /kaggle/temp/weights
+out_dir: /kaggle/working/m2_track
+
+wandb:
+  project: aiml04-perception
+  group: track
+  name: bytetrack-kitti-video
+  weights_artifact: yolo11s-bdd-best:candidate
+
+sequences: ["0000", "0001", "0011"]      # KITTI tracking training sequences (city, 10 fps)
+max_frames: 300                          # per sequence
+fps: 10                                  # KITTI capture rate: video fps and tracker frame_rate
+latency_warmup: 5                        # frames skipped before timing
+detector_overrides:
+  conf: 0.1                              # keep low-score boxes for ByteTrack's second pass
+trail: true
+
+smoke:                                   # --smoke: one short sequence
+  sequences: ["0000"]
+  max_frames: 30

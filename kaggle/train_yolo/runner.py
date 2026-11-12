@@ -60,7 +60,9 @@ def main() -> None:
     load_wandb_key()
     if not os.path.exists(WORKDIR):
         sh(["git", "clone", "--depth", "50", REPO, WORKDIR])
-    sh(["git", "checkout", REF], cwd=WORKDIR)
+    # A shallow clone has only the default branch, so fetch REF explicitly.
+    sh(["git", "fetch", "--depth", "50", "origin", REF], cwd=WORKDIR)
+    sh(["git", "checkout", "FETCH_HEAD"], cwd=WORKDIR)
     sh([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"], cwd=WORKDIR)
     sh(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv"])
     sh(JOB_CMD, cwd=WORKDIR)

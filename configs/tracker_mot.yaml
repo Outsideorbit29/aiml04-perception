@@ -1,0 +1,98 @@
+# M2.6 MOT evaluation (MOTA, IDF1, ID switches) on KITTI tracking. Used by scripts/eval_mot.py,
+# run on Kaggle by kaggle/eval_mot (dataset leducnhuan/kitti-tracking attached there).
+#
+# Why KITTI and not "BDD MOT": BDD100K MOT (box tracking 2020) is not on Kaggle, while the KITTI
+# tracking upload is already attached to our jobs and ships label_02 (per-sequence MOT labels).
+# KITTI is also driving footage with cars + pedestrians, which is what the brief asks for.
+detector_config: configs/yolo_detector.yaml
+tracker_config: configs/tracker.yaml     # base ByteTrack settings; sweep entries override keys
+data_config: configs/data_kitti.yaml     # tracking.image_dir / tracking.label_dir under input_root
+search: /kaggle/input                    # fallback search for training/image_02 + label_02
+weights_dir: /kaggle/temp/weights
+out_dir: /kaggle/working/m2_mot
+
+wandb:
+  project: aiml04-perception
+  group: track
+  name: bytetrack-kitti-mot
+  weights_artifact: yolo11s-bdd-best:candidate
+
+# Fixed subset of KITTI tracking *training* sequences (they have labels; the test split has none).
+# Mix of car-heavy city/road clips (0000, 0001, 0004, 0011) and pedestrian-heavy ones
+# (0013, 0015, 0016, 0017). About 2.4k frames, a few minutes on a T4.
+sequences: ["0000", "0001", "0004", "0011", "0013", "0015", "0016", "0017"]
+max_frames: null                         # per sequence; null = whole sequence
+fps: 10                                  # KITTI capture rate -> tracker frame_rate
+latency_warmup: 5                        # frames skipped before timing (per sequence)
+detector_overrides:
+  conf: 0.1                              # keep low-score boxes for ByteTrack's second pass
+
+matching:
+  iou_threshold: 0.5                     # a hypothesis matches a GT box if IoU >= this
+  ignore_overlap: 0.5                    # unmatched hypothesis dropped (not FP) if this share of
+                                         # its area lies inside an ignore box (DontCare etc.)
+  min_height_px: 25                      # KITTI devkit: shorter GT -> ignore region; shorter
+                                         # hypotheses are dropped
+  max_occlusion: 2                       # KITTI occluded flag 0..3 (3 = unknown); above -> ignore
+  max_truncation: 2                      # KITTI truncated flag 0..2; 2 keeps all
+
+# KITTI type -> our (BDD) class name, or "ignore". Ignored objects become ignore regions: a
+# hypothesis on them is neither TP nor FP, and missing them is not a FN.
+# Van -> car because BDD labels vans as car. Tram (no BDD class), Misc and DontCare are ignored.
+# Cyclist -> rider: the KITTI box covers person + bike and usually still overlaps the BDD rider
+# box at IoU >= 0.5; misses here are reported per group below.
+kitti_class_map:
+  Car: car
+  Van: car
+  Truck: truck
+  Pedestrian: person
+  Person_sitting: person
+  Cyclist: rider
+  Tram: ignore
+  Misc: ignore
+  DontCare: ignore
+
+# Evaluation groups. Matching is class-agnostic inside a group (the tracker ignores classes and
+# the detector uses agnostic NMS, so car<->truck confusions should not count as errors).
+# gt: mapped class names evaluated; pred: detector classes kept as hypotheses. GT objects of
+# other groups become ignore regions for that group. bicycle/motorcycle hypotheses are not used:
+# KITTI does not label parked bikes, and riders are matched through the rider class.
+groups:
+  all:
+    gt: [car, truck, person, rider]
+    pred: [car, truck, bus, person, rider]
+  vehicle:
+    gt: [car, truck]
+    pred: [car, truck, bus]
+  pedestrian:
+    gt: [person, rider]
+    pred: [person, rider]
+
+# Tracker sweep: overrides on top of tracker_config. The first entry pins the pre-M2.6 baseline
+# (buffer 30, consecutive 1); `default` is whatever configs/tracker.yaml ships now.
+# At fps 10, ByteTrack keeps a lost track for lost_track_buffer / 3 frames (30 -> 1 s).
+# New tracks need score >= track_activation_threshold + 0.1 (supervision adds 0.1).
+sweep:
+  - name: baseline_m25
+    params: {lost_track_buffer: 30, minimum_consecutive_frames: 1}
+  - name: default
+    params: {}
+  - name: consec2_buf30
+    params: {lost_track_buffer: 30, minimum_consecutive_frames: 2}
+  - name: buf60
+    params: {lost_track_buffer: 60}
+  - name: buf90
+    params: {lost_track_buffer: 90}
+  - name: buf60_act015
+    params: {lost_track_buffer: 60, track_activation_threshold: 0.15}
+  - name: buf60_match09
+    params: {lost_track_buffer: 60, minimum_matching_threshold: 0.9}
+  - name: buf60_consec2
+    params: {lost_track_buffer: 60, minimum_consecutive_frames: 2}
+select_by: [idf1, mota]                  # best config: highest IDF1 on group "all", then MOTA
+max_sweep: null                          # null = all sweep entries
+
+smoke:                                   # --smoke: one short sequence, one tracker config
+  sequences: ["0000"]
+  max_frames: 50
+  max_sweep: 1
