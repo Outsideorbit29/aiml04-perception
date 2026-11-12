@@ -1,5 +1,7 @@
 """Tracker (ByteTrack via supervision) on synthetic detections, plus the track overlay."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -123,3 +125,72 @@ def test_low_score_detection_extends_but_never_starts_a_track():
     fresh = Tracker(CFG)
     for _ in range(5):
         assert fresh.update([det(200, 100, cls=3, score=0.15)], None) == []
+
+
+# ---------- state pruning follows ByteTrack, not the last output (qa-reviewer M2 item 2) ----------
+class _Out:
+    """Minimal stand-in for ``sv.Detections`` returned by ``update_with_detections``."""
+
+    def __init__(self, ids: list[int]) -> None:
+        self.tracker_id = np.array(ids, int)
+        self.data = {"idx": np.arange(len(ids))}
+
+    def __len__(self) -> int:
+        return len(self.tracker_id)
+
+
+class ScriptedByteTrack:
+    """Outputs id 1 on ``out`` frames and lists it as live on ``live`` frames.
+
+    Frames that are live but not output mimic supervision updating a track whose Kalman box
+    overlaps the detection by IoU <= 0.5: ByteTrack keeps it, but it is not returned.
+    """
+
+    def __init__(self, out: set[int], live: set[int], expose: bool = True) -> None:
+        self.out, self.live, self.expose, self.f = out, live, expose, 0
+        if expose:
+            self.tracked_tracks: list = []
+            self.lost_tracks: list = []
+
+    def update_with_detections(self, _dets):
+        self.f += 1
+        if self.expose:
+            alive = self.f in self.live
+            self.tracked_tracks = [SimpleNamespace(external_track_id=1)] if alive else []
+        return _Out([1] if self.f in self.out else [])
+
+
+def run_scripted(bt: ScriptedByteTrack, frames: int) -> list[list[Track]]:
+    tr = Tracker(CFG)  # frame_rate 10, lost_track_buffer 30 -> max_lost 10
+    assert tr.max_lost == 10
+    tr._bt = bt
+    return [tr.update([det(10, 50)], None) for _ in range(frames)]
+
+
+def test_state_kept_while_bytetrack_holds_the_id_even_without_output():
+    out = {1, 2, 3, 30}
+    seq = run_scripted(ScriptedByteTrack(out, live=set(range(1, 31))), 30)
+    (back,) = seq[29]  # 26 frames without output (> 2 * max_lost), but ByteTrack kept it
+    assert back.track_id == 1 and back.age == 29 and len(back.history) == 4
+
+
+def test_state_dropped_once_bytetrack_drops_the_id():
+    seq = run_scripted(ScriptedByteTrack({1, 2, 3, 6}, live={1, 2, 3}), 6)
+    (back,) = seq[5]  # gone from ByteTrack at frame 4: any later id 1 is a new track
+    assert back.age == 0 and len(back.history) == 1
+
+
+def test_state_fallback_keeps_two_max_lost_when_internals_hidden():
+    (kept,) = run_scripted(ScriptedByteTrack({1, 16}, set(), expose=False), 16)[15]
+    assert kept.age == 15 and len(kept.history) == 2  # 15 frames > max_lost, < 2 * max_lost
+    (gone,) = run_scripted(ScriptedByteTrack({1, 25}, set(), expose=False), 25)[24]
+    assert gone.age == 0
+
+
+def test_installed_supervision_exposes_live_ids():
+    """Guards the internals _live_ids reads; if this fails the 2*max_lost fallback is in use."""
+    tr = Tracker(CFG)
+    for t in range(3):
+        ids = {tk.track_id for tk in tr.update(scene(t), None)}
+    live = tr._live_ids()
+    assert live is not None and ids <= live

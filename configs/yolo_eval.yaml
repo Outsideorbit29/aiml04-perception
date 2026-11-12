@@ -21,6 +21,8 @@ val:                                     # Ultralytics model.val(): mAP, per-cla
 
 analysis:                                # error breakdown with the Detector class (batch 1)
   conf: 0.25                             # operating point for recall/precision and the gallery
+  agnostic_nms: false                    # class-aware NMS like model.val(), so the breakdown
+                                         # matches the mAP numbers (runtime config uses true)
   iou_match: 0.5
   small_area_px: 1024                    # < 32^2 px at 1280x720 = small (EDA definition)
   medium_area_px: 9216                   # < 96^2 px = medium, else large

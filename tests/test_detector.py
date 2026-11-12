@@ -1,14 +1,22 @@
 """Detector and shared pre/post-processing (CPU only: fake backends, no torch, no weights)."""
 
+import logging
+import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import cv2
 import numpy as np
 import pytest
+import yaml
 
 from perception.detection import BACKENDS, Detector, ExportedBackend, load_config
-from perception.detection.detector import REQUIRED_KEYS, load_names, result_to_raw
+from perception.detection.detector import (
+    OPTIONAL_DEFAULTS,
+    REQUIRED_KEYS,
+    load_names,
+    result_to_raw,
+)
 from perception.detection.processing import (
     RawDetections,
     box_iou,
@@ -167,6 +175,80 @@ def test_decode_yolo_threshold_class_aware_nms_and_filter():
     assert decode_yolo(raw, 0.25, 0.7, 300, classes=[2]).cls.tolist() == [2]
     assert decode_yolo(raw, 0.25, 0.7, max_det=1).cls.tolist() == [0]
     assert len(decode_yolo(raw, conf=0.95, iou=0.7, max_det=300).boxes) == 0
+
+
+def test_decode_yolo_agnostic_nms_keeps_one_box_per_object():
+    """car 0.8 + truck 0.4 on the same vehicle: class-aware keeps both, agnostic keeps the car."""
+    raw = make_raw(
+        [
+            (50, 50, 40, 30, 0, 0.8),  # car
+            (51, 50, 40, 30, 1, 0.4),  # truck, same object
+            (300, 300, 40, 30, 1, 0.6),  # a real truck elsewhere
+        ],
+        nc=9,
+    )
+    assert sorted(decode_yolo(raw, 0.25, 0.7, 300).cls.tolist()) == [0, 1, 1]
+    out = decode_yolo(raw, 0.25, 0.7, 300, agnostic=True)
+    assert out.cls.tolist() == [0, 1] and out.scores.tolist() == pytest.approx([0.8, 0.6])
+    np.testing.assert_allclose(out.boxes[1], [280, 285, 320, 315])
+
+
+def test_exported_backend_honours_agnostic_nms():
+    class TwoLabels(ExportedBackend):
+        def infer(self, blob: np.ndarray) -> np.ndarray:
+            return make_raw([(160, 260, 160, 120, 0, 0.8), (161, 260, 160, 120, 1, 0.4)], nc=9)
+
+    frame = fixture_frame()
+    for agnostic, n in ((False, 2), (True, 1)):
+        cfg = {**CFG, "agnostic_nms": agnostic}
+        out = Detector(cfg, backend=TwoLabels({**OPTIONAL_DEFAULTS, **cfg})).detect(frame)
+        assert len(out) == n and out[0].cls_name == "car"
+
+
+def test_torch_backend_passes_agnostic_nms_to_ultralytics(monkeypatch):
+    """No torch in CI: a fake ``ultralytics`` module records the predict() kwargs."""
+    calls: list[dict] = []
+
+    class FakeYOLO:
+        names = load_names(CFG)
+
+        def __init__(self, weights: str) -> None:
+            self.weights = weights
+
+        def predict(self, frame, **kwargs):
+            calls.append(kwargs)
+            boxes = SimpleNamespace(xyxy=np.zeros((0, 4)), conf=np.zeros(0), cls=np.zeros(0))
+            return [SimpleNamespace(boxes=boxes)]
+
+    monkeypatch.setitem(sys.modules, "ultralytics", ModuleType("ultralytics"))
+    monkeypatch.setattr(sys.modules["ultralytics"], "YOLO", FakeYOLO, raising=False)
+    repo = load_config("configs/yolo_detector.yaml")
+    assert Detector(repo).detect(fixture_frame()) == []
+    assert calls[-1]["agnostic_nms"] is True
+    Detector({**CFG}).detect(fixture_frame())  # key missing -> Ultralytics default (False)
+    assert calls[-1]["agnostic_nms"] is False
+
+
+def test_nms_mode_in_repo_configs():
+    """Runtime (tracking) NMS is agnostic; the eval breakdown stays class-aware like model.val()."""
+    assert load_config("configs/yolo_detector.yaml")["agnostic_nms"] is True
+    ev = yaml.safe_load((Path(__file__).parents[1] / "configs/yolo_eval.yaml").read_text())
+    assert ev["analysis"]["agnostic_nms"] is False
+
+
+def test_warns_when_backend_names_disagree_with_data_config(caplog):
+    empty = RawDetections(np.zeros((0, 4)), np.zeros(0), np.zeros(0))
+    with caplog.at_level(logging.WARNING, logger="perception.detection.detector"):
+        det = Detector(CFG, backend=FakeBackend(empty))  # fake0/fake4 vs BDD names
+    assert det.names[0] == "car"
+    assert any("differ" in r.getMessage() for r in caplog.records)
+
+    caplog.clear()
+    same = FakeBackend(empty)
+    same.names = load_names(CFG)
+    with caplog.at_level(logging.WARNING, logger="perception.detection.detector"):
+        Detector(CFG, backend=same)
+    assert not caplog.records
 
 
 def test_exported_backend_shares_pre_and_post_processing():

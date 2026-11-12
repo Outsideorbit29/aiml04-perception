@@ -35,7 +35,7 @@ REFERENCE_FPS = 30.0  # ByteTrack defines lost_track_buffer at 30 fps and rescal
 @dataclass
 class _TrackState:
     first_frame: int
-    last_frame: int
+    last_frame: int  # last frame this id was output (ByteTrack may update it without output)
     history: deque = field(default_factory=deque)
 
 
@@ -60,7 +60,10 @@ class Tracker:
 
         self._sv = sv
         self.history_len = int(cfg["history_len"])
-        # Same rule ByteTrack uses to drop lost tracks; past it an id never comes back.
+        # ByteTrack drops a track this many frames after its last *update*. supervision outputs a
+        # matched track only if its Kalman box overlaps the detection (IoU > 0.5), so the last
+        # *output* can be older than the last update. Without access to ByteTrack's live tracks
+        # we keep states for 2 * max_lost frames since the last output instead.
         self.max_lost = max(1, int(cfg["frame_rate"] / REFERENCE_FPS * cfg["lost_track_buffer"]))
         self.reset()
 
@@ -86,6 +89,27 @@ class Tracker:
             class_id=np.array([d.cls for d in dets], int),
             data={"idx": np.arange(len(dets))},
         )
+
+    def _live_ids(self) -> set[int] | None:
+        """External ids ByteTrack still holds (tracked or lost), or None if not exposed."""
+        pools = [getattr(self._bt, n, None) for n in ("tracked_tracks", "lost_tracks")]
+        if any(p is None for p in pools):
+            return None
+        try:
+            return {int(t.external_track_id) for pool in pools for t in pool}
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+    def _prune(self) -> None:
+        """Drop per-id state only once ByteTrack itself can no longer return that id."""
+        live = self._live_ids()
+        if live is not None:
+            dead = [t for t in self._states if t not in live]
+        else:
+            cutoff = self.frame_idx - 2 * self.max_lost
+            dead = [t for t, s in self._states.items() if s.last_frame < cutoff]
+        for t in dead:
+            del self._states[t]
 
     @staticmethod
     def _source_rows(out: Any, dets: list[Detection]) -> list[int]:
@@ -126,7 +150,5 @@ class Tracker:
                     history=deque(st.history, maxlen=self.history_len),
                 )
             )
-        cutoff = self.frame_idx - self.max_lost
-        for t in [t for t, s in self._states.items() if s.last_frame < cutoff]:
-            del self._states[t]
+        self._prune()
         return tracks

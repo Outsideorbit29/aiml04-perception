@@ -7,6 +7,8 @@ import pytest
 import yaml
 
 from perception.types import Detection
+from scripts.data.bdd_yolo import format_yolo_rows, frame_to_yolo
+from scripts.data.prepare_bdd import compact
 from scripts.eval_detection import (
     Breakdown,
     GroundTruth,
@@ -15,6 +17,7 @@ from scripts.eval_detection import (
     gt_from_meta,
     gt_from_yolo,
     latency_stats,
+    load_min_box_px,
     make_grid,
     match_image,
     pick_failures,
@@ -56,9 +59,9 @@ def test_gt_from_yolo_fixture_and_meta():
     assert len(gt.cls) == sum(1 for line in label.read_text().splitlines() if line.strip())
     assert (gt.boxes[:, 2] > gt.boxes[:, 0]).all() and gt.boxes.max() <= 320 + 1e-3
     assert not gt.occluded.any()
-    m = gt_from_meta([[0, 1, 2, 30, 40, 1, 0], [7, 5, 5, 9, 9, 0, 1]])
+    m = gt_from_meta([[0, 1, 2, 30, 40, 1, 0], [7, 5, 5, 9, 9, 0, 1]], 320, 180, 1.0)
     assert m.cls.tolist() == [0, 7] and m.occluded.tolist() == [True, False]
-    assert gt_from_meta([]).boxes.shape == (0, 4)
+    assert gt_from_meta([], 320, 180, 1.0).boxes.shape == (0, 4)
 
 
 def test_breakdown_rows():
@@ -138,3 +141,51 @@ def test_match_image_one_prediction_per_gt_and_iou_threshold():
                              np.array([0, 0, 0]), 0.5)
     # the 0.95 box has IoU 0.4 < 0.5; of the two exact boxes only the higher score is a TP
     assert gt_hit.tolist() == [True] and tp.tolist() == [False, True, False]
+
+
+# ---------- meta GT gets the same clip + min-size filter as the YOLO labels (M2 QA item 3) ----
+def test_gt_from_meta_clips_orders_and_drops_thin_boxes():
+    rows = [
+        [0, -20, 10, 100, 60, 1, 1],  # off the left edge: clipped to x1 = 0
+        [3, 1300, 700, 1200, 600, 0, 0],  # corners swapped and past the right edge
+        [7, 500, 300, 500.5, 340, 0, 0],  # 0.5 px wide: dropped
+        [8, 1279.5, 10, 1300, 40, 1, 0],  # 0.5 px wide after clipping: dropped
+        [1, 10, -5, 50, -1, 0, 0],  # fully above the image: dropped
+        [2, 200, 200, 260, 240, 1, 0],
+    ]
+    gt = gt_from_meta(rows, 1280, 720, min_box_px=1.0)
+    assert gt.cls.tolist() == [0, 3, 2]
+    assert gt.occluded.tolist() == [True, False, True]  # filtered in step with the boxes
+    np.testing.assert_allclose(
+        gt.boxes, [[0, 10, 100, 60], [1200, 600, 1280, 700], [200, 200, 260, 240]]
+    )
+    assert gt.boxes.dtype == np.float32
+    assert len(gt_from_meta(rows, 1280, 720, min_box_px=50.0).cls) == 2  # threshold is honoured
+
+
+def test_gt_from_meta_matches_yolo_labels_for_the_same_frame():
+    """meta/frames_val rows and labels/val/*.txt from prepare_bdd must give the same GT."""
+    frame = {
+        "name": "x.jpg",
+        "labels": [
+            {"category": "car", "box2d": {"x1": -15, "y1": 300, "x2": 120, "y2": 420},
+             "attributes": {"occluded": True}},
+            {"category": "pedestrian", "box2d": {"x1": 640, "y1": 350, "x2": 660, "y2": 410}},
+            {"category": "traffic sign", "box2d": {"x1": 800, "y1": 100, "x2": 800.4, "y2": 130}},
+            {"category": "truck", "box2d": {"x1": 1200, "y1": 500, "x2": 1350, "y2": 760}},
+            {"category": "train", "box2d": {"x1": 1, "y1": 1, "x2": 50, "y2": 50}},  # unmapped
+        ],
+    }
+    w, h, min_px = 1280, 720, load_min_box_px("configs/data_bdd.yaml")
+    from_meta = gt_from_meta(compact(frame)["boxes"], w, h, min_px)
+    from_yolo = gt_from_yolo(format_yolo_rows(frame_to_yolo(frame, w, h, min_px)), w, h)
+    assert from_meta.cls.tolist() == from_yolo.cls.tolist() == [0, 3, 1]
+    np.testing.assert_allclose(from_meta.boxes, from_yolo.boxes, atol=1e-2)
+    assert from_meta.occluded.tolist() == [True, False, False]
+
+
+def test_min_box_px_comes_from_the_data_prep_config():
+    data = yaml.safe_load((ROOT / "configs/data_bdd.yaml").read_text())
+    assert load_min_box_px("configs/data_bdd.yaml") == float(data["prep"]["min_box_px"])
+    ev = yaml.safe_load((ROOT / "configs/yolo_eval.yaml").read_text())
+    assert ev["data_config"] == "configs/data_bdd.yaml"

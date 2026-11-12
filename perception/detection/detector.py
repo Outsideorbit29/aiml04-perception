@@ -13,6 +13,7 @@ Backends, chosen by ``cfg["backend"]``:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -28,6 +29,8 @@ from perception.detection.processing import (
 )
 from perception.types import Detection
 
+log = logging.getLogger(__name__)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REQUIRED_KEYS = ("backend", "weights", "imgsz", "conf", "iou")
 OPTIONAL_DEFAULTS: dict[str, Any] = {
@@ -35,6 +38,7 @@ OPTIONAL_DEFAULTS: dict[str, Any] = {
     "device": None,
     "half": False,
     "classes": None,
+    "agnostic_nms": False,  # Ultralytics default; configs/yolo_detector.yaml turns it on
     "names": None,
     "data_config": None,
 }
@@ -100,6 +104,7 @@ class TorchBackend:
             "max_det": cfg["max_det"],
             "half": bool(cfg["half"]),
             "classes": cfg["classes"],
+            "agnostic_nms": bool(cfg.get("agnostic_nms", OPTIONAL_DEFAULTS["agnostic_nms"])),
             "verbose": False,
         }
         if cfg["device"] is not None:
@@ -121,6 +126,7 @@ class ExportedBackend:
         self.iou = float(cfg["iou"])
         self.max_det = int(cfg["max_det"])
         self.classes = cfg["classes"]
+        self.agnostic = bool(cfg.get("agnostic_nms", OPTIONAL_DEFAULTS["agnostic_nms"]))
 
     def infer(self, blob: np.ndarray) -> np.ndarray:
         """1x3xHxW float32 RGB blob -> raw head output (1, 4 + nc, N)."""
@@ -128,7 +134,9 @@ class ExportedBackend:
 
     def __call__(self, frame: np.ndarray) -> RawDetections:
         img, ratio, pad = letterbox(frame, self.imgsz)
-        raw = decode_yolo(self.infer(to_blob(img)), self.conf, self.iou, self.max_det, self.classes)
+        raw = decode_yolo(
+            self.infer(to_blob(img)), self.conf, self.iou, self.max_det, self.classes, self.agnostic
+        )
         return raw._replace(boxes=scale_boxes(raw.boxes, ratio, pad, frame.shape[:2]))
 
 
@@ -175,7 +183,16 @@ class Detector:
                 raise ValueError(f"unknown detector backend {kind!r}; choose from {list(BACKENDS)}")
             backend = BACKENDS[kind](self.cfg)
         self.backend = backend
-        self.names: dict[int, str] = load_names(self.cfg) or getattr(backend, "names", None) or {}
+        cfg_names = load_names(self.cfg)
+        model_names = getattr(backend, "names", None)
+        if cfg_names and model_names and cfg_names != model_names:
+            log.warning(
+                "class names in %s %s differ from the model's own names %s; using the config's",
+                self.cfg.get("data_config") or "cfg['names']",
+                cfg_names,
+                model_names,
+            )
+        self.names: dict[int, str] = cfg_names or model_names or {}
         self.conf = float(self.cfg["conf"])
 
     def detect(self, frame: np.ndarray) -> list[Detection]:

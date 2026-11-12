@@ -9,4 +9,6 @@ max_det: 300
 device: null                        # null = auto (cuda:0 when available)
 half: false                         # FP16 for the torch backend
 classes: null                       # optional list of class ids to keep; null = all 9
+agnostic_nms: true                  # one box per object across classes (car 0.8 + truck 0.4
+                                    # would become two ByteTrack tracks: it ignores class)
 data_config: configs/data_bdd.yaml  # class names (same order as training)

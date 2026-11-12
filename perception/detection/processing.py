@@ -6,7 +6,7 @@ as Ultralytics' predictor:
 
     img, ratio, pad = letterbox(frame, imgsz)
     raw = session.run(to_blob(img))              # (1, 4 + nc, N) for YOLO11 detect heads
-    boxes, scores, cls = decode_yolo(raw, conf, iou, max_det)
+    boxes, scores, cls = decode_yolo(raw, conf, iou, max_det, classes, agnostic)
     boxes = scale_boxes(boxes, ratio, pad, frame.shape[:2])
 """
 
@@ -102,10 +102,13 @@ def decode_yolo(
     iou: float,
     max_det: int,
     classes: list[int] | None = None,
+    agnostic: bool = False,
 ) -> RawDetections:
     """Decode a YOLOv8/11 detect head output ``(1, 4 + nc, N)`` into boxes in letterbox pixels.
 
-    Rows are cx, cy, w, h followed by one score per class (no objectness). NMS is class-aware.
+    Rows are cx, cy, w, h followed by one score per class (no objectness). NMS is class-aware
+    unless ``agnostic`` (Ultralytics ``agnostic_nms``): then overlapping boxes of different
+    classes suppress each other, so one object never leaves two boxes (e.g. car + truck).
     """
     pred = np.asarray(raw, np.float32)
     if pred.ndim == 3:
@@ -122,7 +125,8 @@ def decode_yolo(
         return empty_raw()
     cx, cy, w, h = pred[:, 0], pred[:, 1], pred[:, 2], pred[:, 3]
     boxes = np.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], axis=1)
-    idx = nms(boxes + cls[:, None] * MAX_WH, scores, iou)[:max_det]
+    offset = 0.0 if agnostic else cls[:, None] * MAX_WH
+    idx = nms(boxes + offset, scores, iou)[:max_det]
     return RawDetections(
         boxes[idx].astype(np.float32), scores[idx].astype(np.float32), cls[idx].astype(np.int64)
     )

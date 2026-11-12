@@ -31,7 +31,7 @@ import cv2
 import numpy as np
 import yaml
 
-from perception.detection.detector import load_names
+from perception.detection.detector import load_names, resolve_path
 from perception.detection.processing import box_iou
 from perception.types import Detection
 
@@ -49,10 +49,26 @@ class GroundTruth:
     occluded: np.ndarray  # (N,) bool
 
 
-def gt_from_meta(rows: Sequence[Sequence[float]]) -> GroundTruth:
-    """Rows from data-prep ``meta/frames_val.jsonl.gz``: [cls, x1, y1, x2, y2, occluded, trunc]."""
+def gt_from_meta(
+    rows: Sequence[Sequence[float]], width: int, height: int, min_box_px: float
+) -> GroundTruth:
+    """Rows from data-prep ``meta/frames_val.jsonl.gz``: [cls, x1, y1, x2, y2, occluded, trunc].
+
+    The meta boxes are raw BDD boxes, so they get the same treatment as the YOLO labels
+    (``scripts.data.bdd_yolo.frame_to_yolo``): order the corners, clip to the image, and drop
+    boxes thinner than ``min_box_px`` after clipping.
+    """
     arr = np.asarray(rows, np.float32).reshape(-1, 7)
-    return GroundTruth(arr[:, 0].astype(int), arr[:, 1:5].copy(), arr[:, 5] > 0)
+    xs, ys = np.sort(arr[:, [1, 3]], axis=1), np.sort(arr[:, [2, 4]], axis=1)
+    xs, ys = xs.clip(0, float(width)), ys.clip(0, float(height))
+    keep = (xs[:, 1] - xs[:, 0] >= min_box_px) & (ys[:, 1] - ys[:, 0] >= min_box_px)
+    boxes = np.stack([xs[:, 0], ys[:, 0], xs[:, 1], ys[:, 1]], axis=1)[keep]
+    return GroundTruth(arr[keep, 0].astype(int), boxes.astype(np.float32), arr[keep, 5] > 0)
+
+
+def load_min_box_px(data_config: str | Path) -> float:
+    """``prep.min_box_px`` from the data config that ``scripts.data.prepare_bdd`` used."""
+    return float(yaml.safe_load(resolve_path(data_config).read_text())["prep"]["min_box_px"])
 
 
 def gt_from_yolo(text: str, w: int, h: int) -> GroundTruth:
@@ -256,10 +272,12 @@ def load_meta(path: Path) -> dict[str, dict[str, Any]]:
     return {Path(r["name"]).stem: r for r in rows}
 
 
-def ground_truth(img_path: Path, meta: dict[str, dict[str, Any]], shape: tuple) -> GroundTruth:
+def ground_truth(
+    img_path: Path, meta: dict[str, dict[str, Any]], shape: tuple, min_px: float
+) -> GroundTruth:
     m = meta.get(img_path.stem)
-    if m is not None:
-        return gt_from_meta(m["boxes"])
+    if m is not None:  # original pixels; val images are not resized (prep.max_side = 1280)
+        return gt_from_meta(m["boxes"], shape[1], shape[0], min_px)
     from scripts.train_yolo import label_path
 
     return gt_from_yolo(label_path(img_path).read_text(), shape[1], shape[0])
@@ -303,7 +321,7 @@ def analyse(
         dets = detector.detect(img)
         if i >= a["fps_warmup"]:
             lat.append((time.perf_counter() - t0) * 1000.0)
-        gt = ground_truth(p, meta, img.shape)
+        gt = ground_truth(p, meta, img.shape, a["min_box_px"])
         pb, ps, pc = dets_to_arrays(dets)
         gt_hit, pred_tp = match_image(gt.boxes, gt.cls, pb, ps, pc, a["iou_match"])
         sizes = size_buckets(gt.boxes, a["small_area_px"], a["medium_area_px"])
@@ -334,9 +352,10 @@ def analyse(
 
 
 def gallery(
-    detector: Any, records: list[dict], meta: dict, names: dict[int, str], cfg: dict, case: str
+    detector: Any, records: list[dict], meta: dict, names: dict[int, str], cfg: dict,
+    a: dict[str, Any], case: str,
 ) -> Path | None:
-    g, a = cfg["gallery"], cfg["analysis"]
+    g = cfg["gallery"]
     picks = pick_failures(records, case, g["per_case"], g["min_gt"] if case == "night" else 0)
     if not picks:
         print(f"gallery {case}: no failing images", flush=True)
@@ -345,7 +364,7 @@ def gallery(
     for r in picks:
         p = Path(r["path"])
         img = cv2.imread(str(p))
-        gt = ground_truth(p, meta, img.shape)
+        gt = ground_truth(p, meta, img.shape, a["min_box_px"])
         pred = dets_to_arrays(detector.detect(img))
         gt_hit, pred_tp = match_image(gt.boxes, gt.cls, *pred, a["iou_match"])
         title = f"{p.stem[:17]} {r['timeofday']} miss {r['fn']}/{r['n_gt']} fp {r['fp']}"
@@ -367,7 +386,8 @@ def main(argv: Iterable[str] | None = None) -> None:
     names = load_names({"data_config": cfg["data_config"]}) or {}
     out = Path(cfg["out_dir"])
     out.mkdir(parents=True, exist_ok=True)
-    a = cfg["analysis"]
+    # Same GT filtering as the YOLO labels: min_box_px comes from the data-prep config.
+    a = {**cfg["analysis"], "min_box_px": load_min_box_px(cfg["data_config"])}
     limit = cfg["smoke"]["limit"] if args.smoke else a["limit"]
 
     import wandb
@@ -411,7 +431,7 @@ def main(argv: Iterable[str] | None = None) -> None:
 
     # 2. Error breakdown and latency with the Detector class.
     det_cfg = load_config(cfg["detector_config"], weights=str(weights), conf=a["conf"],
-                          imgsz=cfg["val"]["imgsz"])
+                          imgsz=cfg["val"]["imgsz"], agnostic_nms=a["agnostic_nms"])
     detector = Detector(det_cfg)
     records, bd, lat = analyse(detector, paths, meta, names, a)
     results["breakdown"] = bd.rows()
@@ -422,7 +442,7 @@ def main(argv: Iterable[str] | None = None) -> None:
 
     # 3. Failure galleries.
     cases = cfg["gallery"]["cases"]
-    galleries = {c: gallery(detector, records, meta, names, cfg, c) for c in cases}
+    galleries = {c: gallery(detector, records, meta, names, cfg, a, c) for c in cases}
     results["galleries"] = {c: str(p) for c, p in galleries.items() if p}
 
     # 4. Log.
