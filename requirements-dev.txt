@@ -3,5 +3,6 @@
 numpy>=1.26
 opencv-python-headless>=4.9
 pyyaml>=6.0
+supervision>=0.22,<0.27  # ByteTrack for perception.tracking tests (no torch)
 pytest>=8.0
 ruff>=0.6

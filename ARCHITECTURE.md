@@ -96,11 +96,11 @@ class weighting or oversampling for rare classes (rider, motorcycle).
 
 ### 3.2 Detection (`perception/detection/`)
 - Ultralytics **YOLO11s** (fall back to YOLOv8s if needed), pretrained on COCO, fine-tuned on BDD100K at 640 px on a **Kaggle T4/P100**, batch 32 with AMP, about 50 epochs over 2 sessions with checkpoint resume.
-- `Detector` interface: `detect(frame) -> list[Detection]`. Backends are `torch`, `onnxruntime` and `tensorrt`, chosen in config.
+- `Detector` interface: `detect(frame) -> list[Detection]`. Backends are `torch`, `onnx` (ONNX Runtime) and `tensorrt`, chosen in config.
 - Metrics: mAP@0.5 and mAP@0.5:0.95, per-class AP, plus mAP on CARLA frames (sim-to-real gap).
 
 ### 3.3 Tracking (`perception/tracking/`)
-- **ByteTrack** is the default (Ultralytics tracker config). **DeepSORT** (`deep-sort-realtime`) is the comparison.
+- **ByteTrack** is the default (`supervision` implementation, so the laptop runtime needs no PyTorch; config in `configs/tracker.yaml`). **DeepSORT** (`deep-sort-realtime`) is the comparison.
 - `Tracker.update(detections, frame) -> list[Track]`, which keeps the track id, class, bbox history and age.
 - Metrics on a BDD100K MOT subset: MOTA, IDF1, ID switches (TrackEval), plus FPS.
 

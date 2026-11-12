@@ -69,9 +69,9 @@ On the laptop (one short session):
 ## M2 – Detection and tracking (Nov 11–14) ☁ [detection-tracking]
 - [x] M2.1 Baseline: COCO-pretrained YOLO11s zero-shot on BDD val, mAP logged (mAP@0.5 0.361 on 7 shared classes)
 - [x] M2.2 Fine-tune YOLO11s on Kaggle (640, batch 32 on T4 or P100, AMP, ~50 epochs). Split into 2 sessions with `resume=True`. The checkpoint is saved every epoch as a W&B artifact so a session timeout loses nothing. Done 2026-11-09: 50 epochs in one 4.6 h session, mAP@0.5 0.553 / mAP@0.5:0.95 0.309.
-- [ ] M2.3 Evaluate: per-class AP, confusion matrix, failure gallery (night, small objects)
-- [ ] M2.4 `Detector` class with torch backend and a config switch for onnx/trt (filled in M6)
-- [ ] M2.5 ByteTrack integration through the `Tracker` class; annotated video rendered on Kaggle
+- [x] M2.3 Evaluate: per-class AP, confusion matrix, failure gallery (night, small objects)
+- [x] M2.4 `Detector` class with torch backend and a config switch for onnx/trt (filled in M6)
+- [x] M2.5 ByteTrack integration through the `Tracker` class; annotated video rendered on Kaggle
 - [ ] M2.6 MOT eval on a BDD MOT subset (MOTA, IDF1, ID switches)
 - [ ] M2.7 **(S)** DeepSORT comparison
 - Exit: fine-tuned mAP@0.5 beats the zero-shot baseline, numbers are in EXPERIMENTS.md, and `best.pt` is a W&B artifact.
