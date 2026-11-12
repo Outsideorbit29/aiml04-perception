@@ -9,10 +9,14 @@ Add one row per run as soon as it finishes. W&B project: `aiml04-perception`.
 | 2026-11-09 | train-yolo smoke (sanity only) | YOLO11s COCO → BDD | 640 train imgs (668 with RFS), 500 val, imgsz 320 | 1 | 0.016 | 0.006 | [njln4om8](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/njln4om8) | Job check only (3.6 min). Zero-shot on the same 500 val images at 640: mAP@0.5 0.356 (7 shared classes). Staging 60k files to /kaggle/temp took ~140 s. |
 | 2026-11-09 | baseline-zeroshot (M2.1) | YOLO11s COCO | BDD val 10k, imgsz 640 | 0 | 0.361 | 0.210 | [6euheeu2](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/6euheeu2) | 7 shared classes only (rider scored as person, traffic sign excluded). Per class AP50: car 0.578, person 0.492, bus 0.375, bicycle 0.317, truck 0.315, motorcycle 0.272, traffic light 0.179. |
 | 2026-11-09 | yolo11s-bdd (M2.2) | YOLO11s COCO → BDD | 20k subset + RFS (20,853 entries), BDD val 10k, imgsz 640 | 50 | **0.553** | **0.309** | [6euheeu2](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/6euheeu2) | One Kaggle T4 session, 4.6 h, no resume needed. On the 7 shared classes: 0.560 / 0.321 (+0.20 mAP@0.5 over zero-shot). Per class AP50: car 0.775, sign 0.630, light 0.596, person 0.587, truck 0.582, bus 0.572, rider 0.426, bicycle 0.425, motorcycle 0.383. Weights: W&B artifact `yolo11s-bdd-best:candidate`. |
+| 2026-11-12 | yolo11s-bdd-eval (M2.3) | YOLO11s BDD (`yolo11s-bdd-best:candidate`) | BDD val 10k, imgsz 640 | – | 0.553 | 0.309 | [8tzih6my](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/8tzih6my) | Re-evaluation matches training exactly. Day 0.559 / night 0.533 / dawn-dusk 0.568 mAP@0.5, so night costs only ~0.03. Recall 0.67, precision 0.71 overall; lowest recall: motorcycle 0.38, bicycle 0.39, rider 0.39. Main confusions: truck↔car, traffic light↔sign. Detector-only latency on T4 (torch, batch 1): 11.1 ms mean, 90 FPS. Galleries (night, small, occlusion) in W&B. |
 
 ## Tracking (M2)
 | Date | Tracker | Detector | Clip set | MOTA | IDF1 | ID sw | FPS | W&B |
 |---|---|---|---|---|---|---|---|---|
+| 2026-11-12 | ByteTrack (supervision) | YOLO11s BDD, agnostic NMS | KITTI tracking 0000, 0001, 0011 (754 frames) | – (M2.6) | – (M2.6) | – | 52 (det 15.9 ms + track 3.2 ms, T4) | [f4sdcuqk](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/f4sdcuqk) |
+
+KITTI videos are qualitative only (no MOT metrics yet). Fragmentation is visible: seq 0000 has 75 unique ids over 154 frames with ~7 objects active, and 23 tracks are shorter than 3 frames. M2.6 measures this properly (MOTA/IDF1/ID switches); if ID switches are high, try a longer `lost_track_buffer` and a lower activation threshold before trying DeepSORT.
 
 ## Lanes (M3)
 | Date | Method | Eval set | IoU | F1 | Night F1 | FPS | W&B |
