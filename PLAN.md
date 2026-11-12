@@ -77,7 +77,7 @@ On the laptop (one short session):
 - Exit: fine-tuned mAP@0.5 beats the zero-shot baseline, numbers are in EXPERIMENTS.md, and `best.pt` is a W&B artifact.
 
 ## M3 – Lane detection (Nov 13–15) ☁ [lane-depth]
-- [ ] M3.1 Classical pipeline (ROI, HLS + Sobel, bird's-eye warp, sliding window, polyfit, smoothing). Develop it against the fixtures with CPU-only code.
+- [x] M3.1 Classical pipeline (ROI, HLS + Sobel, bird's-eye warp, sliding window, polyfit, smoothing). Develop it against the fixtures with CPU-only code.
 - [ ] M3.2 Learned pipeline: YOLOP pretrained lane/drivable output in the same `LaneResult` format
 - [ ] M3.3 Evaluation on 500 BDD val images on Kaggle: lane IoU/F1 by condition, plus FPS
 - [ ] M3.4 Comparison table and a failure-case figure for the report
