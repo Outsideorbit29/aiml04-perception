@@ -1,0 +1,53 @@
+# Lane detection (M3). Read by perception.lanes.build_lane_detector().
+# Every threshold, ROI vertex and warp point used by perception/lanes/ lives here.
+# Points are fractions of the image (x / (W-1), y / (H-1)), so one file serves BDD (1280x720),
+# KITTI (1242x375), CARLA (800x450) and the downscaled test fixtures. Retune them on Kaggle (M3.3).
+
+method: classical          # classical | yolop (M3.2). Same LaneResult output either way.
+ego_mask: true             # fill the polygon between left and right boundaries into LaneResult.ego_mask
+
+# Shared by every backend: a backend produces an image-space lane binary, then this stage warps
+# it to a bird's-eye view, runs the sliding-window search and fits x = a*y^2 + b*y + c.
+fitting:
+  roi:                     # polygon vertices, clockwise from bottom-left; cuts sky and hood
+    polygon: [[0.00, 0.95], [0.40, 0.60], [0.60, 0.60], [1.00, 0.95]]
+  warp:                    # perspective src (image) -> dst (bird's-eye), order TL, TR, BR, BL
+    src: [[0.44, 0.62], [0.56, 0.62], [0.80, 0.90], [0.20, 0.90]]
+    dst: [[0.25, 0.00], [0.75, 0.00], [0.75, 1.00], [0.25, 1.00]]
+  sliding_window:
+    n_windows: 9
+    margin_frac: 0.08        # half window width, fraction of bird's-eye width
+    min_pix_frac: 0.005      # pixels needed to re-centre a window, fraction of window area
+    histogram_frac: 0.5      # bottom fraction of the bird's-eye image used to find lane bases
+  min_fit_pix_frac: 0.0005   # pixels needed to fit one side, fraction of bird's-eye area
+  min_window_hits_frac: 0.25 # windows with >= min_pix, fraction of n_windows; below -> side dropped
+  lane_width_frac: [0.25, 0.80]  # plausible right-left gap in bird's-eye view, frac of width
+  refit_samples: 30          # points sampled on the bird's-eye fit and mapped back for the image fit
+
+smoothing:                 # per-side EMA on image-space coefficients across frames
+  enabled: true              # set false for independent images (BDD eval)
+  alpha: 0.3                 # weight of the new fit
+  max_missed: 5              # frames a side is held without a detection before it is dropped
+  missed_conf_decay: 0.8     # confidence multiplier per missed frame
+  max_jump_frac: 0.15        # new fit whose bottom-row x moves more than this * W is an outlier
+
+classical:
+  every_n_frames: 1          # cheap enough to run on every frame
+  threshold:                 # HLS + Sobel; a pixel is lane if any of the three tests passes
+    sobel_kernel: 3
+    sobel_x: [20, 100]       # |d(L)/dx| scaled to 0-255 by the per-frame max
+    s_channel: [170, 255]    # HLS saturation (yellow paint)
+    l_channel: [200, 255]    # HLS lightness (white paint)
+
+yolop:                     # M3.2, not implemented yet
+  every_n_frames: 2          # allowed by the latency budget (ARCHITECTURE.md section 6)
+  weights: null              # W&B artifact or torch.hub id, resolved on Kaggle
+  input_size: [640, 384]
+  lane_threshold: 0.5
+
+viz:                       # overlay colours (BGR) for perception.lanes.render
+  left_color: [255, 0, 0]
+  right_color: [0, 0, 255]
+  mask_color: [0, 255, 0]
+  mask_alpha: 0.3
+  line_thickness: 2

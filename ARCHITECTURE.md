@@ -107,10 +107,10 @@ class weighting or oversampling for rare classes (rider, motorcycle).
 ### 3.4 Lane detection (`perception/lanes/`)
 | Approach | Method | Strength |
 |---|---|---|
-| Classical | Undistort, ROI mask, HLS/Sobel threshold, perspective warp, sliding window, 2nd-order polyfit, temporal smoothing | Fast, explainable; fails on worn markings, curves, night |
+| Classical | ROI mask, HLS/Sobel threshold, perspective warp, sliding window, 2nd-order polyfit, temporal smoothing (undistortion skipped: BDD and CARLA frames ship without distortion parameters) | Fast, explainable; fails on worn markings, curves, night |
 | Learned | **YOLOP** (pretrained on BDD100K drivable area + lane) or a YOLO-seg model fine-tuned on BDD lane masks | Robust; heavier |
 
-Common output: `LaneResult(left: Polyline | None, right: Polyline | None, ego_lane_mask, confidence)`.
+Common output: `LaneResult(left: Polyline | None, right: Polyline | None, ego_mask, confidence)`.
 Comparison table: lane IoU/F1 on a BDD val subset, failure cases by condition (night, rain, curve), and FPS.
 
 ### 3.5 Depth and distance (`perception/depth/`, `perception/fusion/`)
