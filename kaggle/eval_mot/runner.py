@@ -17,7 +17,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "m2-mot"  # branch, tag or commit SHA to run; set to "main" after the merge
-MODE = "smoke"  # smoke | full
+MODE = "full"  # smoke | full
 EXTRA = ["--smoke"] if MODE == "smoke" else []
 JOB_CMD = ["python", "-m", "scripts.eval_mot", "--config", "configs/tracker_mot.yaml", *EXTRA]
 WORKDIR = "/kaggle/temp/repo"  # outside /kaggle/working so the code is not saved as job output
