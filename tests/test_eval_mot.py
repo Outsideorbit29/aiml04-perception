@@ -71,7 +71,9 @@ def test_config_maps_every_kitti_type():
     bdd = set(yaml.safe_load((ROOT / "configs" / "data_bdd.yaml").read_text())["names"].values())
     for spec in CFG["groups"].values():
         assert set(spec["pred"]) <= bdd and set(spec["gt"]) <= set(CMAP.values())
-    assert CFG["sweep"][0]["name"] == "default" and CFG["sweep"][0]["params"] == {}
+    names = [e["name"] for e in CFG["sweep"]]
+    assert names[0] == "baseline_m25" and "default" in names
+    assert CFG["sweep"][0]["params"] == {"lost_track_buffer": 30, "minimum_consecutive_frames": 1}
 
 
 def test_box_ioa_and_distance():

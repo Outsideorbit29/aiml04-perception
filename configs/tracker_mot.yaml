@@ -68,12 +68,17 @@ groups:
     gt: [person, rider]
     pred: [person, rider]
 
-# Tracker sweep: overrides on top of tracker_config. The first entry is the current default.
+# Tracker sweep: overrides on top of tracker_config. The first entry pins the pre-M2.6 baseline
+# (buffer 30, consecutive 1); `default` is whatever configs/tracker.yaml ships now.
 # At fps 10, ByteTrack keeps a lost track for lost_track_buffer / 3 frames (30 -> 1 s).
 # New tracks need score >= track_activation_threshold + 0.1 (supervision adds 0.1).
 sweep:
+  - name: baseline_m25
+    params: {lost_track_buffer: 30, minimum_consecutive_frames: 1}
   - name: default
     params: {}
+  - name: consec2_buf30
+    params: {lost_track_buffer: 30, minimum_consecutive_frames: 2}
   - name: buf60
     params: {lost_track_buffer: 60}
   - name: buf90

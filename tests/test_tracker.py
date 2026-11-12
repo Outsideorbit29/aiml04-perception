@@ -11,7 +11,12 @@ from perception.tracking.viz import draw_tracks, id_color
 from perception.types import Detection, Track
 
 NAMES = {0: "car", 3: "person"}
-CFG = load_config("configs/tracker.yaml", frame_rate=10)
+# Wrapper-mechanics tests pin the tunables they depend on (ids from the first frame, max_lost 10),
+# so retuning configs/tracker.yaml cannot silently change what they check. The shipped defaults
+# are tested separately at the end of this file (SHIPPED).
+CFG = load_config(
+    "configs/tracker.yaml", frame_rate=10, lost_track_buffer=30, minimum_consecutive_frames=1
+)
 
 
 def det(x: float, y: float, cls: int = 0, score: float = 0.9, w: float = 40, h: float = 30):
@@ -194,3 +199,71 @@ def test_installed_supervision_exposes_live_ids():
         ids = {tk.track_id for tk in tr.update(scene(t), None)}
     live = tr._live_ids()
     assert live is not None and ids <= live
+
+
+# ---------- shipped defaults (qa-reviewer, M2.6 gate: minimum_consecutive_frames 2, buffer 60) ----
+SHIPPED = load_config("configs/tracker.yaml", frame_rate=10)
+
+
+def _first_output(tracks_per_frame: list[list[Track]], cls: int) -> int | None:
+    return next(
+        (t for t, tr in enumerate(tracks_per_frame) if any(k.det.cls == cls for k in tr)), None
+    )
+
+
+def test_shipped_new_tracks_appear_on_their_third_matched_frame():
+    """consecutive 2: an id is assigned on the 3rd consecutive high-score match, for objects seen
+    on frame 1 and for objects born later (consecutive 1 shows late-born ones on the 2nd)."""
+    k = int(SHIPPED["minimum_consecutive_frames"])
+    tr = Tracker(SHIPPED)
+    out = []
+    for t in range(10):
+        dets = [det(10 + 3 * t, 50)] + ([det(200, 10, cls=3)] if t >= 4 else [])
+        out.append(tr.update(dets, None))
+    assert _first_output(out, 0) == k  # frame-1 object: frames 0..k-1 hidden
+    assert _first_output(out, 3) == 4 + k  # born at t=4
+    first = {tk.det.cls: tk for tk in out[4 + k]}
+    assert first[3].age == 0 and len(first[3].history) == 1
+    ids = [{tk.det.cls: tk.track_id for tk in tracks} for tracks in out[4 + k :]]
+    assert all(i == ids[0] for i in ids) and len(set(ids[0].values())) == 2
+    car = next(tk for tk in out[-1] if tk.det.cls == 0)
+    assert car.age == 9 - k  # age counts from the first output, not the first detection
+
+    legacy = Tracker(CFG)  # consecutive 1: late-born object shows on its 2nd frame
+    out1 = [
+        legacy.update([det(10 + 3 * t, 50)] + ([det(200, 10, cls=3)] if t >= 4 else []), None)
+        for t in range(8)
+    ]
+    assert _first_output(out1, 0) == 0 and _first_output(out1, 3) == 5
+
+
+def test_shipped_two_frame_ghost_never_gets_an_id():
+    ghost = det(200, 10, cls=3)
+    for cfg, expect_ids in ((SHIPPED, 1), (CFG, 2)):
+        tr = Tracker(cfg)
+        ids: set[int] = set()
+        for t in range(10):
+            dets = [det(10 + 3 * t, 50)] + ([ghost] if t in (4, 5) else [])
+            ids |= {tk.track_id for tk in tr.update(dets, None)}
+        assert len(ids) == expect_ids  # only consecutive 1 lets the ghost through
+
+
+def test_shipped_short_gap_and_low_score_keep_the_id():
+    tr = Tracker(SHIPPED)
+    for t in range(6):
+        tracks = tr.update([det(10 + 3 * t, 50)], None)
+    (tid,) = [tk.track_id for tk in tracks]
+    for _ in range(2):
+        assert tr.update([], None) == []
+    (back,) = tr.update([det(10 + 3 * 8, 50)], None)
+    assert back.track_id == tid
+    (low,) = tr.update([det(10 + 3 * 9, 50, score=0.15)], None)
+    assert low.track_id == tid
+
+
+@pytest.mark.parametrize("fps", [10, 20])
+def test_wrapper_buffer_matches_bytetrack(fps):
+    """Tracker.max_lost must equal supervision's max_time_lost (both scale the 30-fps buffer)."""
+    tr = Tracker({**SHIPPED, "frame_rate": fps})
+    assert tr.max_lost == tr._bt.max_time_lost
+    assert tr.max_lost == int(fps / 30 * SHIPPED["lost_track_buffer"])
