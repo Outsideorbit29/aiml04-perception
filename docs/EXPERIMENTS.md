@@ -17,6 +17,15 @@ Add one row per run as soon as it finishes. W&B project: `aiml04-perception`.
 ## Lanes (M3)
 | Date | Method | Eval set | IoU | F1 | Night F1 | FPS | W&B |
 |---|---|---|---|---|---|---|---|
+| 2026-11-13 | Classical (HLS + Sobel, sliding window), `configs/lanes_bdd.yaml` | BDD val 500 (200 day / 200 night / 100 dawn-dusk, seed 42) | 0.423 (measured-only 0.239) | 0.231 | 0.271 | 24.9 (CPU, Kaggle Xeon) | [bf4xp164](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/bf4xp164) |
+| 2026-11-13 | YOLOP pretrained (ONNX Runtime FP32), same fitting | same | 0.415 (measured-only 0.224) | **0.515** | 0.493 | 16.3 (T4; model alone 22.9–24.9 ms) | [bf4xp164](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/bf4xp164) |
+
+**How to read the lane numbers (M3.3–M3.4).** IoU = ego-lane mask vs BDD drivable area `direct` over image rows 0.58–0.74; single-side fallback on (the missing boundary is synthesized at 0.37 of the bird's-eye width), and 'measured-only' scores those images as no prediction. F1 = measured boundaries only vs the nearest BDD parallel lane lines, hit if mean error ≤ 20 px. Full table: `docs/figures/lanes_comparison.md`; failure cases: `docs/figures/lanes_failures.jpg`.
+- **YOLOP finds the right lines far more often** (F1 0.52 vs 0.23, precision 0.60 vs 0.24). Classical is fooled by car edges, hood reflections and road text.
+- **Ego-mask IoU is a tie (~0.42)** because YOLOP returns no line at all on 129/500 images (classical 28/500), mostly faint/worn markings, snow (21/38) and dense traffic. When it predicts, its IoU is higher (0.52 vs 0.45).
+- **Night costs YOLOP little** (F1 0.49 vs 0.52 day). Snow is the worst condition for YOLOP (F1 0.37). Curves are weak for both (n = 20).
+- **Speed:** classical 40 ms on CPU, YOLOP 61 ms end to end on T4 FP32 (42 ms in session.run, ~15 ms fit). M6 (TensorRT FP16) targets the YOLOP model time.
+- **Decision:** use YOLOP as the default lane backend for the live pipeline; keep classical as the CPU fallback and for the report comparison. BDD lane width from 279 images is 0.407 W at the band bottom (≈0.34 bird's-eye), slightly below the 0.37 used; leave as is (affects only synthesized sides).
 
 ## Depth / distance (M4)
 | Date | Depth model | Scale method | GT | AbsRel 0–10m | AbsRel 10–30m | AbsRel 30–60m | RMSE | W&B |
