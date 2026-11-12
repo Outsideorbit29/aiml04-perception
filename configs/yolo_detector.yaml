@@ -1,0 +1,12 @@
+# Detector runtime settings (M2.4). Read by perception.detection.Detector(cfg).
+# Eval jobs override `weights` with the file downloaded from the W&B artifact `yolo11s-bdd-best`.
+backend: torch                      # torch | onnx | tensorrt  (onnx / tensorrt are added in M6)
+weights: models/yolo11s-bdd.pt      # torch: best.pt, onnx: *.onnx, tensorrt: *.engine (gitignored)
+imgsz: 640                          # training size; exported models are fixed at 640x640
+conf: 0.1                           # low on purpose: ByteTrack's second pass uses 0.1-0.25 boxes
+iou: 0.7                            # NMS IoU (Ultralytics default)
+max_det: 300
+device: null                        # null = auto (cuda:0 when available)
+half: false                         # FP16 for the torch backend
+classes: null                       # optional list of class ids to keep; null = all 9
+data_config: configs/data_bdd.yaml  # class names (same order as training)

@@ -1,0 +1,38 @@
+# M2.3 evaluation of the fine-tuned YOLO11s on BDD val. Used by scripts/eval_detection.py,
+# run on Kaggle by kaggle/eval_track. Nothing here runs on the laptop.
+data_config: configs/data_bdd.yaml       # class names
+detector_config: configs/yolo_detector.yaml
+search: /kaggle/input/notebooks          # kernel outputs only (avoids walking the KITTI tree)
+search_fallback: /kaggle/input              # used only if nothing is found under `search`
+stage_dir: /kaggle/temp/bdd_yolo_val     # local copy of the val split (the mount reads slowly)
+weights_dir: /kaggle/temp/weights
+out_dir: /kaggle/working/m2_eval         # small outputs saved with the job (json, png, jpg)
+
+wandb:
+  project: aiml04-perception
+  group: detect
+  name: yolo11s-bdd-eval
+  weights_artifact: yolo11s-bdd-best:candidate
+
+val:                                     # Ultralytics model.val(): mAP, per-class AP, conf matrix
+  imgsz: 640
+  batch: 32
+  conditions: [daytime, night, dawn/dusk]  # extra mAP per BDD timeofday subset
+
+analysis:                                # error breakdown with the Detector class (batch 1)
+  conf: 0.25                             # operating point for recall/precision and the gallery
+  iou_match: 0.5
+  small_area_px: 1024                    # < 32^2 px at 1280x720 = small (EDA definition)
+  medium_area_px: 9216                   # < 96^2 px = medium, else large
+  fps_warmup: 20                         # frames skipped before timing
+  limit: null                            # null = all val images
+
+gallery:
+  cases: [night, small, occlusion]
+  per_case: 8
+  cols: 4
+  tile_width: 640
+  min_gt: 3                              # night case: skip near-empty frames
+
+smoke:                                   # --smoke: ~5 min check of the whole job
+  limit: 300
