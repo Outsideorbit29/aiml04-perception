@@ -840,3 +840,150 @@ def test_find_input_falls_back_to_shallow_search(tmp_path):
     assert find_input("/nope/labels/val.json", str(tmp_path), 4, 2) == target
     with pytest.raises(FileNotFoundError):
         find_input("/nope/other.json", str(tmp_path), 4, 1)
+
+
+# ---------------------------------------------------------------- QA gate M3.2-M3.4 additions
+
+
+def test_yolop_preprocess_channel_order_normalisation_and_padding(cfg):
+    """BGR -> RGB order, ImageNet mean/std and the pad value are checked against a hand
+    computation (the fake session un-normalises with the same config, so it cannot see them)."""
+    det, _ = _yolop(cfg)
+    y = cfg["yolop"]
+    mean, std = np.asarray(y["mean"], np.float64), np.asarray(y["std"], np.float64)
+    bgr = (10, 100, 200)
+    frame = np.empty((720, 1280, 3), np.uint8)
+    frame[:] = bgr
+    x, (new_w, new_h, px, py) = det.preprocess(frame)
+    assert x.shape == (1, 3, 640, 640) and x.dtype == np.float32
+    assert (new_w, new_h, px, py) == (640, 360, 0, 140)
+    rgb = np.array(bgr[::-1], np.float64)
+    for c in range(3):
+        inside = (rgb[c] / 255.0 - mean[c]) / std[c]
+        pad = (float(y["pad_value"]) / 255.0 - mean[c]) / std[c]
+        np.testing.assert_allclose(x[0, c, py : py + new_h, px : px + new_w], inside, atol=1e-5)
+        np.testing.assert_allclose(x[0, c, :py], pad, atol=1e-5)
+        np.testing.assert_allclose(x[0, c, py + new_h :], pad, atol=1e-5)
+
+
+@pytest.mark.parametrize("shape_hw", [(375, 1242), (600, 400)])
+def test_yolop_mocked_odd_and_horizontal_padding(cfg, shape_hw):
+    """KITTI size (odd vertical pad) and a portrait frame (px > 0, no upscale): the crop must
+    put the lines back where they were drawn."""
+    h, w = shape_hw
+    det, sess = _yolop(cfg)
+    img, left_x, right_x = _painted_road(h, w)
+    _, (new_w, new_h, px, py) = det.preprocess(img)
+    if shape_hw == (600, 400):
+        assert px > 0 and (new_w, new_h) == (w, h)  # allow_upscale: false
+    else:
+        assert (640 - new_h) % 2 == 1  # odd total pad
+    margin = det.lane_margin(img)
+    assert margin.shape == (h, w)
+    binary = margin >= det.margin_threshold
+    ys = np.linspace(0.64 * (h - 1), 0.88 * (h - 1), 10)
+    tol = max(4.0, 0.01 * w)
+    for fx in (left_x, right_x):
+        for yy in ys:
+            cols = np.flatnonzero(binary[int(round(yy))])
+            assert cols.size and np.abs(cols - fx(yy)).min() <= tol
+
+
+class FakeSigmoidSession(FakeYolopSession):
+    """YOLOP's real seg heads end in a per-channel sigmoid: values in [0, 1], not logits."""
+
+    def run(self, names, feed):
+        (logits,) = super().run(names, feed)
+        return [(1.0 / (1.0 + np.exp(-logits))).astype(np.float32)]  # 0.98 / 0.02
+
+
+def _yolop_sigmoid(cfg: dict, threshold: float):
+    from perception.lanes.yolop import YolopLaneDetector
+
+    cfg["method"] = "yolop"
+    cfg["yolop"]["lane_threshold"] = threshold
+    return YolopLaneDetector(cfg, session=FakeSigmoidSession(cfg["yolop"]))
+
+
+def test_yolop_sigmoid_outputs_default_threshold_finds_lines(cfg):
+    det = _yolop_sigmoid(cfg, 0.5)
+    img, _, _ = _painted_road()
+    res = det.detect(img, stateless=True)
+    assert res.left is not None and res.right is not None
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="QA M3.2: lane_threshold is mapped to a softmax margin log(t/(1-t)), but YOLOP's "
+    "sigmoid outputs bound the margin to (-1, 1); any t > ~0.73 gives an empty binary even "
+    "where the lane channel is 0.98. Fix in perception/lanes/yolop.py (lane-depth).",
+)
+def test_yolop_sigmoid_outputs_high_threshold_still_finds_lines(cfg):
+    det = _yolop_sigmoid(cfg, 0.8)
+    img, _, _ = _painted_road()
+    assert det.lane_binary(img).any()
+
+
+def test_ensure_weights_download_size_guard_sha_and_success(tmp_path, monkeypatch):
+    import hashlib
+
+    from perception.lanes.yolop import ensure_weights
+
+    payload = b"onnx" * 1000
+    monkeypatch.setattr(
+        urllib.request, "urlretrieve", lambda url, dst: Path(dst).write_bytes(payload)
+    )
+    final = tmp_path / "w" / "yolop.onnx"
+    base = {"weights": str(final), "weights_url": "https://example.invalid/y.onnx"}
+    with pytest.raises(RuntimeError, match="expected >="):
+        ensure_weights({**base, "min_weight_bytes": len(payload) + 1})
+    assert not final.exists()
+    with pytest.raises(RuntimeError, match="sha256"):
+        ensure_weights({**base, "sha256": "0" * 64})
+    assert not final.exists()
+    good = hashlib.sha256(payload).hexdigest()
+    assert ensure_weights({**base, "sha256": good, "min_weight_bytes": 10}) == final
+    assert final.read_bytes() == payload
+
+
+def test_contains_between_measured_boundaries_below_band(cfg):
+    cfg["smoothing"]["enabled"] = False
+    img, left_x, right_x = _painted_road()
+    det = build_lane_detector(cfg)
+    res = det.detect(img, stateless=True)
+    assert res.left is not None and res.right is not None and res.ego_mask is not None
+    y = float(np.floor(det.last_debug["y_bottom"])) + 10.0  # below the band, inside the image
+    assert y < H
+    assert res.contains(0.5 * (left_x(y) + right_x(y)), y)
+
+
+def _trapezoid_mask(h: int, w: int, top: int, bottom: int) -> np.ndarray:
+    """Ego mask covering rows top..bottom whose edges widen linearly toward the bottom."""
+    m = np.zeros((h, w), dtype=bool)
+    for r in range(top, bottom + 1):
+        half = 40 + (r - top)  # 1 px per row on each side
+        m[r, w // 2 - half : w // 2 + half] = True
+    return m
+
+
+def test_contains_one_sided_mask_extends_edges_below_and_above():
+    mask = _trapezoid_mask(H, W, 200, 260)
+    res = LaneResult(
+        left=Polyline(np.array([0.0, 0.0, 100.0])), right=None, ego_mask=mask, confidence=0.5
+    )
+    y = 330.0  # 70 rows below the mask: edges at W/2 -/+ (40 + 130)
+    assert res.contains(W / 2, y)
+    assert res.contains(W / 2 - 165, y)
+    assert not res.contains(W / 2 - 180, y)
+    assert not res.contains(W / 2 + 180, y)
+    assert res.contains(W / 2, 190.0)  # just above the mask, edges narrower
+    assert not res.contains(W / 2 + 45, 190.0)
+
+
+def test_contains_uses_mask_inside_its_rows():
+    mask = _trapezoid_mask(H, W, 200, 260)
+    res = LaneResult(left=None, right=None, ego_mask=mask, confidence=0.5)
+    assert res.contains(W / 2, 230.0)
+    assert not res.contains(W / 2 + 100, 230.0)
+    empty = LaneResult(left=None, right=None, ego_mask=np.zeros((H, W), bool), confidence=0.0)
+    assert not empty.contains(W / 2, 230.0)

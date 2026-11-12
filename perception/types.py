@@ -11,6 +11,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+# Rows used to fit the mask edge lines when extending the ego mask past its measured rows.
+_EDGE_FIT_ROWS = 10
+
 
 @dataclass
 class Detection:
@@ -57,15 +60,43 @@ class LaneResult:
     confidence: float
 
     def contains(self, x: float, y: float) -> bool:
-        """True if image point (x, y) lies between the left and right boundaries."""
-        if self.ego_mask is not None:
-            h, w = self.ego_mask.shape
+        """True if image point (x, y) lies between the left and right boundaries.
+
+        The mask only covers the rows the lane fit measured. Inside those rows it is used
+        directly. Outside them (e.g. the bottom-centre of a close lead vehicle below the
+        band) the two measured polylines decide; with only one measured side, the mask's
+        left/right edges are extended linearly from its nearest end, which follows the
+        perspective of straight lane boundaries.
+        """
+        mask = self.ego_mask
+        rows = np.flatnonzero(mask.any(axis=1)) if mask is not None else np.empty(0, int)
+        if rows.size:
+            h, w = mask.shape
             xi, yi = int(round(x)), int(round(y))
-            if 0 <= yi < h and 0 <= xi < w:
-                return bool(self.ego_mask[yi, xi])
-        if self.left is None or self.right is None:
+            if rows[0] <= yi <= rows[-1] and 0 <= xi < w:
+                return bool(mask[yi, xi])
+        if self.left is not None and self.right is not None:
+            return float(self.left.x_at(y)) <= x <= float(self.right.x_at(y))
+        if rows.size < 2:
             return False
-        return float(self.left.x_at(y)) <= x <= float(self.right.x_at(y))
+        end = rows[-1] if y > rows[-1] else rows[0]
+        near = (
+            rows[max(0, rows.size - 1 - _EDGE_FIT_ROWS)]
+            if end == rows[-1]
+            else rows[min(rows.size - 1, _EDGE_FIT_ROWS)]
+        )
+        if near == end:
+            return False
+        lo = self._edge_line(mask, end, near, 0, y)
+        hi = self._edge_line(mask, end, near, -1, y)
+        return lo <= x <= hi
+
+    @staticmethod
+    def _edge_line(mask: np.ndarray, r0: int, r1: int, side: int, y: float) -> float:
+        """x of the mask's left (side=0) or right (side=-1) edge, extended linearly to row y."""
+        x0 = float(np.flatnonzero(mask[r0])[side])
+        x1 = float(np.flatnonzero(mask[r1])[side])
+        return x0 + (x1 - x0) * (y - r0) / (r1 - r0)
 
 
 @dataclass

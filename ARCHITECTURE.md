@@ -110,7 +110,7 @@ class weighting or oversampling for rare classes (rider, motorcycle).
 | Classical | ROI mask, HLS/Sobel threshold, perspective warp, sliding window, 2nd-order polyfit, temporal smoothing (undistortion skipped: BDD and CARLA frames ship without distortion parameters) | Fast, explainable; fails on worn markings, curves, night |
 | Learned | **YOLOP** (pretrained on BDD100K drivable area + lane) or a YOLO-seg model fine-tuned on BDD lane masks | Robust; heavier |
 
-Common output: `LaneResult(left: Polyline | None, right: Polyline | None, ego_mask, confidence)`. `left`/`right` hold measured boundaries only. When one side is found, `ego_mask` is built from it plus a side synthesized at a nominal lane width (`single_side_fallback`), and `confidence` is lowered.
+Common output: `LaneResult(left: Polyline | None, right: Polyline | None, ego_mask, confidence)`. `left`/`right` hold measured boundaries only. When one side is found, `ego_mask` is built from it plus a side synthesized at a nominal lane width (`single_side_fallback`),, and `confidence` is lowered. The mask covers only the measured rows; `contains()` uses it there and, outside those rows, the two measured polylines or (one-sided case) the mask edges extended linearly.
 Comparison table: lane IoU/F1 on a BDD val subset, failure cases by condition (night, rain, curve), and FPS.
 
 ### 3.5 Depth and distance (`perception/depth/`, `perception/fusion/`)
