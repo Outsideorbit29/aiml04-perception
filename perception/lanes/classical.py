@@ -21,4 +21,5 @@ class ClassicalLaneDetector(LaneDetector):
         self.threshold_cfg = cfg["classical"]["threshold"]
 
     def lane_binary(self, frame_bgr: np.ndarray) -> np.ndarray:
-        return threshold_binary(frame_bgr, self.threshold_cfg)
+        region = self.fitter.roi(frame_bgr.shape[:2])
+        return threshold_binary(frame_bgr, self.threshold_cfg, region)

@@ -26,22 +26,28 @@ def _in_range(channel: np.ndarray, bounds: list | tuple) -> np.ndarray:
     return (channel >= lo) & (channel <= hi)
 
 
-def threshold_binary(frame_bgr: np.ndarray, cfg: dict) -> np.ndarray:
+def threshold_binary(
+    frame_bgr: np.ndarray, cfg: dict, region: np.ndarray | None = None
+) -> np.ndarray:
     """Lane-pixel candidates: Sobel-x on lightness OR saturation OR lightness, as an HxW bool mask.
 
-    `cfg` is the `classical.threshold` section of configs/lanes.yaml.
+    `cfg` is the `classical.threshold` section of configs/lanes.yaml. `region` (HxW bool, usually
+    the ROI) sets where the Sobel normalisation peak is measured, so a strong edge in the sky or
+    on the hood cannot scale the road gradients down. The saturation (yellow) test also needs a
+    lightness of at least `s_min_lightness`, which rejects dark, noisy, saturated pixels.
     """
     hls = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HLS)
     light, sat = hls[:, :, 1], hls[:, :, 2]
 
     sobel = np.abs(cv2.Sobel(light, cv2.CV_64F, 1, 0, ksize=int(cfg["sobel_kernel"])))
-    peak = float(sobel.max())
+    inside = sobel[region] if region is not None and region.any() else sobel
+    peak = float(inside.max()) if inside.size else 0.0
     if peak > 0:
-        sobel_scaled = (255.0 * sobel / peak).astype(np.uint8)
+        sobel_scaled = np.clip(255.0 * sobel / peak, 0, 255).astype(np.uint8)
     else:
         sobel_scaled = np.zeros_like(light)
 
     grad = _in_range(sobel_scaled, cfg["sobel_x"])
-    yellow = _in_range(sat, cfg["s_channel"])
+    yellow = _in_range(sat, cfg["s_channel"]) & (light >= int(cfg["s_min_lightness"]))
     white = _in_range(light, cfg["l_channel"])
     return grad | yellow | white

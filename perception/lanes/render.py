@@ -14,23 +14,41 @@ import cv2
 import numpy as np
 
 from perception.lanes.base import LaneDetector, build_lane_detector, load_lane_config
+from perception.lanes.fitting import measured_rows
 from perception.types import LaneResult, Polyline
 
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 
 
 def _draw_polyline(
-    img: np.ndarray, line: Polyline, y_top: float, color: list, thickness: int
+    img: np.ndarray,
+    line: Polyline,
+    y_top: float,
+    color: list,
+    thickness: int,
+    y_bottom: float | None = None,
 ) -> None:
-    h = img.shape[0]
-    ys = np.arange(max(int(y_top), 0), h, dtype=np.float64)
-    xs = np.asarray(line.x_at(ys), dtype=np.float64)
+    h, w = img.shape[:2]
+    ys = measured_rows(y_top, h - 1.0 if y_bottom is None else y_bottom, h)
+    if ys.size < 2:
+        return
+    xs = np.clip(np.asarray(line.x_at(ys), dtype=np.float64), -w, 2 * w)
     pts = np.round(np.stack([xs, ys], axis=1)).astype(np.int32).reshape(-1, 1, 2)
     cv2.polylines(img, [pts], False, tuple(int(c) for c in color), thickness)
 
 
-def draw_lanes(frame_bgr: np.ndarray, result: LaneResult, y_top: float, viz: dict) -> np.ndarray:
-    """Return a copy of the frame with the ego-lane mask and both boundaries drawn."""
+def draw_lanes(
+    frame_bgr: np.ndarray,
+    result: LaneResult,
+    y_top: float,
+    viz: dict,
+    y_bottom: float | None = None,
+) -> np.ndarray:
+    """Return a copy of the frame with the ego-lane mask and both boundaries drawn.
+
+    Boundaries are drawn on the same rows as the ego mask (`y_top`..`y_bottom`), so the overlay
+    never shows the polynomial extrapolated below the measured region.
+    """
     out = frame_bgr.copy()
     if result.ego_mask is not None:
         tint = np.zeros_like(out)
@@ -39,16 +57,17 @@ def draw_lanes(frame_bgr: np.ndarray, result: LaneResult, y_top: float, viz: dic
         out[result.ego_mask] = cv2.addWeighted(out, 1.0 - alpha, tint, alpha, 0)[result.ego_mask]
     thickness = int(viz["line_thickness"])
     if result.left is not None:
-        _draw_polyline(out, result.left, y_top, viz["left_color"], thickness)
+        _draw_polyline(out, result.left, y_top, viz["left_color"], thickness, y_bottom)
     if result.right is not None:
-        _draw_polyline(out, result.right, y_top, viz["right_color"], thickness)
+        _draw_polyline(out, result.right, y_top, viz["right_color"], thickness, y_bottom)
     return out
 
 
 def _render(detector: LaneDetector, frame: np.ndarray, viz: dict) -> np.ndarray:
     result = detector.detect(frame)
     y_top = float(detector.last_debug.get("y_top", 0.0))
-    return draw_lanes(frame, result, y_top, viz)
+    y_bottom = detector.last_debug.get("y_bottom")
+    return draw_lanes(frame, result, y_top, viz, y_bottom)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -72,14 +91,15 @@ def main(argv: list[str] | None = None) -> None:
             frame = cv2.imread(str(path))
             if frame is None:
                 continue
-            detector.reset()
-            vis = _render(detector, frame, cfg["viz"])
+            result = detector.detect(frame, stateless=True)
+            dbg = detector.last_debug
+            vis = draw_lanes(frame, result, dbg["y_top"], cfg["viz"], dbg["y_bottom"])
             cv2.imwrite(str(out_dir / f"lanes_{path.stem}.jpg"), vis)
         print(f"wrote {min(len(files), args.max_frames)} overlays to {out_dir}")
 
     if args.video:
         cap = cv2.VideoCapture(args.video)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 10.0
+        fps = cap.get(cv2.CAP_PROP_FPS) or float(cfg["viz"]["fallback_fps"])
         writer = None
         n = 0
         detector.reset()

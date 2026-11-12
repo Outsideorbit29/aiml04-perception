@@ -3,7 +3,7 @@
 # Points are fractions of the image (x / (W-1), y / (H-1)), so one file serves BDD (1280x720),
 # KITTI (1242x375), CARLA (800x450) and the downscaled test fixtures. Retune them on Kaggle (M3.3).
 
-method: classical          # classical | yolop (M3.2). Same LaneResult output either way.
+method: classical          # classical | yolop. Same LaneResult output either way.
 ego_mask: true             # fill the polygon between left and right boundaries into LaneResult.ego_mask
 
 # Shared by every backend: a backend produces an image-space lane binary, then this stage warps
@@ -25,7 +25,7 @@ fitting:
   refit_samples: 30          # points sampled on the bird's-eye fit and mapped back for the image fit
 
 smoothing:                 # per-side EMA on image-space coefficients across frames
-  enabled: true              # set false for independent images (BDD eval)
+  enabled: true              # independent images use detect(frame, stateless=True) instead
   alpha: 0.3                 # weight of the new fit
   max_missed: 5              # frames a side is held without a detection before it is dropped
   missed_conf_decay: 0.8     # confidence multiplier per missed frame
@@ -35,15 +35,25 @@ classical:
   every_n_frames: 1          # cheap enough to run on every frame
   threshold:                 # HLS + Sobel; a pixel is lane if any of the three tests passes
     sobel_kernel: 3
-    sobel_x: [20, 100]       # |d(L)/dx| scaled to 0-255 by the per-frame max
+    sobel_x: [20, 100]       # |d(L)/dx| scaled to 0-255 by its max inside the fitting ROI
     s_channel: [170, 255]    # HLS saturation (yellow paint)
+    s_min_lightness: 80      # ...and at least this HLS lightness (drops dark saturated noise)
     l_channel: [200, 255]    # HLS lightness (white paint)
 
-yolop:                     # M3.2, not implemented yet
+yolop:                     # M3.2: pretrained YOLOP ONNX (hustvl/YOLOP), lane-line head only
   every_n_frames: 2          # allowed by the latency budget (ARCHITECTURE.md section 6)
-  weights: null              # W&B artifact or torch.hub id, resolved on Kaggle
-  input_size: [640, 384]
-  lane_threshold: 0.5
+  weights: models/yolop-640-640.onnx   # local path (gitignored); the Kaggle eval overrides it
+  weights_url: https://github.com/hustvl/YOLOP/raw/main/weights/yolop-640-640.onnx
+  sha256: null               # pin after the first Kaggle run (eval logs the hash)
+  min_weight_bytes: 1000000  # a smaller download is an LFS pointer / error page
+  providers: [CUDAExecutionProvider, CPUExecutionProvider]  # first available wins
+  input_size: [640, 640]     # model input W, H (fixed in this ONNX export)
+  allow_upscale: false       # letterbox like YOLOP's resize_unscale: never enlarge the frame
+  pad_value: 114             # letterbox fill (RGB), before normalisation
+  mean: [0.485, 0.456, 0.406]  # ImageNet RGB normalisation used by YOLOP
+  std: [0.229, 0.224, 0.225]
+  lane_output: lane_line_seg # ONNX output name, shape (1, 2, H_in, W_in)
+  lane_threshold: 0.5        # on the lane-class probability; 0.5 == YOLOP's argmax
 
 viz:                       # overlay colours (BGR) for perception.lanes.render
   left_color: [255, 0, 0]
@@ -51,3 +61,4 @@ viz:                       # overlay colours (BGR) for perception.lanes.render
   mask_color: [0, 255, 0]
   mask_alpha: 0.3
   line_thickness: 2
+  fallback_fps: 10.0         # output video FPS when the input clip reports none

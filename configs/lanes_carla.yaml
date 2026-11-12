@@ -1,0 +1,20 @@
+# Lane detection override for the CARLA ego camera (M5): 800x450 RGB, 90 deg horizontal FOV.
+# Loaded with perception.lanes.load_lane_config("configs/lanes_carla.yaml"); only the keys
+# below change, everything else comes from `base`.
+#
+# BEST-EFFORT VALUES, TO BE TUNED IN M5 on recorded CARLA frames (short session, ask first).
+# They assume the camera from configs/carla*.yaml sits ~1.6 m above the road with zero pitch:
+#   f = (800 / 2) / tan(45 deg) = 400 px, horizon at y = 0.5 * H.
+#   A 3.5 m lane at distance Z spans x = 400 +- 700 / Z px and sits at y = 225 + 640 / Z px.
+#   Bottom warp row 0.90 -> Z ~ 3.6 m (x 0.25 / 0.75); top row 0.62 -> Z ~ 12 m (x 0.43 / 0.57).
+# Re-derive them if the M5 camera height or pitch differ, then check the overlay with
+#   python -m perception.lanes.render --config configs/lanes_carla.yaml --images <frames> --out runs/x
+base: configs/lanes.yaml
+
+fitting:
+  roi:
+    polygon: [[0.00, 0.95], [0.42, 0.58], [0.58, 0.58], [1.00, 0.95]]
+  warp:                    # order TL, TR, BR, BL; dst unchanged (lane spans x 0.25-0.75 in BEV)
+    src: [[0.43, 0.62], [0.57, 0.62], [0.75, 0.90], [0.25, 0.90]]
+
+# Thresholds (classical.threshold) are inherited; retune them in M5 only if the overlay fails.

@@ -31,9 +31,7 @@ class BirdsEyeWarp:
     def warp(self, binary: np.ndarray) -> np.ndarray:
         """Warp an HxW bool mask to the bird's-eye view (nearest neighbour keeps it binary)."""
         h, w = self.image_hw
-        out = cv2.warpPerspective(
-            binary.astype(np.uint8), self.M, (w, h), flags=cv2.INTER_NEAREST
-        )
+        out = cv2.warpPerspective(binary.astype(np.uint8), self.M, (w, h), flags=cv2.INTER_NEAREST)
         return out > 0
 
     def to_image(self, pts_xy: np.ndarray) -> np.ndarray:
@@ -87,12 +85,30 @@ def fit_poly(xs: np.ndarray, ys: np.ndarray, min_points: int) -> np.ndarray | No
     return np.polyfit(ys.astype(np.float64), xs.astype(np.float64), 2)
 
 
+def measured_rows(y_top: float, y_bottom: float, h: int) -> np.ndarray:
+    """Integer image rows from ceil(y_top) to floor(y_bottom), clipped to [0, H-1], as float64.
+
+    The fitted polylines are only measured between the top and bottom edges of the bird's-eye
+    warp source, so the ego mask and the overlay use these rows and never extrapolate past them.
+    """
+    lo = max(int(math.ceil(y_top)), 0)
+    hi = min(int(math.floor(y_bottom)), h - 1)
+    return np.arange(lo, hi + 1, dtype=np.float64)
+
+
 def ego_mask_from_polylines(
-    left: Polyline, right: Polyline, shape_hw: tuple[int, int], y_top: float
+    left: Polyline,
+    right: Polyline,
+    shape_hw: tuple[int, int],
+    y_top: float,
+    y_bottom: float | None = None,
 ) -> np.ndarray | None:
-    """Bool HxW mask of the region between the two boundaries, from `y_top` to the image bottom."""
+    """Bool HxW mask of the region between the two boundaries, rows `y_top`..`y_bottom`.
+
+    `y_bottom` defaults to the last image row; the detectors pass the warp's lower source edge.
+    """
     h, w = shape_hw
-    ys = np.arange(max(int(math.ceil(y_top)), 0), h, dtype=np.float64)
+    ys = measured_rows(y_top, h - 1.0 if y_bottom is None else y_bottom, h)
     if ys.size < 2:
         return None
     xl = np.asarray(left.x_at(ys), dtype=np.float64)
@@ -117,6 +133,7 @@ class LaneFit:
     conf_left: float
     conf_right: float
     y_top: float  # image row where the bird's-eye view starts (top of the measured lane region)
+    y_bottom: float  # image row where it ends (lower edge of the warp source trapezoid)
     debug: dict = field(default_factory=dict)
 
 
@@ -140,6 +157,12 @@ class LaneFitter:
     @property
     def warp(self) -> BirdsEyeWarp | None:
         return self._warp
+
+    def roi(self, shape_hw: tuple[int, int]) -> np.ndarray:
+        """HxW bool region mask for this frame size (cached with the warp)."""
+        self._prepare(shape_hw)
+        assert self._roi is not None
+        return self._roi
 
     def fit(self, binary: np.ndarray) -> LaneFit:
         h, w = binary.shape
@@ -198,5 +221,6 @@ class LaneFitter:
             polys.append(Polyline(img_coeffs))
 
         y_top = float(self._warp.src[:, 1].min())
+        y_bottom = float(self._warp.src[:, 1].max())
         debug = {"warped": warped, "bases": bases, "warped_coeffs": coeffs_w}
-        return LaneFit(polys[0], polys[1], confs[0], confs[1], y_top, debug)
+        return LaneFit(polys[0], polys[1], confs[0], confs[1], y_top, y_bottom, debug)
