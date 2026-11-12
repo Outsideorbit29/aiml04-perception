@@ -78,9 +78,9 @@ On the laptop (one short session):
 
 ## M3 – Lane detection (Nov 13–15) ☁ [lane-depth]
 - [x] M3.1 Classical pipeline (ROI, HLS + Sobel, bird's-eye warp, sliding window, polyfit, smoothing). Develop it against the fixtures with CPU-only code.
-- [ ] M3.2 Learned pipeline: YOLOP pretrained lane/drivable output in the same `LaneResult` format
-- [ ] M3.3 Evaluation on 500 BDD val images on Kaggle: lane IoU/F1 by condition, plus FPS
-- [ ] M3.4 Comparison table and a failure-case figure for the report
+- [x] M3.2 Learned pipeline: YOLOP pretrained lane/drivable output in the same `LaneResult` format
+- [x] M3.3 Evaluation on 500 BDD val images on Kaggle: lane IoU/F1 by condition, plus FPS
+- [x] M3.4 Comparison table and a failure-case figure for the report
 - [ ] M3.5 **(S)** Fine-tune a YOLO-seg lane model
 
 ## M4 – Depth and distance (Nov 15–16) ☁ [lane-depth]

@@ -19,8 +19,8 @@ import subprocess
 import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
-REF = "m3-lanes-eval"  # branch, tag or commit SHA to run
-MODE = "smoke"  # smoke | full
+REF = "main"  # branch, tag or commit SHA to run
+MODE = "full"  # smoke | full
 EXTRA = ["--smoke"] if MODE == "smoke" else []
 JOB_CMDS = [
     ["python", "-m", "scripts.eval_lanes", "--config", "configs/lanes_eval.yaml", *EXTRA],
