@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
-REF = "main"  # branch, tag or commit SHA to run
+REF = "m2-eval-track"  # branch, tag or commit SHA to run
 MODE = "smoke"  # smoke | full
 EXTRA = ["--smoke"] if MODE == "smoke" else []
 JOB_CMDS = [
