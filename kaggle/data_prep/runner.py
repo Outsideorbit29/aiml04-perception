@@ -79,7 +79,8 @@ def main() -> None:
     load_wandb_key()
     if not os.path.exists(WORKDIR):
         sh(["git", "clone", "--depth", "50", REPO, WORKDIR])
-    sh(["git", "checkout", REF], cwd=WORKDIR)
+    sh(["git", "fetch", "--depth", "50", "origin", REF], cwd=WORKDIR)  # shallow clone has only the default branch
+    sh(["git", "checkout", "FETCH_HEAD"], cwd=WORKDIR)
     sh([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"], cwd=WORKDIR)
     sh(["ls", "/kaggle/input", "/kaggle/input/datasets"])
     for cmd in JOB_CMDS:
