@@ -15,6 +15,7 @@ models:
   midas_small:              # MiDaS v2.1 small (EfficientNet-Lite3), ~21M params
     hub_repo: intel-isl/MiDaS
     hub_model: MiDaS_small
+    trusted_hub_repos: [rwightman/gen-efficientnet-pytorch]  # loaded inside MiDaS's hubconf
     onnx: models/midas_small.onnx       # exported in M6 (deploy/), gitignored
     input_hw: [256, 448]    # CARLA/BDD 16:9 at the model's native 256 rows
     multiple_of: 32

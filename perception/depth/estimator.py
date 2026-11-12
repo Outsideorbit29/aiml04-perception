@@ -58,6 +58,24 @@ class DepthBackend(Protocol):
     def __call__(self, blob: np.ndarray) -> np.ndarray: ...
 
 
+def _trust_hub_repos(torch: Any, repos: list[str]) -> None:
+    """Pre-trust repos that a hubconf loads internally without ``trust_repo``.
+
+    torch.hub otherwise asks on stdin, which fails in a non-interactive Kaggle job. torch keeps
+    the list as ``owner_repo`` lines in ``<hub dir>/trusted_list``.
+    """
+    if not repos:
+        return
+    hub_dir = Path(torch.hub.get_dir())
+    hub_dir.mkdir(parents=True, exist_ok=True)
+    path = hub_dir / "trusted_list"
+    known = set(path.read_text().split()) if path.exists() else set()
+    new = [r.replace("/", "_") for r in repos if r.replace("/", "_") not in known]
+    if new:
+        with path.open("a") as f:
+            f.write("".join(f"{r}\n" for r in new))
+
+
 class TorchHubBackend:
     """MiDaS / DPT via ``torch.hub.load(hub_repo, hub_model)``. Kaggle only."""
 
@@ -68,6 +86,7 @@ class TorchHubBackend:
         dev = ecfg.get("device") or ("cuda" if torch.cuda.is_available() else "cpu")
         self.device = torch.device(dev)
         self.half = bool(ecfg.get("half", False)) and self.device.type == "cuda"
+        _trust_hub_repos(torch, mcfg.get("trusted_hub_repos", []))
         model = torch.hub.load(mcfg["hub_repo"], mcfg["hub_model"], trust_repo=True)
         model = model.to(self.device).eval()
         self.model = model.half() if self.half else model

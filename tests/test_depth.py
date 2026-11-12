@@ -280,3 +280,15 @@ def test_shipped_configs_load():
     assert set(cfg["fusion"]["object_classes"]) <= names
     carla = load_camera("configs/camera.yaml", "carla")
     assert carla.fx == pytest.approx(carla.width / 2 / math.tan(math.radians(45)))
+
+
+def test_trust_hub_repos_appends_once(tmp_path):
+    from types import SimpleNamespace
+
+    from perception.depth.estimator import _trust_hub_repos
+
+    fake = SimpleNamespace(hub=SimpleNamespace(get_dir=lambda: str(tmp_path / "hub")))
+    _trust_hub_repos(fake, ["rwightman/gen-efficientnet-pytorch"])
+    _trust_hub_repos(fake, ["rwightman/gen-efficientnet-pytorch", "intel-isl/MiDaS"])
+    lines = (tmp_path / "hub" / "trusted_list").read_text().split()
+    assert lines == ["rwightman_gen-efficientnet-pytorch", "intel-isl_MiDaS"]
