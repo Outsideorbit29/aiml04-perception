@@ -5,9 +5,14 @@ onnxruntime, so the same code runs on Kaggle (CUDA provider) and later on the la
 PyTorch. Steps per frame:
 1. Letterbox the RGB frame into the fixed model input (`yolop.input_size`), ImageNet-normalise.
 2. Run the session, take the `lane_line_seg` output (1, 2, H_in, W_in), crop the padding.
-3. Lane probability = channel 1 (softmax over the two channels; for YOLOP's per-channel sigmoid
-   outputs a 0.5 threshold on it equals the argmax used by the YOLOP demo). Computed as the
-   equivalent threshold on the margin ll[1] - ll[0] (no exp at full resolution).
+3. Lane probability p of channel 1, for either output kind (`yolop.output_kind`):
+   - `probs` (per-channel sigmoid, values in [0, 1]): p = ll[1] / (ll[0] + ll[1]), the lane
+     channel normalised over the two channels;
+   - `logits`: p = softmax(ll)[1].
+   `auto` decides on the first frame (all values in [0, 1] -> probs) and prints the output
+   min/max and the chosen kind once, so the Kaggle log shows the real range. In both cases
+   p >= 0.5 is exactly YOLOP's argmax. The threshold is applied as an equivalent linear test on
+   a decision margin (no exp or division at full resolution, see `decision_margin`).
 4. Resize the margin to the frame, threshold it (`yolop.lane_threshold` as a probability), and
    hand the binary to the same `LaneFitter`/`LaneSmoother` as the classical backend.
 
@@ -33,9 +38,14 @@ from perception.lanes.base import LaneDetector, resolve_path
 
 
 def ensure_weights(ycfg: dict) -> Path:
-    """Return `ycfg["weights"]`, downloading it from `ycfg["weights_url"]` if missing (Kaggle)."""
+    """Return `ycfg["weights"]`, downloading it from `ycfg["weights_url"]` if missing (Kaggle).
+
+    The size guard (`min_weight_bytes`) and the `sha256` check apply to an existing file as well
+    as to a fresh download, so a stale or truncated file is never used silently.
+    """
     path = resolve_path(ycfg["weights"])
     if path.exists():
+        check_weights(path, ycfg, source=str(path))
         return path
     url = ycfg.get("weights_url")
     if not url:
@@ -44,17 +54,24 @@ def ensure_weights(ycfg: dict) -> Path:
     tmp = path.with_suffix(path.suffix + ".part")
     print(f"downloading YOLOP weights {url} -> {path}", flush=True)
     urllib.request.urlretrieve(url, tmp)  # noqa: S310 - fixed https URL from config
-    min_bytes = int(ycfg.get("min_weight_bytes", 0))
-    if tmp.stat().st_size < min_bytes:
-        raise RuntimeError(
-            f"downloaded {tmp.stat().st_size} bytes from {url}; expected >= {min_bytes} "
-            "(Git LFS pointer or HTML page?)"
-        )
-    expected = ycfg.get("sha256")
-    if expected and file_sha256(tmp) != expected:
-        raise RuntimeError(f"sha256 mismatch for {url}")
+    check_weights(tmp, ycfg, source=url)
     tmp.replace(path)
     return path
+
+
+def check_weights(path: Path, ycfg: dict, source: str) -> None:
+    """Raise if `path` is smaller than `min_weight_bytes` or its sha256 differs from `sha256`."""
+    min_bytes = int(ycfg.get("min_weight_bytes", 0))
+    size = path.stat().st_size
+    if size < min_bytes:
+        raise RuntimeError(
+            f"{size} bytes in {source}; expected >= {min_bytes} (Git LFS pointer or HTML page?)"
+        )
+    expected = ycfg.get("sha256")
+    if expected and file_sha256(path) != expected:
+        raise RuntimeError(
+            f"sha256 mismatch for {source} (expected {expected}); delete the file to re-download"
+        )
 
 
 def file_sha256(path: str | Path) -> str:
@@ -91,21 +108,56 @@ def letterbox_params(
     return r, new_w, new_h, (in_w - new_w) // 2, (in_h - new_h) // 2
 
 
-def lane_probability(ll: np.ndarray) -> np.ndarray:
-    """(2, H, W) lane-line output -> (H, W) float32 probability of the lane class."""
+OUTPUT_KINDS = ("auto", "probs", "logits")
+
+
+def detect_output_kind(ll: np.ndarray) -> str:
+    """'probs' if every value of the lane-line output lies in [0, 1] (sigmoid), else 'logits'."""
+    ll = np.asarray(ll)
+    return "probs" if float(ll.min()) >= 0.0 and float(ll.max()) <= 1.0 else "logits"
+
+
+def lane_probability(ll: np.ndarray, kind: str | None = None) -> np.ndarray:
+    """(2, H, W) lane-line output -> (H, W) float32 probability of the lane class.
+
+    `kind` 'probs': ll[1] / (ll[0] + ll[1]) (0.5 where both are 0); 'logits': softmax(ll)[1];
+    None: detected from the value range. Either way p >= 0.5 <=> ll[1] >= ll[0] (YOLOP argmax).
+    """
     ll = np.asarray(ll, dtype=np.float32)
+    if (kind or detect_output_kind(ll)) == "probs":
+        total = ll[0] + ll[1]
+        safe = np.where(total > 0, total, 1.0)
+        return np.where(total > 0, ll[1] / safe, 0.5).astype(np.float32)
     e = np.exp(ll - ll.max(axis=0, keepdims=True))
     return e[1] / e.sum(axis=0)
 
 
 def lane_margin_threshold(threshold: float) -> float:
-    """Probability threshold t on softmax(ll)[1] -> threshold on the margin ll[1] - ll[0].
+    """Probability threshold t on softmax(ll)[1] -> threshold on the logit margin ll[1] - ll[0].
 
-    softmax(ll)[1] >= t  <=>  ll[1] - ll[0] >= log(t / (1 - t)), so the post-processing can skip
-    the exp/sum over two full-resolution channels. t = 0.5 gives 0 (YOLOP's argmax).
+    softmax(ll)[1] >= t  <=>  ll[1] - ll[0] >= log(t / (1 - t)); t = 0.5 gives 0 (argmax).
+    Only valid for logit outputs; probability outputs use `decision_margin` with threshold 0.
     """
     t = min(max(float(threshold), 1e-6), 1.0 - 1e-6)
     return float(np.log(t / (1.0 - t)))
+
+
+def decision_margin(ll: np.ndarray, kind: str, threshold: float) -> tuple[np.ndarray, float]:
+    """(margin, margin threshold): `margin >= margin threshold` <=> lane probability >= t.
+
+    - logits: margin = ll[1] - ll[0], threshold log(t / (1 - t)).
+    - probs:  ll[1] / (ll[0] + ll[1]) >= t  <=>  (ll[1] - ll[0]) - (2t - 1)(ll[0] + ll[1]) >= 0
+      (for ll[0] + ll[1] > 0), threshold 0.
+    Both margins are linear in ll, so they can be bilinearly resized before thresholding, and at
+    t = 0.5 both reduce to exactly `ll[1] - ll[0] >= 0` (YOLOP's argmax).
+    """
+    margin = ll[1] - ll[0]
+    if kind == "logits":
+        return margin, lane_margin_threshold(threshold)
+    k = 2.0 * float(threshold) - 1.0
+    if k != 0.0:
+        margin = margin - np.float32(k) * (ll[0] + ll[1])
+    return margin, 0.0
 
 
 class YolopLaneDetector(LaneDetector):
@@ -118,7 +170,17 @@ class YolopLaneDetector(LaneDetector):
         y = cfg["yolop"]
         self.input_wh = (int(y["input_size"][0]), int(y["input_size"][1]))
         self.threshold = float(y["lane_threshold"])
-        self.margin_threshold = lane_margin_threshold(self.threshold)
+        if not 0.0 < self.threshold < 1.0:
+            raise ValueError(f"yolop.lane_threshold {self.threshold} not in (0, 1)")
+        kind = str(y.get("output_kind", "auto"))
+        if kind not in OUTPUT_KINDS:
+            raise ValueError(f"yolop.output_kind {kind!r}; expected one of {OUTPUT_KINDS}")
+        # 'auto' is resolved on the first frame (_resolve_output_kind)
+        self.output_kind: str | None = None if kind == "auto" else kind
+        self.output_range: tuple[float, float] | None = None  # lane output min/max, 1st frame
+        self.margin_threshold = (
+            0.0 if self.output_kind == "probs" else lane_margin_threshold(self.threshold)
+        )
         mean = np.asarray(y["mean"], dtype=np.float32)
         std = np.asarray(y["std"], dtype=np.float32)
         self.mean, self.std = mean, std
@@ -164,30 +226,57 @@ class YolopLaneDetector(LaneDetector):
             self._blob[0, c_out] += self._offset[c_out]
         return self._blob, (new_w, new_h, px, py)
 
-    def lane_margin(self, frame_bgr: np.ndarray) -> np.ndarray:
-        """HxW float32 lane margin ll[1] - ll[0] at frame resolution (see lane_margin_threshold).
-        Fills `last_timing_ms` with pre_ms, model_ms (session.run) and post_ms."""
-        h, w = frame_bgr.shape[:2]
+    def _resolve_output_kind(self, ll: np.ndarray) -> str:
+        """Fix the output kind on the first frame and print the output range once."""
+        if self.output_range is None:
+            self.output_range = (float(ll.min()), float(ll.max()))
+            detected = detect_output_kind(ll)
+            if self.output_kind is None:
+                self.output_kind = detected
+            print(
+                f"YOLOP {self.output_name} range [{self.output_range[0]:.4g}, "
+                f"{self.output_range[1]:.4g}] -> treated as {self.output_kind} "
+                f"(range suggests {detected}); lane_threshold {self.threshold}",
+                flush=True,
+            )
+        assert self.output_kind is not None
+        return self.output_kind
+
+    def _lane_output(self, frame_bgr: np.ndarray) -> np.ndarray:
+        """Run the model; (2, new_h, new_w) float32 lane-line output with the padding cropped.
+        Fills `last_timing_ms` with pre_ms and model_ms."""
         t0 = time.perf_counter()
         x, (new_w, new_h, px, py) = self.preprocess(frame_bgr)
         t1 = time.perf_counter()
         (ll,) = self.session.run([self.output_name], {self.input_name: x})
         t2 = time.perf_counter()
-        ll = np.asarray(ll, dtype=np.float32)[0, :, py : py + new_h, px : px + new_w]
-        margin = cv2.resize(ll[1] - ll[0], (w, h), interpolation=cv2.INTER_LINEAR)
-        t3 = time.perf_counter()
-        self.last_timing_ms.update(
-            {"pre_ms": 1e3 * (t1 - t0), "model_ms": 1e3 * (t2 - t1), "post_ms": 1e3 * (t3 - t2)}
-        )
+        self.last_timing_ms.update({"pre_ms": 1e3 * (t1 - t0), "model_ms": 1e3 * (t2 - t1)})
+        return np.asarray(ll, dtype=np.float32)[0, :, py : py + new_h, px : px + new_w]
+
+    def lane_margin(self, frame_bgr: np.ndarray) -> np.ndarray:
+        """HxW float32 decision margin at frame resolution; lane where
+        `margin >= self.margin_threshold` (see `decision_margin`; with `output_kind: auto` the
+        threshold is final after the first call). Fills `last_timing_ms` with pre_ms, model_ms
+        (session.run) and post_ms."""
+        h, w = frame_bgr.shape[:2]
+        ll = self._lane_output(frame_bgr)
+        t2 = time.perf_counter()
+        kind = self._resolve_output_kind(ll)
+        m, self.margin_threshold = decision_margin(ll, kind, self.threshold)
+        margin = cv2.resize(m, (w, h), interpolation=cv2.INTER_LINEAR)
+        self.last_timing_ms["post_ms"] = 1e3 * (time.perf_counter() - t2)
         return margin
 
     def lane_prob(self, frame_bgr: np.ndarray) -> np.ndarray:
         """HxW float32 lane probability at frame resolution (visualisation/debug only)."""
-        m = self.lane_margin(frame_bgr)
-        return (1.0 / (1.0 + np.exp(-m))).astype(np.float32)
+        h, w = frame_bgr.shape[:2]
+        ll = self._lane_output(frame_bgr)
+        p = lane_probability(ll, self._resolve_output_kind(ll))
+        return cv2.resize(p, (w, h), interpolation=cv2.INTER_LINEAR)
 
     def lane_binary(self, frame_bgr: np.ndarray) -> np.ndarray:
-        return self.lane_margin(frame_bgr) >= self.margin_threshold
+        margin = self.lane_margin(frame_bgr)
+        return margin >= self.margin_threshold
 
 
 def benchmark_session(session: Any, input_hw: tuple[int, int], runs: int, warmup: int) -> dict:

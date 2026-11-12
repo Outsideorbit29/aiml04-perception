@@ -62,7 +62,10 @@ yolop:                     # M3.2: pretrained YOLOP ONNX (hustvl/YOLOP), lane-li
   mean: [0.485, 0.456, 0.406]  # ImageNet RGB normalisation used by YOLOP
   std: [0.229, 0.224, 0.225]
   lane_output: lane_line_seg # ONNX output name, shape (1, 2, H_in, W_in)
-  lane_threshold: 0.5        # on the lane-class probability; 0.5 == YOLOP's argmax
+  lane_threshold: 0.5        # on the lane-class probability, in (0, 1); 0.5 == YOLOP's argmax
+  output_kind: auto          # auto | probs | logits. probs: per-channel sigmoid, p = ll1/(ll0+ll1);
+                             # logits: p = softmax(ll)[1]. auto: all values in [0, 1] on the first
+                             # frame -> probs (range and choice are printed once)
 
 viz:                       # overlay colours (BGR) for perception.lanes.render
   left_color: [255, 0, 0]
@@ -71,4 +74,5 @@ viz:                       # overlay colours (BGR) for perception.lanes.render
   mask_alpha: 0.3
   synth_color: [0, 140, 255]   # orange (BGR): synthesized fallback boundary, drawn thin
   line_thickness: 2
+  synth_thickness: 1         # synthesized boundary, thinner than measured ones
   fallback_fps: 10.0         # output video FPS when the input clip reports none

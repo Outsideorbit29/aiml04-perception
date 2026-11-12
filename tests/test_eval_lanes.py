@@ -23,6 +23,7 @@ from scripts.eval_lanes import (
     aggregate,
     band_slice,
     check_band_matches_warp,
+    debug_tiles,
     direct_area_mask,
     ego_boundaries,
     evaluate_image,
@@ -194,7 +195,7 @@ class FixedDetector:
 
     def __init__(self, res: LaneResult, hw: tuple[int, int]) -> None:
         self.res = res
-        self.last_debug = {"binary": np.zeros(hw, bool), "y_top": None, "y_bottom": None}
+        self.last_debug_stateless = {"binary": np.zeros(hw, bool), "y_top": None, "y_bottom": None}
         self.last_timing_ms = {"binary_ms": 1.0, "fit_ms": 2.0}
 
     def detect(self, img, stateless=False):
@@ -286,13 +287,13 @@ def test_f1_excludes_synthesized_side_and_iou_reports_both():
     hw = (LH, LW)
     left = _poly_through(LEFT_BOTTOM)
     mask = _left_half_mask(hw)
-    # Detector contract: synthesized side is not in the result, only in last_debug.
+    # Detector contract: synthesized side is not in the result, only in last_debug_stateless.
     fallback = FixedDetector(LaneResult(left, None, mask, 0.6), hw)
-    fallback.last_debug["synthesized_side"] = "right"
+    fallback.last_debug_stateless["synthesized_side"] = "right"
     # A backend that wrongly returns its synthesized side (far off the GT right line): the eval
-    # must still not score it, because last_debug marks it as synthesized.
+    # must still not score it, because last_debug_stateless marks it as synthesized.
     leaky = FixedDetector(LaneResult(left, Polyline(np.array([0, 0, 5.0])), mask, 0.6), hw)
-    leaky.last_debug["synthesized_side"] = "right"
+    leaky.last_debug_stateless["synthesized_side"] = "right"
     # Same measured side, no fallback: the old behaviour.
     old = FixedDetector(LaneResult(left, None, None, 0.5), hw)
     dets = {"fallback": fallback, "leaky": leaky, "old": old}
@@ -347,6 +348,30 @@ def test_real_detector_fallback_through_eval():
     assert r["synth"] and r["synth_side"] == "right" and not r["pred_none"]
     assert r["tp"] == 1 and r["fp"] == 0 and r["fn"] == 1
     assert r["inter"] > 0 and r["inter_meas"] == 0
+
+
+def test_debug_tiles_with_real_configs_and_stateless_debug():
+    """Failure-figure path (run after the loop on Kaggle): keep_vis + debug_tiles with the real
+    lanes_eval.yaml `figure:` and lanes_bdd.yaml `viz:` keys, and the detector's stateless debug
+    (synthesized line, binary) rather than its video-mode `last_debug`."""
+    ecfg = yaml.safe_load((ROOT / "configs" / "lanes_eval.yaml").read_text())
+    lcfg = load_lane_config(ROOT / ecfg["lanes_config"])
+    lcfg["method"] = "classical"
+    h, w = LH, LW
+    img = np.full((h, w, 3), 90, np.uint8)
+    y0, y1 = 0.56 * (h - 1), 0.78 * (h - 1)
+    lt, lb = float(_x_on(LEFT_BOTTOM, y0)), float(_x_on(LEFT_BOTTOM, y1))
+    cv2.line(img, (int(lb), int(y1)), (int(lt), int(y0)), (255, 255, 255), 8)
+    det = build_lane_detector(lcfg)
+    rec, vis, gt = evaluate_image(
+        {"classical": det}, img, _ego_frame(), MCFG, defaultdict(list), keep_vis=True
+    )
+    v = vis["classical"]
+    assert v["synth_line"] is not None and v["binary"].any()
+    assert det.last_debug == {}  # stateless eval never touches the video debug
+    tiles = debug_tiles(img, rec, gt, vis, lcfg, MCFG, ecfg["figure"])
+    tw = int(ecfg["figure"]["tile_width"])
+    assert tiles.shape == (round(h * tw / w), 2 * tw, 3) and tiles.dtype == np.uint8
 
 
 # ---------------------------------------------------------------- no_gt / short GT accounting

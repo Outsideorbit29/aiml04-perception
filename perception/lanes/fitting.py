@@ -58,6 +58,11 @@ def offset_in_birdseye(
     Used by the single-side fallback: `line` is sampled on image rows `y_top`..`y_bottom` (the
     warp source rows), shifted horizontally in the bird's-eye view, where a lane has constant
     width, and mapped back to an image-space x = a*y^2 + b*y + c fit.
+
+    The shift is horizontal (along bird's-eye x), not perpendicular to the line. On a straight
+    lane the two are the same; on a curve, where the bird's-eye line is tilted by angle theta,
+    the synthesized lane is narrower by cos(theta) measured across the lane. Fine for the
+    near-straight band the fallback is used in; do not read the synthesized width as metric.
     """
     ys = np.linspace(float(y_top), float(y_bottom), max(int(n_samples), 3))
     xs = np.asarray(line.x_at(ys), dtype=np.float64)

@@ -10,14 +10,21 @@ Two calling modes:
 - Independent images (dataset eval): `detect(frame, stateless=True)` always runs the backend,
   skips smoothing and the result cache, and leaves the video state untouched. No `reset()` needed.
 
+Debug data (lane binary, fitted rows, synthesized side) of the last backend run goes to
+`last_debug` for video calls and to `last_debug_stateless` for stateless calls, so stateless
+calls never overwrite the debug data a video overlay is drawing from.
+
 Single-side fallback (`single_side_fallback: true` in the config): when only one boundary is
 found, the other is synthesized by offsetting the found one by `fallback_lane_width_frac` of the
 bird's-eye width, so the ego mask can still be built. The synthesized side is NOT returned in
 `LaneResult.left/right`; those always hold measured boundaries only. So a result with an
 `ego_mask` but one side `None` means "mask built from one measured side". Its confidence is
-the mean of the found side's confidence and `fallback_conf_mult` times it. The synthesized
-polyline is available for overlays as `last_debug["synthesized_line"]` (side name in
-`last_debug["synthesized_side"]`).
+the mean of the found side's confidence and `fallback_conf_mult` times it, i.e. at most
+(1 + fallback_conf_mult) / 2 = 0.75 of a perfect side with the default 0.5. So a confident
+one-sided result can score higher than a weak two-sided one: `confidence` is not an ordering
+of "both sides measured" over "one side measured"; check `left`/`right` for that. The
+synthesized polyline is available for overlays as `last_debug["synthesized_line"]` (side name in
+`last_debug["synthesized_side"]`; `last_debug_stateless` for stateless calls).
 """
 
 from __future__ import annotations
@@ -116,7 +123,8 @@ class LaneDetector(ABC):
                 )
             if not 0.0 <= self.fallback_conf_mult <= 1.0:
                 raise ValueError(f"fallback_conf_mult {self.fallback_conf_mult} not in [0, 1]")
-        self.last_debug: dict = {}
+        self.last_debug: dict = {}  # last video-mode (`detect(frame)`) backend run
+        self.last_debug_stateless: dict = {}  # last `detect(frame, stateless=True)` run
         self.last_timing_ms: dict[str, float] = {}  # stage times of the last backend run
         self._frame_idx = 0
         self._last: LaneResult | None = None
@@ -126,8 +134,9 @@ class LaneDetector(ABC):
         """Lane boundaries for one HxWx3 uint8 BGR frame, in image coordinates.
 
         `stateless=True` treats the frame as an independent image: the backend always runs, no
-        smoothing is applied, and the temporal state used by video calls is neither read nor
-        changed. Use it for dataset evaluation.
+        smoothing is applied, and the temporal state used by video calls (including
+        `last_debug`) is neither read nor changed; its debug data goes to
+        `last_debug_stateless`. Use it for dataset evaluation.
         """
         if frame_bgr.ndim != 3 or frame_bgr.shape[2] != 3 or frame_bgr.dtype != np.uint8:
             raise ValueError(
@@ -198,7 +207,7 @@ class LaneDetector(ABC):
                     c_l = self.fallback_conf_mult * c_r
             else:
                 syn_side, syn_line = None, None
-        self.last_debug = {
+        debug = {
             "binary": binary,
             "y_top": fit.y_top,
             "y_bottom": fit.y_bottom,
@@ -206,6 +215,10 @@ class LaneDetector(ABC):
             "synthesized_line": syn_line,
             **fit.debug,
         }
+        if smooth:  # video call
+            self.last_debug = debug
+        else:
+            self.last_debug_stateless = debug
         return LaneResult(left, right, mask, float(0.5 * (c_l + c_r)))
 
     def _single_side_mask(

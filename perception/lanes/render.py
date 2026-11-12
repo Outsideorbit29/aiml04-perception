@@ -64,7 +64,8 @@ def draw_lanes(
     if result.right is not None:
         _draw_polyline(out, result.right, y_top, viz["right_color"], thickness, y_bottom)
     if synthesized is not None:
-        _draw_polyline(out, synthesized, y_top, viz["synth_color"], 1, y_bottom)
+        synth_t = int(viz["synth_thickness"])
+        _draw_polyline(out, synthesized, y_top, viz["synth_color"], synth_t, y_bottom)
     return out
 
 
@@ -98,7 +99,7 @@ def main(argv: list[str] | None = None) -> None:
             if frame is None:
                 continue
             result = detector.detect(frame, stateless=True)
-            dbg = detector.last_debug
+            dbg = detector.last_debug_stateless
             vis = draw_lanes(
                 frame,
                 result,

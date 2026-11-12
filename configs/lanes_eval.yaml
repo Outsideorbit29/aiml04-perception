@@ -49,6 +49,15 @@ figure:
   gt_mask_color: [255, 0, 255]           # BGR, GT "direct" drivable area
   binary_color: [255, 255, 0]            # BGR, each method's lane binary (debug tiles)
   band_color: [160, 160, 160]            # BGR, scoring band rows
+  gt_mask_alpha: 0.4                     # GT direct-area tint on the GT tile
+  binary_alpha: 0.7                      # lane-binary tint on the method tiles
+  gt_thickness: 3                        # GT boundaries on the GT tile (px)
+  gt_thickness_overlay: 1                # GT boundaries over the method tiles (px)
+  band_thickness: 1                      # scoring band rows (px)
+  jpeg_quality: 88                       # failure figure and debug tiles
+  label_min_scale: 0.4                   # tile caption font scale = max(min, width / this)
+  label_width_per_scale: 900
+  label_thickness: 1                     # caption text stroke (px)
 
 debug:                                   # side-by-side GT / per-method overlays in out_dir/debug
   enabled: false                         # forced on by --smoke (smoke.debug)

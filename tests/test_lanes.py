@@ -218,8 +218,13 @@ def test_stateless_detect_ignores_and_keeps_video_state(cfg):
     blank = np.full((H, W, 3), 90, np.uint8)
     r0 = det.detect(img)
     assert r0.left is not None
+    video_debug = det.last_debug
     assert det.detect(blank, stateless=True).left is None  # no cache, no smoother hold-over
     assert det.detect(blank, stateless=True).left is None
+    # stateless debug is kept apart: the video overlay's last_debug is not overwritten
+    assert det.last_debug is video_debug
+    assert det.last_debug_stateless["binary"] is not video_debug["binary"]
+    assert not det.last_debug_stateless["binary"].any()
     assert det.detect(img) is r0  # video path: 2nd frame still reuses its cached result
 
 
@@ -329,15 +334,15 @@ def test_single_side_fallback_mask_between_found_and_offset_line(cfg, found):
     # Contract: only the measured side is in the result; the synthesized one is not.
     assert getattr(res, found) is not None and getattr(res, missing) is None
     assert res.ego_mask is not None
-    assert det.last_debug["synthesized_side"] == missing
-    syn = det.last_debug["synthesized_line"]
+    assert det.last_debug_stateless["synthesized_side"] == missing
+    syn = det.last_debug_stateless["synthesized_line"]
     assert isinstance(syn, Polyline)
 
     # Width 0.5 == the dst lane width, so the synthesized line is the other trapezoid edge and
     # the mask spans found line .. offset line on every measured row.
     other_x = right_x if found == "left" else left_x
-    y_top = int(np.ceil(det.last_debug["y_top"]))
-    y_bottom = int(np.floor(det.last_debug["y_bottom"]))
+    y_top = int(np.ceil(det.last_debug_stateless["y_top"]))
+    y_bottom = int(np.floor(det.last_debug_stateless["y_bottom"]))
     ys = np.arange(y_top, y_bottom + 1)
     np.testing.assert_allclose(syn.x_at(ys), other_x(ys), atol=4.0)
     for y in ys[:: max(1, ys.size // 8)]:
@@ -365,8 +370,8 @@ def test_single_side_fallback_disabled_restores_old_behaviour(cfg):
     res = det.detect(img, stateless=True)
     assert res.left is not None and res.right is None
     assert res.ego_mask is None  # old behaviour: no mask without both sides
-    assert det.last_debug["synthesized_side"] is None
-    assert det.last_debug["synthesized_line"] is None
+    assert det.last_debug_stateless["synthesized_side"] is None
+    assert det.last_debug_stateless["synthesized_line"] is None
     # Two measured sides are unaffected by the flag.
     both, _, _ = _painted_road()
     on = copy.deepcopy(cfg)
@@ -383,7 +388,7 @@ def test_single_side_fallback_never_fires_on_blank_road(cfg):
     det = build_lane_detector(cfg)
     res = det.detect(np.full((H, W, 3), 90, np.uint8), stateless=True)
     assert res.ego_mask is None and res.confidence == 0.0
-    assert det.last_debug["synthesized_side"] is None
+    assert det.last_debug_stateless["synthesized_side"] is None
 
 
 def test_single_side_fallback_rejects_implausible_width(cfg):
@@ -410,7 +415,7 @@ def test_overlay_draws_synthesized_line_in_its_own_colour(cfg):
     img, _, _ = _one_line_road("left")
     det = build_lane_detector(cfg)
     res = det.detect(img, stateless=True)
-    dbg = det.last_debug
+    dbg = det.last_debug_stateless
     viz = {**cfg["viz"], "mask_alpha": 0.0}
     plain = draw_lanes(img, res, dbg["y_top"], viz, dbg["y_bottom"])
     with_syn = draw_lanes(img, res, dbg["y_top"], viz, dbg["y_bottom"], dbg["synthesized_line"])
@@ -625,6 +630,52 @@ def test_lane_probability_softmax_and_sigmoid_outputs():
     np.testing.assert_array_equal(lane_probability(sig) >= 0.5, np.argmax(sig, axis=0) == 1)
 
 
+@pytest.mark.parametrize("kind", ["probs", "logits"])
+def test_decision_margin_equals_probability_threshold(kind):
+    from perception.lanes.yolop import decision_margin, detect_output_kind, lane_probability
+
+    rng = np.random.default_rng(0)
+    if kind == "probs":
+        ll = rng.uniform(0.0, 1.0, (2, 40, 50)).astype(np.float32)
+    else:
+        ll = rng.normal(0.0, 4.0, (2, 40, 50)).astype(np.float32)
+    assert detect_output_kind(ll) == kind
+    p = lane_probability(ll, kind)
+    for t in (0.1, 0.3, 0.5, 0.75, 0.8, 0.95):
+        m, thr = decision_margin(ll, kind, t)
+        clear = np.abs(p - t) > 1e-4  # ignore float ties on the boundary
+        np.testing.assert_array_equal((m >= thr)[clear], (p >= t)[clear])
+    m, thr = decision_margin(ll, kind, 0.5)  # 0.5: exactly the argmax margin, as before
+    assert thr == 0.0
+    np.testing.assert_array_equal(m, ll[1] - ll[0])
+
+
+def test_yolop_output_kind_auto_resolves_and_logs_range(cfg, capsys):
+    det, _ = _yolop(cfg)  # FakeYolopSession returns logits
+    assert det.output_kind is None and det.output_range is None
+    img, _, _ = _painted_road()
+    det.lane_binary(img)
+    assert det.output_kind == "logits"
+    lo, hi = det.output_range
+    assert lo < 0.0 < 1.0 < hi
+    assert "treated as logits" in capsys.readouterr().out
+    det.lane_binary(img)
+    assert "treated as" not in capsys.readouterr().out  # printed once
+
+
+def test_yolop_rejects_bad_output_kind_and_threshold(cfg):
+    from perception.lanes.yolop import YolopLaneDetector
+
+    bad_kind = copy.deepcopy(cfg)
+    bad_kind["yolop"]["output_kind"] = "softmax"
+    with pytest.raises(ValueError, match="output_kind"):
+        YolopLaneDetector(bad_kind, session=FakeYolopSession(bad_kind["yolop"]))
+    bad_t = copy.deepcopy(cfg)
+    bad_t["yolop"]["lane_threshold"] = 1.0
+    with pytest.raises(ValueError, match="lane_threshold"):
+        YolopLaneDetector(bad_t, session=FakeYolopSession(bad_t["yolop"]))
+
+
 @pytest.mark.parametrize("shape_hw", [(360, 640), (720, 1280), (450, 800)])
 def test_yolop_mocked_recovers_lines(cfg, shape_hw):
     h, w = shape_hw
@@ -661,6 +712,23 @@ def test_ensure_weights_uses_existing_file_and_needs_url(tmp_path, monkeypatch):
     assert ensure_weights({"weights": str(f)}) == f
     with pytest.raises(FileNotFoundError):
         ensure_weights({"weights": str(tmp_path / "none.onnx"), "weights_url": None})
+
+
+def test_ensure_weights_verifies_existing_file(tmp_path, monkeypatch):
+    import hashlib
+
+    from perception.lanes.yolop import ensure_weights
+
+    monkeypatch.setattr(urllib.request, "urlretrieve", lambda *a, **k: pytest.fail("download"))
+    f = tmp_path / "w.onnx"
+    f.write_bytes(b"onnx" * 100)
+    good = hashlib.sha256(f.read_bytes()).hexdigest()
+    assert ensure_weights({"weights": str(f), "sha256": good, "min_weight_bytes": 10}) == f
+    with pytest.raises(RuntimeError, match="sha256"):
+        ensure_weights({"weights": str(f), "sha256": "0" * 64})
+    with pytest.raises(RuntimeError, match="expected >="):
+        ensure_weights({"weights": str(f), "min_weight_bytes": 10_000})
+    assert f.exists()  # never deleted or replaced silently
 
 
 # ---------------------------------------------------------------- BDD eval helpers (M3.3)
@@ -912,12 +980,6 @@ def test_yolop_sigmoid_outputs_default_threshold_finds_lines(cfg):
     assert res.left is not None and res.right is not None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="QA M3.2: lane_threshold is mapped to a softmax margin log(t/(1-t)), but YOLOP's "
-    "sigmoid outputs bound the margin to (-1, 1); any t > ~0.73 gives an empty binary even "
-    "where the lane channel is 0.98. Fix in perception/lanes/yolop.py (lane-depth).",
-)
 def test_yolop_sigmoid_outputs_high_threshold_still_finds_lines(cfg):
     det = _yolop_sigmoid(cfg, 0.8)
     img, _, _ = _painted_road()
@@ -952,7 +1014,7 @@ def test_contains_between_measured_boundaries_below_band(cfg):
     det = build_lane_detector(cfg)
     res = det.detect(img, stateless=True)
     assert res.left is not None and res.right is not None and res.ego_mask is not None
-    y = float(np.floor(det.last_debug["y_bottom"])) + 10.0  # below the band, inside the image
+    y = float(np.floor(det.last_debug_stateless["y_bottom"])) + 10.0  # below band, in image
     assert y < H
     assert res.contains(0.5 * (left_x(y) + right_x(y)), y)
 
@@ -987,3 +1049,27 @@ def test_contains_uses_mask_inside_its_rows():
     assert not res.contains(W / 2 + 100, 230.0)
     empty = LaneResult(left=None, right=None, ego_mask=np.zeros((H, W), bool), confidence=0.0)
     assert not empty.contains(W / 2, 230.0)
+
+
+# ---------------------------------------------------------------- QA gate: contains() one-sided
+
+
+@pytest.mark.parametrize("found", ["left", "right"])
+def test_contains_one_sided_fallback_below_band_through_detector(cfg, found):
+    """A close lead vehicle's bottom-centre lies below the measured band (down to y == H for a
+    box clipped by the image edge). With one measured side, contains() must still follow the
+    real lane there: points 25 px inside both boundaries are in, 25 px outside are out."""
+    cfg["smoothing"]["enabled"] = False
+    cfg.update(single_side_fallback=True, fallback_lane_width_frac=0.5, fallback_conf_mult=0.5)
+    img, left_x, right_x = _one_line_road(found)
+    det = build_lane_detector(cfg)
+    res = det.detect(img, stateless=True)
+    assert res.ego_mask is not None and (res.left is None) != (res.right is None)
+    y_bottom = float(np.floor(det.last_debug_stateless["y_bottom"]))
+    margin = 25.0
+    for y in (y_bottom + 10.0, H - 1.0, float(H)):
+        assert y > y_bottom
+        lx, rx = float(left_x(y)), float(right_x(y))
+        assert res.contains(0.5 * (lx + rx), y)
+        assert res.contains(lx + margin, y) and res.contains(rx - margin, y)
+        assert not res.contains(lx - margin, y) and not res.contains(rx + margin, y)

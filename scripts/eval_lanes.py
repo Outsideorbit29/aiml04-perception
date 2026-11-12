@@ -63,6 +63,7 @@ import argparse
 import copy
 import glob
 import json
+import os
 import platform
 import random
 import time
@@ -77,6 +78,7 @@ import numpy as np
 import yaml
 
 from perception.lanes.base import (
+    REPO_ROOT,
     build_lane_detector,
     load_lane_config,
     merge_config,
@@ -583,6 +585,24 @@ def cpu_name() -> str:
     return platform.processor() or "cpu"
 
 
+def git_sha() -> str:
+    """Commit of the code being evaluated: `git rev-parse HEAD` in the repo, else the
+    GIT_COMMIT env var (set by kaggle/eval_lanes/runner.py), else "unknown"."""
+    try:
+        import subprocess
+
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return out.stdout.strip() or os.environ.get("GIT_COMMIT", "unknown")
+    except Exception:
+        return os.environ.get("GIT_COMMIT", "unknown")
+
+
 def gpu_name() -> str:
     try:
         import subprocess
@@ -615,13 +635,15 @@ def preload_cuda_libs() -> None:
         print(f"onnxruntime preload skipped ({type(exc).__name__}: {exc})")
 
 
-def _label(img: np.ndarray, text: str) -> np.ndarray:
+def _label(img: np.ndarray, text: str, fig: dict) -> np.ndarray:
+    """Caption in a black box at the top-left; font scale grows with the image width."""
     out = img.copy()
-    scale = max(0.4, img.shape[1] / 900)
-    (tw, th), base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, 1)
+    scale = max(float(fig["label_min_scale"]), img.shape[1] / float(fig["label_width_per_scale"]))
+    thick = int(fig["label_thickness"])
+    (tw, th), base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
     cv2.rectangle(out, (0, 0), (tw + 8, th + base + 8), (0, 0, 0), -1)
     cv2.putText(
-        out, text, (4, th + 4), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), 1, cv2.LINE_AA
+        out, text, (4, th + 4), cv2.FONT_HERSHEY_SIMPLEX, scale, (255, 255, 255), thick, cv2.LINE_AA
     )
     return out
 
@@ -646,19 +668,19 @@ def _gt_lines(img: np.ndarray, sides: Sequence[np.ndarray | None], color, thick:
             )
 
 
-def _band_lines(img: np.ndarray, band_frac: Sequence[float], color) -> None:
+def _band_lines(img: np.ndarray, band_frac: Sequence[float], color, thick: int) -> None:
     h, w = img.shape[:2]
     for f in band_frac:
         y = int(round(f * (h - 1)))
-        cv2.line(img, (0, y), (w - 1, y), tuple(int(c) for c in color), 1)
+        cv2.line(img, (0, y), (w - 1, y), tuple(int(c) for c in color), thick)
 
 
 def draw_gt(
     img: np.ndarray, gt_mask: np.ndarray, sides: Sequence[np.ndarray | None], fig: dict
 ) -> np.ndarray:
     out = img.copy()
-    _tint(out, gt_mask, fig["gt_mask_color"], 0.4)
-    _gt_lines(out, sides, fig["gt_color"], 3)
+    _tint(out, gt_mask, fig["gt_mask_color"], float(fig["gt_mask_alpha"]))
+    _gt_lines(out, sides, fig["gt_color"], int(fig["gt_thickness"]))
     return out
 
 
@@ -677,23 +699,25 @@ def debug_tiles(
 
     band = mcfg["band_frac"]
     g = draw_gt(img, gt["mask"], gt["sides"], fig)
-    _band_lines(g, band, fig["band_color"])
+    band_t = int(fig["band_thickness"])
+    _band_lines(g, band, fig["band_color"], band_t)
     gpx = rec[next(iter(vis))]["gt_px"] if vis else 0
     tiles = [
         _label(
             g,
             f"GT {rec['timeofday']}/{rec['weather']}/{rec['geometry']} "
             f"band px {gpx} sides {rec['gt_sides']}",
+            fig,
         )
     ]
     for m, v in vis.items():
         out = img.copy()
-        _tint(out, v["binary"], fig["binary_color"], 0.7)
+        _tint(out, v["binary"], fig["binary_color"], float(fig["binary_alpha"]))
         out = draw_lanes(
             out, v["result"], v["y_top"] or 0.0, lcfg["viz"], v["y_bottom"], v.get("synth_line")
         )
-        _gt_lines(out, gt["sides"], fig["gt_color"], 1)
-        _band_lines(out, band, fig["band_color"])
+        _gt_lines(out, gt["sides"], fig["gt_color"], int(fig["gt_thickness_overlay"]))
+        _band_lines(out, band, fig["band_color"], band_t)
         r = rec[m]
         iou = r["inter"] / r["union"] if r["gt_px"] > 0 else float("nan")
         tiles.append(
@@ -702,6 +726,7 @@ def debug_tiles(
                 f"{m} IoU {iou:.2f} {'NO MASK ' if r['pred_none'] else ''}"
                 f"{'SYN-' + r['synth_side'][0].upper() + ' ' if r.get('synth_side') else ''}"
                 f"TP{r['tp']} FP{r['fp']} FN{r['fn']}",
+                fig,
             )
         )
     tw = int(fig["tile_width"])
@@ -737,7 +762,8 @@ def measured_sides(
 
     The lane detectors never put a synthesized fallback side into ``LaneResult.left/right``, so
     a mask with exactly one side ``None`` is a one-sided (fallback) mask. A side the detector
-    reports as synthesized (``last_debug["synthesized_side"]``) is dropped here as well, so F1
+    reports as synthesized (``last_debug_stateless["synthesized_side"]``) is dropped here as
+    well, so F1
     stays measured-only even if a backend did return it.
     """
     left, right = res.left, res.right
@@ -796,7 +822,7 @@ def evaluate_image(
         timings[m].append(1e3 * (time.perf_counter() - t0))
         for k, v in (getattr(det, "last_timing_ms", None) or {}).items():
             timings[f"{m}/{k}"].append(v)
-        dbg = getattr(det, "last_debug", None) or {}
+        dbg = getattr(det, "last_debug_stateless", None) or {}  # debug of this stateless call
         left, right, syn = measured_sides(res, dbg.get("synthesized_side"))
         inter, union = band_iou_counts(res.ego_mask, gt_mask, mcfg["band_frac"])
         # Measured-only IoU (behaviour before the single-side fallback): a mask that used a
@@ -822,19 +848,19 @@ def evaluate_image(
             "errs": [s.err_px for s in sides if s.err_px is not None],
             "both": left is not None and right is not None,
             "n_sides": int(left is not None) + int(right is not None),
-            "y_top": det.last_debug.get("y_top"),
-            "y_bottom": det.last_debug.get("y_bottom"),
+            "y_top": dbg.get("y_top"),
+            "y_bottom": dbg.get("y_bottom"),
         }
         if keep_vis:
-            binary = np.asarray(det.last_debug.get("binary"), dtype=bool)
+            binary = np.asarray(dbg.get("binary"), dtype=bool)
             fitter = getattr(det, "fitter", None)
             if fitter is not None:
                 binary = binary & fitter.roi(hw)  # what the sliding window actually sees
             vis[m] = {
                 "result": res,
                 "binary": binary.copy(),
-                "y_top": det.last_debug.get("y_top"),
-                "y_bottom": det.last_debug.get("y_bottom"),
+                "y_top": dbg.get("y_top"),
+                "y_bottom": dbg.get("y_bottom"),
                 "synth_line": dbg.get("synthesized_line") if syn else None,
             }
     return rec, vis, {"mask": gt_mask, "sides": (gl, gr)}
@@ -862,7 +888,9 @@ def failure_figure(
         grid.append(debug_tiles(img, rec, gt, vis, lcfg, mcfg, fig))
     if not grid:
         return None
-    cv2.imwrite(str(out_path), np.vstack(grid), [cv2.IMWRITE_JPEG_QUALITY, 88])
+    cv2.imwrite(
+        str(out_path), np.vstack(grid), [cv2.IMWRITE_JPEG_QUALITY, int(fig["jpeg_quality"])]
+    )
     return out_path
 
 
@@ -931,7 +959,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     del all_frames
     print(f"sampled {len(frames)} images: {dict(quotas)}", flush=True)
 
-    info: dict[str, Any] = {"cpu": cpu_name(), "cv2_threads": cv2.getNumThreads()}
+    info: dict[str, Any] = {
+        "git_sha": git_sha(),
+        "cpu": cpu_name(),
+        "cv2_threads": cv2.getNumThreads(),
+    }
     detectors = {}
     for m in methods:
         mc = copy.deepcopy(lcfg)
@@ -965,6 +997,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             det.session, (in_h, in_w), int(b["runs"]), int(b["warmup"])
         )
         print("yolop model-only:", info["yolop_model_bench"], flush=True)
+        # Output kind (probs/logits) and value range seen on the first frame (warm-up).
+        info["yolop_lane_output"] = {"kind": det.output_kind, "range": det.output_range}
 
     import wandb
 
@@ -974,7 +1008,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         group=w["group"],
         job_type="smoke" if args.smoke else "eval",
         name=w["name"] + ("-smoke" if args.smoke else ""),
-        config={**cfg, "lanes": lcfg, "n_images": len(frames), "smoke": args.smoke},
+        config={
+            **cfg,
+            "lanes": lcfg,
+            "n_images": len(frames),
+            "smoke": args.smoke,
+            "git_sha": info["git_sha"],
+        },
     )
 
     records: list[dict] = []
@@ -996,7 +1036,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if keep:
             path = debug_dir / f"{len(debug_files):02d}_{Path(frame['name']).stem}.jpg"
             tiles = debug_tiles(img, rec, gt, vis, lcfg, mcfg, fig)
-            cv2.imwrite(str(path), tiles, [cv2.IMWRITE_JPEG_QUALITY, 88])
+            cv2.imwrite(str(path), tiles, [cv2.IMWRITE_JPEG_QUALITY, int(fig["jpeg_quality"])])
             debug_files.append(path)
         if (k + 1) % 50 == 0:
             print(f"{k + 1}/{len(frames)} images, {time.time() - t_loop:.0f} s", flush=True)

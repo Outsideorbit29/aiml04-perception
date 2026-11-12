@@ -71,6 +71,13 @@ def main() -> None:
     # A shallow clone has only the default branch, so fetch REF explicitly.
     sh(["git", "fetch", "--depth", "50", "origin", REF], cwd=WORKDIR)
     sh(["git", "checkout", "FETCH_HEAD"], cwd=WORKDIR)
+    # Commit under test; scripts/eval_lanes.py logs it (results.json setup.git_sha and the W&B
+    # config) and falls back to this env var if git is unavailable in its process.
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=WORKDIR, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    os.environ["GIT_COMMIT"] = sha
+    print(f"code commit {sha} (REF {REF})", flush=True)
     sh([sys.executable, "-m", "pip", "install", "-q", "-r", "requirements.txt"], cwd=WORKDIR)
     sh(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv"])
     # Run every step even if one fails, then fail the job so the status shows it.
