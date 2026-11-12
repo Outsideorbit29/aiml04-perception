@@ -17,7 +17,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "m2-eval-track"  # branch, tag or commit SHA to run
-MODE = "smoke"  # smoke | full
+MODE = "full"  # smoke | full
 EXTRA = ["--smoke"] if MODE == "smoke" else []
 JOB_CMDS = [
     ["python", "-m", "scripts.eval_tracking", "--config", "configs/tracker_eval.yaml", *EXTRA],
