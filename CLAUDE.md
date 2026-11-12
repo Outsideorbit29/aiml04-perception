@@ -42,24 +42,27 @@ Rules for delegation:
 ## Progress snapshot (update at the end of every session)
 Full checklist is in `PLAN.md`; numbers are in `docs/EXPERIMENTS.md`. This is the short version.
 
-_Last updated: 2026-11-12_
+_Last updated: 2026-11-13_
 
 | Milestone | Status | Notes |
 |---|---|---|
 | M0 Setup | Done except M0.7–M0.8 | GitHub, Kaggle, W&B, CI working. CARLA + WSL2/ROS2 local setup still open (needs user, laptop). |
 | M1 Data | Done | 20k BDD subset + 10k val in YOLO format (kernel `anish2906/aiml04-data-prep`), EDA, fixtures, class decision. |
-| M2 Detection/tracking | M2.1–M2.2 done | YOLO11s fine-tuned: mAP@0.5 **0.553** (zero-shot 0.361), W&B run `6euheeu2`, artifact `yolo11s-bdd-best`. Next: M2.3 eval gallery, M2.4 `Detector`, M2.5 ByteTrack, M2.6 MOT eval. |
-| M3 Lanes | Not started | Planned Nov 13–15. |
+| M2 Detection/tracking | M2.1–M2.5 done | YOLO11s fine-tuned: mAP@0.5 **0.553** (zero-shot 0.361), artifact `yolo11s-bdd-best`. Full eval W&B `8tzih6my`; det+ByteTrack 52 FPS on T4. Tracks fragment (KITTI 0000: 75 ids / 154 frames). Next: M2.6 MOT metrics, then tune ByteTrack. |
+| M3 Lanes | M3.1 done; M3.2–M3.3 in progress | Classical pipeline merged. Branch `m3-lanes-eval`: YOLOP ONNX backend + Kaggle job `aiml04-eval-lanes`. BDD needs its own camera geometry (`configs/lanes_bdd.yaml`; hood + high horizon). Smoke: IoU when predicted classical 0.60 / YOLOP 0.85, but most frames show one lane line only, so a single-side fallback is being added before the full run. |
 | M4 Depth/distance | Not started | Planned Nov 15–16. |
 | M5 CARLA + ROS2 | Not started | Needs M0.7–M0.8 first. |
 | M6 ONNX/TensorRT | Not started | |
 | M7 Deliverables | Not started | |
 
-**Schedule:** about one day behind PLAN.md (M2 tracking work should have started Nov 11).
+**Schedule:** roughly on PLAN.md dates for M2/M3; M2.6 (MOT) slipped behind M3.
 
 Useful facts learned so far:
 - The Kaggle CLI is at `C:\Users\anish\AppData\Roaming\Python\Python314\Scripts\kaggle.exe` (not on PATH).
 - Fetch only small outputs from a job: `kaggle kernels output <ref> -p <dir> --file-pattern '\.(log|json|csv|yaml)$'`.
+- Kaggle jobs clone the repo shallowly; runners now `git fetch origin REF` + checkout `FETCH_HEAD`, so `REF` may be a branch. Set `REF` back to `main` before merging.
+- Run a `MODE = "smoke"` job first and look at its debug outputs before any full run; implausible numbers (e.g. whole groups at 0.000) have meant eval bugs.
+- Don't switch branches in the main checkout while a subagent is editing; merge through `git worktree` instead.
 - A 50-epoch YOLO11s run on 20k images at 640 takes ~4.6 h on a Kaggle T4 (fits one session).
 
 ## Claude-specific notes
