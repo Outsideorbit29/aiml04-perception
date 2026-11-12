@@ -34,3 +34,4 @@ access_token
 
 # test fixtures are the only media allowed in git (<= 5 MB total)
 !tests/fixtures/*.mp4
+.claude/worktrees/

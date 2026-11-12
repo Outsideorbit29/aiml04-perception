@@ -1,0 +1,35 @@
+# Lane detection override for the BDD100K dashcams (1280x720), used by the M3.3 eval
+# (configs/lanes_eval.yaml). Only the keys below change; everything else comes from `base`.
+#
+# Why a separate camera config: configs/lanes.yaml assumes a low horizon and no hood (warp rows
+# 0.62-0.90, like KITTI/CARLA). In BDD the horizon sits near y = 0.47 * H and the hood or
+# dashboard covers roughly the bottom 15-40 % of the frame, so rows 0.62-0.90 were mostly hood:
+# both sides were found in only 7-10 % of the smoke-run images (2026-11-12, W&B 9wm2haoh).
+#
+# Geometry (checked on the 5 BDD fixture frames, then against the eval's gt_geometry stats,
+# which report the GT vanishing row, GT lane width and the bottom row of the GT drivable area;
+# see the val-split caveat in the fallback section below):
+#   vanishing point (0.50, 0.47); trapezoid sides run through it.
+#   bottom row 0.74 (just above most hoods), x 0.20 / 0.80; top row 0.58, x 0.378 / 0.622.
+#   An ego lane is ~0.40 W wide at row 0.74 -> ~0.33 W in the bird's-eye view.
+base: configs/lanes.yaml
+
+fitting:
+  roi:                     # clockwise from bottom-left; stops above the hood line
+    polygon: [[0.00, 0.80], [0.35, 0.54], [0.65, 0.54], [1.00, 0.80]]
+  warp:                    # order TL, TR, BR, BL; dst inherited (x 0.25-0.75 in BEV)
+    src: [[0.378, 0.58], [0.622, 0.58], [0.80, 0.74], [0.20, 0.74]]
+  lane_width_frac: [0.18, 0.65]  # expected ego lane ~0.33 W in BEV (0.25 was at the edge)
+
+# Single-side fallback (M3.3 follow-up). Many BDD frames show only one marking (parked cars,
+# dense traffic, unmarked streets). In the 30-image smoke (W&B 68ujhdyl) 22/30 YOLOP images had
+# no mask, and the debug overlays showed correct single sides among them (e.g. debug/03).
+# Width: the smoke's gt_geometry width_bottom median is 0.447 W (image, row 0.74, n = 14 images
+# with both GT sides; p10-p90 0.21-0.81). At row 0.74 the warp maps src x 0.20-0.80 onto dst
+# 0.25-0.75 (x 5/6), so 0.447 * 5/6 = 0.37 of the bird's-eye width.
+# Caveat: the warp rows above and this fallback width were tuned on BDD *val* GT statistics
+# (the same split the M3.3 table is scored on). If they are retuned, re-derive them from the
+# gt_geometry stats of a disjoint sample (BDD train split), not from the val eval images.
+single_side_fallback: true
+fallback_lane_width_frac: 0.37
+fallback_conf_mult: 0.5

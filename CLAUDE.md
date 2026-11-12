@@ -48,14 +48,14 @@ _Last updated: 2026-11-13_
 |---|---|---|
 | M0 Setup | Done except M0.7–M0.8 | GitHub, Kaggle, W&B, CI working. CARLA + WSL2/ROS2 local setup still open (needs user, laptop). |
 | M1 Data | Done | 20k BDD subset + 10k val in YOLO format (kernel `anish2906/aiml04-data-prep`), EDA, fixtures, class decision. |
-| M2 Detection/tracking | M2.1–M2.5 done | YOLO11s fine-tuned: mAP@0.5 **0.553** (zero-shot 0.361), artifact `yolo11s-bdd-best`. Full eval W&B `8tzih6my`; det+ByteTrack 52 FPS on T4. Tracks fragment (KITTI 0000: 75 ids / 154 frames). Next: M2.6 MOT metrics, then tune ByteTrack. |
-| M3 Lanes | M3.1 done; M3.2–M3.3 in progress | Classical pipeline merged. Branch `m3-lanes-eval`: YOLOP ONNX backend + Kaggle job `aiml04-eval-lanes`. BDD needs its own camera geometry (`configs/lanes_bdd.yaml`; hood + high horizon). Smoke: IoU when predicted classical 0.60 / YOLOP 0.85, but most frames show one lane line only, so a single-side fallback is being added before the full run. |
+| M2 Detection/tracking | M2.1–M2.6 done (M2.7 stretch open) | YOLO11s mAP@0.5 **0.553** (zero-shot 0.361), artifact `yolo11s-bdd-best`, eval W&B `8tzih6my`. MOT on 8 KITTI sequences (W&B `qvrkp7t1`): MOTA 52.5, IDF1 67.4, IDSW 176 with tuned ByteTrack (buffer 60, 2 consecutive frames); vehicles 63.7 / 75.7, pedestrians 38.5 / 54.9. New ids appear 2 frames after first detection. Det+track 52 FPS on T4. |
+| M3 Lanes | M3.1–M3.4 done (M3.5 stretch open) | 500 BDD val (W&B `bf4xp164`): lane F1 YOLOP **0.52** vs classical 0.23; ego-lane IoU tie ~0.42 (YOLOP finds no line on 129/500: faint markings, snow, traffic). YOLOP is the live default (switch `method` in M5). BDD uses `configs/lanes_bdd.yaml`; single-side fallback builds the ego mask from one line. Figures in `docs/figures/lanes_*`. |
 | M4 Depth/distance | Not started | Planned Nov 15–16. |
 | M5 CARLA + ROS2 | Not started | Needs M0.7–M0.8 first. |
 | M6 ONNX/TensorRT | Not started | |
 | M7 Deliverables | Not started | |
 
-**Schedule:** roughly on PLAN.md dates for M2/M3; M2.6 (MOT) slipped behind M3.
+**Schedule:** M2 and M3 done on 2026-11-13, on PLAN.md dates. Next: M4 depth/distance (Nov 15–16); M0.7–M0.8 local CARLA/ROS2 setup needed before M5 (Nov 16).
 
 Useful facts learned so far:
 - The Kaggle CLI is at `C:\Users\anish\AppData\Roaming\Python\Python314\Scripts\kaggle.exe` (not on PATH).
@@ -63,6 +63,8 @@ Useful facts learned so far:
 - Kaggle jobs clone the repo shallowly; runners now `git fetch origin REF` + checkout `FETCH_HEAD`, so `REF` may be a branch. Set `REF` back to `main` before merging.
 - Run a `MODE = "smoke"` job first and look at its debug outputs before any full run; implausible numbers (e.g. whole groups at 0.000) have meant eval bugs.
 - Don't switch branches in the main checkout while a subagent is editing; merge through `git worktree` instead.
+- `LaneResult.contains()` uses the ego mask only on its measured rows; below/above it uses the polylines or extends the mask edges. M4.5 `in_ego_lane` can call it with the box bottom-centre directly.
+- YOLOP ONNX outputs probabilities (range ~0.41–1), not logits; `yolop.output_kind: auto` handles both.
 - A 50-epoch YOLO11s run on 20k images at 640 takes ~4.6 h on a Kaggle T4 (fits one session).
 
 ## Claude-specific notes

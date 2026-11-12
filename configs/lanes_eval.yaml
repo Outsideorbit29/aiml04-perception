@@ -1,0 +1,74 @@
+# M3.3/M3.4: classical vs YOLOP lanes on BDD100K val. Used by scripts/eval_lanes.py, run on
+# Kaggle by kaggle/eval_lanes. Nothing here runs on the laptop.
+lanes_config: configs/lanes_bdd.yaml   # BDD camera geometry (horizon ~0.47 H, hood below ~0.75 H)
+methods: [classical, yolop]
+overrides:                               # merged into lanes_config for this job only
+  yolop:
+    weights: /kaggle/temp/weights/yolop-640-640.onnx   # downloaded from yolop.weights_url
+
+data:
+  # Images: same mount as the M1 data prep (configs/data_bdd.yaml, verified 2026-11-09).
+  images_val: /kaggle/input/datasets/awsaf49/bdd100k-dataset/bdd100k/bdd100k/images/100k/val
+  # Lane + drivable-area poly2d labels: the 2018 release label file (same file data prep reads
+  # weather/timeofday from). Verified 2026-11-12 (smoke, W&B 9wm2haoh): 9526 of 10000 val
+  # frames carry lane labels; the job fails loudly if none are found.
+  labels_val: /kaggle/input/datasets/solesensei/solesensei_bdd100k/bdd100k_labels_release/bdd100k/labels/bdd100k_labels_images_val.json
+  label_wh: [1280, 720]                  # pixel frame of the label coordinates (BDD 100k);
+                                         # GT is rescaled if an image loads at another size
+  search_root: /kaggle/input             # fallback: look for the two names above under here
+  search_depth: 7
+
+sample:                                  # 500 images stratified by BDD timeofday, fixed seed
+  seed: 42
+  per_timeofday: {daytime: 200, night: 200, dawn/dusk: 100}
+  require_labels: true                   # image must have a lane or drivable-area label
+
+metrics:
+  band_frac: [0.58, 0.74]                # image rows (fraction of H-1) where lanes are scored;
+                                         # must = warp src top/bottom of lanes_config (checked)
+  band_rows: 30                          # sampled rows inside the band for the lane distance
+  lane_tol_px: 20                        # mean |x_pred - x_gt| for a boundary to count as TP
+                                         # (BDD 1280 px wide; a lane marking is ~10-20 px)
+  min_gt_rows: 5                         # GT boundary must cover this many band rows to count
+  gt_ref_frac: 0.74                      # row where GT boundaries are ranked left/right of centre
+                                         # (band bottom; BDD lane labels stop at the hood)
+  gt_min_bottom_frac: 0.55               # GT lane polyline must reach below this row
+  bezier_steps: 8                        # points per cubic segment when flattening BDD poly2d
+  exclude_lane_types: [crosswalk]        # BDD laneType values that are never ego boundaries
+  curve_px: 15                           # GT boundary deviating > this from its chord = curve
+
+fps:
+  warmup_runs: 10                        # untimed detect() calls per method on the first image
+  model_bench: {runs: 50, warmup: 10}    # YOLOP session.run on a fixed tensor (model-only ms)
+  # Classical runs on the CPU, YOLOP on the GPU (onnxruntime CUDA provider), same session.
+
+figure:
+  per_method: 4                          # worst ego-lane IoU cases per method
+  tile_width: 480
+  gt_color: [0, 255, 255]                # BGR, GT boundaries
+  gt_mask_color: [255, 0, 255]           # BGR, GT "direct" drivable area
+  binary_color: [255, 255, 0]            # BGR, each method's lane binary (debug tiles)
+  band_color: [160, 160, 160]            # BGR, scoring band rows
+  gt_mask_alpha: 0.4                     # GT direct-area tint on the GT tile
+  binary_alpha: 0.7                      # lane-binary tint on the method tiles
+  gt_thickness: 3                        # GT boundaries on the GT tile (px)
+  gt_thickness_overlay: 1                # GT boundaries over the method tiles (px)
+  band_thickness: 1                      # scoring band rows (px)
+  jpeg_quality: 88                       # failure figure and debug tiles
+  label_min_scale: 0.4                   # tile caption font scale = max(min, width / this)
+  label_width_per_scale: 900
+  label_thickness: 1                     # caption text stroke (px)
+
+debug:                                   # side-by-side GT / per-method overlays in out_dir/debug
+  enabled: false                         # forced on by --smoke (smoke.debug)
+  n_images: 8                            # evenly spaced over the sample (covers each timeofday)
+
+out_dir: /kaggle/working/m3_lanes
+wandb:
+  project: aiml04-perception
+  group: lanes
+  name: lanes-classical-vs-yolop
+
+smoke:                                   # --smoke: ~5 min check of the whole job
+  per_timeofday: {daytime: 10, night: 10, dawn/dusk: 10}
+  debug: true
