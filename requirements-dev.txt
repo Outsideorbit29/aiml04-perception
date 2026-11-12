@@ -4,5 +4,6 @@ numpy>=1.26
 opencv-python-headless>=4.9
 pyyaml>=6.0
 supervision>=0.22,<0.27  # ByteTrack for perception.tracking tests (no torch)
+motmetrics>=1.4  # MOTA / IDF1 for the M2.6 eval tests
 pytest>=8.0
 ruff>=0.6

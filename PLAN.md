@@ -72,7 +72,7 @@ On the laptop (one short session):
 - [x] M2.3 Evaluate: per-class AP, confusion matrix, failure gallery (night, small objects)
 - [x] M2.4 `Detector` class with torch backend and a config switch for onnx/trt (filled in M6)
 - [x] M2.5 ByteTrack integration through the `Tracker` class; annotated video rendered on Kaggle
-- [ ] M2.6 MOT eval on a BDD MOT subset (MOTA, IDF1, ID switches)
+- [x] M2.6 MOT eval on a BDD MOT subset (MOTA, IDF1, ID switches). Done on KITTI tracking (8 sequences) since BDD MOT isn't on Kaggle: MOTA 52.5, IDF1 67.4 after tuning
 - [ ] M2.7 **(S)** DeepSORT comparison
 - Exit: fine-tuned mAP@0.5 beats the zero-shot baseline, numbers are in EXPERIMENTS.md, and `best.pt` is a W&B artifact.
 
