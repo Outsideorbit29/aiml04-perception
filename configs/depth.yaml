@@ -75,6 +75,30 @@ fusion:
                             # and ~65 % of the CARLA geometric inverse-depth variance
                             # (configs/camera.yaml). 0.8 is deliberately conservative; with equal
                             # stds the fused std is sqrt((1 + 0.8) / 2) = 0.95 x either one.
+  ego_lane:                 # in_ego_lane = lane check + metric lateral corridor (fusion.py item 6).
+                            # |X| = lateral offset of the box bottom-centre at the filtered
+                            # distance. Reference geometry: 3.5 m lane, so a lead car inside the
+                            # lane has |X| <= (3.5 - 1.8) / 2 = 0.85 m; a car parked at the kerb
+                            # (1.8 m wide, inner side >= 2.0 m out, centre ~2.9 m) has a box
+                            # centre of ~2.4-2.5 m at 6 m and ~2.2 m when cut by the KITTI image
+                            # edge at 4 m (the box spans its near outer to far inner corner),
+                            # ~1.6 m when also cut by the image bottom in CARLA at 2.5 m.
+    min_lane_confidence: 0.3  # both sides measured AND LaneResult.confidence (mean fraction of
+                              # sliding windows hit) >= this -> lanes are trusted
+    half_width_lanes_m: 1.8   # with trusted lanes: veto for a lane mask/polyline that spills
+                              # over the kerb; between a lane-edge lead (0.85 m, + 0.7 m curve
+                              # drift at 12 m for R = 100 m) and a parked car (>= 2.2 m beyond
+                              # 4 m; closer, contains() must also say yes)
+    range_lanes_m: 12.0       # with trusted lanes the corridor applies up to here; beyond, the
+                              # polylines alone decide (camera-frame drift Z^2 / 2R on curves)
+    half_width_no_lanes_m: 1.2  # one-sided / low-confidence / no lanes: corridor only. Worst
+                                # parked case: car cut by the image bottom AND side of the 90 deg
+                                # CARLA camera at 2.5 m, box centre 1.6 m. 1.2 m tolerates its
+                                # distance 25 % short (KITTI case at 4-6 m: 45 %) and a lane-edge
+                                # lead's distance 40 % long
+    range_no_lanes_m: 30.0    # beyond this, no lead without trusted lanes (straight-road
+                              # assumption breaks: 4.5 m drift at 30 m for R = 100 m). AEB at
+                              # TTC 2 s needs > 15 m/s closing at 30 m, unlikely on unmarked roads
 
 kalman:                     # perception.fusion.FilterBank (per track id)
   accel_std: 3.0            # m/s^2 white-acceleration process noise

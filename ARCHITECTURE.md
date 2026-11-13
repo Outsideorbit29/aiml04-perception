@@ -125,7 +125,18 @@ Evaluation: absolute relative error and RMSE against KITTI LiDAR and the CARLA d
 
 ### 3.6 Fusion output (`perception/fusion/`)
 `DistanceFusion` merges tracks, distances and lanes into a `PerceptionFrame`. It flags each object
-as `in_ego_lane` when the bottom-center of its box falls inside the ego-lane polygon.
+as `in_ego_lane` from the lane result plus a metric lateral corridor: the lateral offset of the box
+bottom-center is `X = (u − cx)·Z / fx` at the filtered distance Z (`fusion.ego_lane` in
+`configs/depth.yaml`).
+- Both boundaries measured and `confidence ≥ min_lane_confidence`: `LaneResult.contains(bottom-center)`
+  and, up to `range_lanes_m` (12 m), `|X| ≤ half_width_lanes_m` (1.8 m). Beyond that range the
+  polylines alone decide, since a camera-frame corridor drifts sideways on curves.
+- One side synthesized, low confidence or no lanes: corridor only, `|X| ≤ half_width_no_lanes_m`
+  (1.2 m) up to `range_no_lanes_m` (30 m). The synthesized one-sided mask can spill over the kerb,
+  so it is not used; a lead car on an unmarked street is still found.
+
+A lead car inside a 3.5 m lane has `|X| ≤ 0.85 m`; a car parked at the kerb has a box-center offset
+of about 2.2–2.5 m (1.6 m when cut by the image bottom and side at 2.5 m in CARLA).
 
 ### 3.7 Simulation and ROS2 (`sim/`, `ros2_ws/src/`)
 Packages:
