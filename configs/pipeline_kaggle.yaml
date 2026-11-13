@@ -1,0 +1,28 @@
+# M4.6 Kaggle job: full offline pipeline on one KITTI tracking sequence -> annotated MP4 + JSONL.
+# Used by kaggle/run_pipeline/job.py (run on Kaggle by kaggle/run_pipeline/runner.py). Nothing
+# here runs on the laptop.
+pipeline_config: configs/pipeline.yaml
+camera: kitti                  # height / pitch / sigmas from configs/camera.yaml kitti
+use_calib_p2: true             # fx/fy/cx/cy from the sequence's calib/<seq>.txt P2 (drive date)
+backend: torch                 # detector .pt + MiDaS torch.hub (ONNX exports arrive in M6)
+lanes_method: null             # null = pipeline.yaml default (yolop)
+
+data_config: configs/data_kitti.yaml   # tracking.image_dir (leducnhuan/kitti-tracking)
+search: /kaggle/input                  # fallback search for training/image_02
+sequence: "0001"               # 447 frames (44.7 s): residential road, parked + moving cars
+max_frames: null               # null = whole sequence
+fps: 10.0                      # KITTI capture rate -> stamps, Kalman/TTC, tracker frame_rate
+
+weights_dir: /kaggle/temp/weights
+yolop_weights: /kaggle/temp/weights/yolop-640-640.onnx   # downloaded from yolop.weights_url
+out_dir: /kaggle/working/m4_pipeline
+
+wandb:
+  project: aiml04-perception
+  entity: anish-grd2004-vellore-institute-of-technology
+  group: pipeline
+  name: pipeline-kitti
+  weights_artifact: yolo11s-bdd-best:candidate
+
+smoke:                         # --smoke
+  max_frames: 50

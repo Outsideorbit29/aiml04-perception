@@ -1,0 +1,64 @@
+# Full offline pipeline (M4.6): video / image folder -> perception.pipeline -> annotated MP4 + JSONL.
+# Read by perception.pipeline.load_pipeline_config(). The per-module settings stay in their own
+# configs; this file only says which ones to use and what to override for the pipeline.
+#
+#   python -m perception.pipeline --source clip.mp4 --out out.mp4 --json frames.jsonl \
+#       [--backend torch] [--camera kitti] [--lanes classical] [--max-frames N]
+#
+# Overrides are merged recursively over the referenced config. The default backends are the
+# ones in the module configs (laptop-safe); `--backend torch` switches detector + depth to torch
+# (Kaggle, until the M6 ONNX exports exist).
+
+detector_config: configs/yolo_detector.yaml
+tracker_config: configs/tracker.yaml
+lanes_config: configs/lanes.yaml
+depth_config: configs/depth.yaml
+camera_config: configs/camera.yaml
+camera: carla                    # camera model for geometric distance (configs/camera.yaml)
+
+overrides:
+  detector: {}
+  tracker: {}
+  lanes:
+    method: yolop                # CLAUDE.md M3: YOLOP is the live default (lane F1 0.52 vs
+                                 # 0.23 classical); configs/lanes.yaml itself still says
+                                 # classical. `--lanes classical` switches back.
+  depth: {}
+
+# Extra overrides applied when a given camera is selected (merged after `overrides`).
+camera_overrides:
+  kitti:
+    depth:
+      models:
+        midas_small: {input_hw: [256, 832]}   # KITTI ~1242x375 (aspect 3.3), as in M4.4
+        dpt_hybrid: {input_hw: [384, 1248]}
+
+depth_enabled: true              # false = geometric distance only (no MiDaS model needed)
+tracker_frame_rate_from_source: true  # ByteTrack frame_rate = source fps (KITTI 10, CARLA 20)
+
+source:
+  image_fps: 10.0                # image folders carry no fps; stamps = frame index / fps
+  fallback_fps: 10.0             # video whose container reports no fps
+  image_suffixes: [.jpg, .jpeg, .png]
+
+output:
+  fourcc: mp4v                   # OpenCV writer codec (H.264 re-encode is done by the Kaggle job)
+  snapshots: 6                   # evenly spaced annotated JPGs written next to the video
+  jpg_quality: 90
+
+summary:
+  warmup_frames: 5               # first frames left out of the timing means (model init, cudnn)
+
+viz:
+  font_scale: 0.45
+  box_thickness: 1               # tracks without a distance (signs, lights, no estimate)
+  object_thickness: 2            # objects with a distance
+  ego_lane_thickness: 3          # objects inside the ego lane
+  ego_lane_color: [0, 255, 255]  # BGR yellow outline around in-lane objects
+  lead_color: [0, 0, 255]        # BGR red: lead object (closest in the ego lane)
+  lead_thickness: 4
+  ttc_warn_s: 4.0                # TTC label turns red below this (ARCHITECTURE.md 3.7 ACC band)
+  text_color: [255, 255, 255]
+  text_bg: [0, 0, 0]
+  warn_color: [0, 0, 255]
+  info_line_px: 16               # line height of the top-left info block
