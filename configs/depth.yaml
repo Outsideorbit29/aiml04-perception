@@ -75,12 +75,43 @@ fusion:
                             # and ~65 % of the CARLA geometric inverse-depth variance
                             # (configs/camera.yaml). 0.8 is deliberately conservative; with equal
                             # stds the fused std is sqrt((1 + 0.8) / 2) = 0.95 x either one.
+  ego_lane:                 # in_ego_lane = lane check + metric lateral corridor (fusion.py item 6).
+                            # |X| = lateral offset of the box bottom-centre at the filtered
+                            # distance. Reference geometry: 3.5 m lane, so a lead car inside the
+                            # lane has |X| <= (3.5 - 1.8) / 2 = 0.85 m; a car parked at the kerb
+                            # (1.8 m wide, inner side >= 2.0 m out, centre ~2.9 m) has a box
+                            # centre of ~2.4-2.5 m at 6 m and ~2.2 m when cut by the KITTI image
+                            # edge at 4 m (the box spans its near outer to far inner corner),
+                            # ~1.6 m when also cut by the image bottom in CARLA at 2.5 m.
+    min_lane_confidence: 0.3  # both sides measured AND LaneResult.confidence (mean fraction of
+                              # sliding windows hit) >= this -> lanes are trusted
+    half_width_lanes_m: 1.5   # with trusted lanes: |X| <= this + Z^2 / (2 curve_radius_m), at
+                              # every range (YOLOP's ego area covers kerb-parked cars on unmarked
+                              # streets, KITTI 0001: X 2.3-3.6 m at 12-24 m). 1.5 m sits between a
+                              # lane-edge lead (0.85 m) and a parked car (>= 2.2 m)
+    curve_radius_m: 400.0     # curve allowance: a lane of radius R drifts Z^2 / 2R sideways in
+                              # the camera frame. 400 m keeps the KITTI 0001 parked cars out to
+                              # ~36 m (allowance 1.6 m there); on R = 100 m a lead centred in its
+                              # lane is kept to ~25 m (TTC 2 s there needs 12.5 m/s, about the top
+                              # speed on such a curve)
+    half_width_no_lanes_m: 1.2  # one-sided / low-confidence / no lanes: corridor only. Worst
+                                # parked case: car cut by the image bottom AND side of the 90 deg
+                                # CARLA camera at 2.5 m, box centre 1.6 m. 1.2 m tolerates its
+                                # distance 25 % short (KITTI case at 4-6 m: 45 %) and a lane-edge
+                                # lead's distance 40 % long
+    range_no_lanes_m: 30.0    # beyond this, no lead without trusted lanes (straight-road
+                              # assumption breaks: 4.5 m drift at 30 m for R = 100 m). AEB at
+                              # TTC 2 s needs > 15 m/s closing at 30 m, unlikely on unmarked roads
 
 kalman:                     # perception.fusion.FilterBank (per track id)
   accel_std: 3.0            # m/s^2 white-acceleration process noise
   init_velocity_std: 10.0   # m/s, velocity is unknown on the first measurement
   gate_chi2: 16.0           # innovation NIS above this (4 sigma) = outlier: coast on prediction
   gate_restart_count: 2     # this many gated measurements in a row = id switch -> restart
+  reacquire_restart_gap_s: 0.275  # a gated measurement whose gap to the last measurement exceeds
+                                  # this restarts at once (no coasting on an extrapolated
+                                  # prediction): >= 2 missed frames at 10 Hz (KITTI, gap 0.3 s),
+                                  # >= 5 at 20 Hz (CARLA); half a frame away from both boundaries
   restart_on_class_change: false  # ByteTrack ignores class; car/truck flips on one object are
                                   # common, and the gate already catches a real id switch
   max_gap_s: 1.0            # no measurement for longer -> restart on the next one

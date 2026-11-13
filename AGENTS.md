@@ -34,7 +34,9 @@ kaggle kernels output <user>/aiml04-train-yolo -p runs/train_yolo   # only when 
 
 # What the Kaggle runner notebook executes (never on the laptop)
 python scripts/train_yolo.py --config configs/yolo_bdd.yaml
-python -m perception.pipeline --source /kaggle/input/<clip>.mp4 --out /kaggle/working/out.mp4
+python -m perception.pipeline --source /kaggle/input/<clip.mp4 or image dir> --out /kaggle/working/out.mp4 \
+    --json frames.jsonl --summary summary.json --snapshots snaps --backend torch --camera kitti \
+    --detector-weights <best.pt> --yolop-weights <yolop-640-640.onnx>   # --backend torch until the M6 ONNX export
 python deploy/export.py --weights best.pt --formats onnx engine --half
 python deploy/benchmark.py --config configs/bench.yaml           # writes docs/benchmarks.md content
 
@@ -70,7 +72,7 @@ Definitions are in `.claude/agents/`. Each agent writes only to the paths it own
 | `data-engineer` | `scripts/data/`, `notebooks/eda*.ipynb`, `configs/data_*.yaml`, `kaggle/data_prep/` | M1 |
 | `detection-tracking` | `perception/detection/`, `perception/tracking/`, `scripts/train_yolo.py`, `configs/yolo_*.yaml`, `configs/tracker*.yaml`, `kaggle/train_yolo/`, `kaggle/eval_track/`, `kaggle/eval_mot/`, `scripts/eval_detection.py`, `scripts/eval_tracking.py`, `scripts/eval_mot.py` | M2 |
 | `lane-depth` | `perception/lanes/`, `perception/depth/`, `perception/fusion/`, `configs/lanes*.yaml`, `configs/depth*.yaml`, `kaggle/eval_lanes/`, `kaggle/eval_depth/` | M3, M4 |
-| `sim-ros-integrator` | `ros2_ws/`, `sim/`, `configs/carla*.yaml`, `perception/pipeline.py`, `kaggle/sim_eval/` | M5 |
+| `sim-ros-integrator` | `ros2_ws/`, `sim/`, `configs/carla*.yaml`, `configs/pipeline*.yaml`, `perception/pipeline.py`, `kaggle/sim_eval/`, `kaggle/run_pipeline/` | M5 |
 | `edge-optimizer` | `deploy/`, `configs/bench*.yaml`, `docs/benchmarks.md`, `kaggle/export_bench/` | M6 |
 | `qa-reviewer` | `tests/`, `.github/workflows/` | gate on every milestone |
 | `docs-presenter` | `README.md`, `docs/` (except `benchmarks.md`), slides, demo script | M7 |

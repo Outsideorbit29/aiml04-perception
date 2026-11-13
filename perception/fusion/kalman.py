@@ -16,6 +16,11 @@ process noise is white acceleration with std ``accel_std`` (m/s^2).
   (closing speed and TTC survive one bad MiDaS value or box). ``gate_restart_count``
   consecutive gated measurements mean a different object, and the filter restarts from the
   latest one instead of blending two objects;
+- a gated measurement that arrives after the id went unmeasured for more than
+  ``reacquire_restart_gap_s`` restarts the filter at once instead of coasting: after a gap the
+  prediction is extrapolated (e.g. at ego speed past a parked car) and is less trustworthy than
+  the fresh measurement. Coasting there would output a distance far too short (KITTI 0001 frame
+  313: predicted 1.2 m, measured 6.0 m), with TTC and the ego-lane test trusting it;
 - a stamp that does not advance (dt <= 0) restarts the filter.
 TTC = distance / closing speed is reported only when all of these hold, otherwise it is None:
 - the filter has been measured for at least ``min_track_s_for_ttc`` seconds (first to last
@@ -49,6 +54,7 @@ REQUIRED_KEYS = (
     "ttc_speed_sigma_k",
     "gate_restart_count",
     "restart_on_class_change",
+    "reacquire_restart_gap_s",
 )
 
 
@@ -146,16 +152,18 @@ class FilterBank:
             self.restarts += 1
             f = None
         if f is not None:
+            gap = stamp - f.last_meas
             f.predict(stamp)
             if f.nis(z, r_std) <= float(self.cfg["gate_chi2"]):
                 f.gated = 0
                 f.update(z, r_std)
                 return f.output(restarted=False)
             f.gated += 1
-            if f.gated < int(self.cfg["gate_restart_count"]):
+            reacquired = gap > float(self.cfg["reacquire_restart_gap_s"])
+            if f.gated < int(self.cfg["gate_restart_count"]) and not reacquired:
                 self.coasts += 1
                 return f.output(restarted=False, coasted=True)
-            self.restarts += 1  # persistent jump: a different object now carries this id
+            self.restarts += 1  # persistent jump (different object) or jump after a gap
         f = DistanceKalman(self.cfg, z, r_std, stamp, cls)
         self.filters[track_id] = f
         return f.output(restarted=True)

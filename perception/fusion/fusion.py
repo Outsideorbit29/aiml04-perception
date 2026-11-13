@@ -27,7 +27,23 @@ contact and would otherwise become false lead objects):
    on it); 0 would be the independent-errors std, 1 gives no gain over the better estimate.
    std(Z) = Z^2 * std(1/Z).
 5. Per-track Kalman filter (perception.fusion.kalman) -> distance, std, closing speed, TTC.
-6. ``in_ego_lane`` = ``LaneResult.contains(box bottom-centre)``.
+6. ``in_ego_lane`` (``ego_lane``): lane check plus a metric lateral corridor gate. The lateral
+   offset of the box bottom-centre is ``X = (u - cx) * Zc / fx`` (``Zc`` = camera-frame depth
+   of that ground point, = Z at zero pitch). The box centre (not its inner edge) is used: a
+   kerb-parallel parked car's box spans from its near outer corner to its far inner corner, so
+   its inner edge times the near distance badly underestimates the offset, while the centre
+   stays ~2.2-2.5 m for a car parked 2.9 m out. Z for the offset is the larger of the filtered
+   distance and this frame's measurement: a too-short Z shrinks |X| towards 0 for any box, while
+   a longer Z cannot push a car straight ahead (u ~ cx) out of the corridor.
+   - Both boundaries measured (``left`` and ``right``) and ``confidence >= min_lane_confidence``:
+     ``contains(bottom-centre)`` AND ``|X| <= half_width_lanes_m + Z^2 / (2 curve_radius_m)``
+     at every range. The second term is the camera-frame drift of a lane curving with radius
+     ``curve_radius_m``; without it the gate would drop leads on curves, and switching the gate
+     off at range let YOLOP's ego area (which covers parked cars on unmarked streets) decide.
+   - Otherwise (one side synthesized, low confidence, or no lane result): corridor only,
+     ``|X| <= half_width_no_lanes_m`` within ``range_no_lanes_m``, else False. The synthesized
+     mask can spill over the kerb, so it is not used; a lead car on an unmarked street is still
+     found. No curve allowance here: without lane evidence a parked car would get in at range.
 Objects with no distance at all (no geometric, no aligned MiDaS, no live filter) are left out
 of the frame, because ``ObjectState.distance_m`` must be a real number; ``last_stats`` counts
 them.
@@ -109,6 +125,69 @@ def fuse(estimates: list[Estimate | None], correlation: float = 0.0) -> Estimate
     return fuse_inverse([(1.0 / z, s / (z * z)) for z, s in valid], correlation)
 
 
+@dataclass(frozen=True)
+class EgoCorridor:
+    """``fusion.ego_lane`` settings (configs/depth.yaml), see the module docstring item 6."""
+
+    min_lane_confidence: float
+    half_width_lanes_m: float
+    curve_radius_m: float
+    half_width_no_lanes_m: float
+    range_no_lanes_m: float
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> EgoCorridor:
+        out = cls(**{k: float(d[k]) for k in cls.__dataclass_fields__})
+        for k, v in vars(out).items():
+            if not (math.isfinite(v) and v >= 0):
+                raise ValueError(f"fusion.ego_lane.{k} = {v} must be finite and >= 0")
+        if out.curve_radius_m <= 0:
+            raise ValueError("fusion.ego_lane.curve_radius_m must be > 0")
+        return out
+
+    def half_width_lanes(self, z: float) -> float:
+        """Corridor half-width with trusted lanes at distance z (curve allowance included)."""
+        return self.half_width_lanes_m + z * z / (2.0 * self.curve_radius_m)
+
+
+def lateral_offset(u: float, z: float, cam: CameraModel) -> float:
+    """Lateral offset (m, + = right) of the ground point at image column ``u`` and forward
+    distance ``z`` (flat ground, camera pitched down by ``cam.pitch_rad``)."""
+    zc = z * math.cos(cam.pitch_rad) + cam.height_m * math.sin(cam.pitch_rad)
+    return (u - cam.cx) * zc / cam.fx
+
+
+def two_sided(lanes: LaneResult | None, min_confidence: float) -> bool:
+    """Both lane boundaries measured (not synthesized) with enough confidence."""
+    return (
+        lanes is not None
+        and lanes.left is not None
+        and lanes.right is not None
+        and lanes.confidence >= min_confidence
+    )
+
+
+def in_ego_lane(
+    det: Detection,
+    z: float,
+    lanes: LaneResult | None,
+    cam: CameraModel,
+    corridor: EgoCorridor,
+    z_lateral: float | None = None,
+) -> bool:
+    """Ego-lane flag of an object at filtered distance ``z`` (module docstring item 6).
+    ``z_lateral`` (default ``z``) is the distance used for the lateral offset; ``update`` passes
+    max(filtered, measured). ``cam`` must already be scaled to the frame size."""
+    zl = z if z_lateral is None else max(z, z_lateral)
+    if not (math.isfinite(z) and z >= 0 and math.isfinite(zl)):
+        return False
+    u, v = det.bottom_center
+    lat = abs(lateral_offset(u, zl, cam))
+    if two_sided(lanes, corridor.min_lane_confidence):
+        return lat <= corridor.half_width_lanes(zl) and bool(lanes.contains(u, v))
+    return z <= corridor.range_no_lanes_m and lat <= corridor.half_width_no_lanes_m
+
+
 class DistanceFusion:
     def __init__(self, cfg: dict[str, Any], camera: CameraModel) -> None:
         self.cfg = cfg
@@ -126,6 +205,7 @@ class DistanceFusion:
         self.classes = set(f["object_classes"])
         self.reuse_frames = int(f["reuse_alignment_frames"])
         self.correlation = float(f["correlation"])
+        self.corridor = EgoCorridor.from_dict(f["ego_lane"])
         if not 0.0 <= self.correlation <= 1.0:
             raise ValueError(f"fusion.correlation {self.correlation} not in [0, 1]")
         if not camera.inv_depth_std() > 0:
@@ -262,6 +342,7 @@ class DistanceFusion:
         else:
             self._align_age += 1
         lanes = lanes if lanes is not None else LaneResult(None, None, None, 0.0)
+        cam = self.camera.scaled_to(hw)
         objects: list[ObjectState] = []
         dropped = 0
         for tr, ms in zip(tracks, meas, strict=True):
@@ -279,7 +360,14 @@ class DistanceFusion:
                     distance_std=est.distance_std,
                     closing_speed_mps=est.closing_speed_mps,
                     ttc_s=est.ttc_s,
-                    in_ego_lane=bool(lanes.contains(*tr.det.bottom_center)),
+                    in_ego_lane=in_ego_lane(
+                        tr.det,
+                        est.distance_m,
+                        lanes,
+                        cam,
+                        self.corridor,
+                        z_lateral=ms.fused[0] if ms.fused is not None else None,
+                    ),
                 )
             )
         self.bank.prune(stamp)

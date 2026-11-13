@@ -10,7 +10,15 @@ import numpy as np
 import pytest
 
 from perception.depth import CameraModel
-from perception.fusion import DistanceFusion, FilterBank, fuse, fuse_inverse
+from perception.fusion import (
+    DistanceFusion,
+    EgoCorridor,
+    FilterBank,
+    fuse,
+    fuse_inverse,
+    in_ego_lane,
+    lateral_offset,
+)
 from perception.types import Detection, LaneResult, Polyline, Track
 
 KF = {
@@ -25,6 +33,7 @@ KF = {
     "ttc_speed_sigma_k": 2.0,
     "gate_restart_count": 2,
     "restart_on_class_change": False,
+    "reacquire_restart_gap_s": 0.25,
 }
 CAM = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.5, 0.0, 1.0, 0.0)
 CFG = {
@@ -46,6 +55,13 @@ CFG = {
         "object_classes": ["car", "person"],
         "reuse_alignment_frames": 2,
         "correlation": 0.0,
+        "ego_lane": {
+            "min_lane_confidence": 0.3,
+            "half_width_lanes_m": 1.5,
+            "curve_radius_m": 400.0,
+            "half_width_no_lanes_m": 1.2,
+            "range_no_lanes_m": 30.0,
+        },
     },
     "kalman": KF,
 }
@@ -218,10 +234,14 @@ def test_geometric_distance_and_in_ego_lane():
     assert by_id[1].ttc_s is None  # first measurement
 
 
-def test_in_ego_lane_without_lanes_is_false():
-    frame = DistanceFusion(CFG, CAM).update([track(1, 12.0)], None, 0.0, 0, HW)
-    assert frame.objects and not frame.objects[0].in_ego_lane
-    assert frame.lead_object() is None
+def test_in_ego_lane_without_lanes_uses_the_corridor():
+    """No lane result: a car straight ahead is still the lead (corridor only); one 3 m to the
+    side or beyond range_no_lanes_m is not."""
+    tracks = [track(1, 12.0), track(2, 12.0, x=400 + 3.0 * 400 / 12.0), track(3, 35.0)]
+    frame = DistanceFusion(CFG, CAM).update(tracks, None, 0.0, 0, HW)
+    by_id = {o.track.track_id: o.in_ego_lane for o in frame.objects}
+    assert by_id == {1: True, 2: False, 3: False}
+    assert frame.lead_object().track.track_id == 1
 
 
 def test_midas_alignment_covers_truncated_object():
@@ -441,7 +461,8 @@ def test_stationary_target_never_gets_short_ttc():
 def test_coasting_never_goes_below_zero():
     """6 m away closing at 8 m/s, then no measurements: the prediction stops at contact (0 m,
     TTC 0) instead of going negative."""
-    bank = FilterBank(KF)
+    # reacquire restart off, so the gated measurement at the end coasts (tested separately)
+    bank = FilterBank({**KF, "reacquire_restart_gap_s": 10.0})
     dt, v = 0.05, 8.0
     for i in range(21):  # 1 s of measurements, ends at 6 m
         out = bank.update(1, 0, i * dt, 14.0 - v * i * dt, 0.1)
@@ -453,3 +474,319 @@ def test_coasting_never_goes_below_zero():
     # a gated (outlier) measurement after crossing also coasts at >= 0
     out = bank.update(1, 0, 1.95, 30.0, 0.1)
     assert out.coasted and out.distance_m == 0.0
+    # with the default reacquire rule the same late measurement restarts the filter instead
+    late = FilterBank(KF)
+    for i in range(21):
+        late.update(1, 0, i * dt, 14.0 - v * i * dt, 0.1)
+    out = late.update(1, 0, 1.95, 30.0, 0.1)
+    assert out.restarted and out.distance_m == 30.0
+
+
+# ------------------------------------------------------------------ in_ego_lane corridor (M4.5)
+
+CORRIDOR = EgoCorridor.from_dict(CFG["fusion"]["ego_lane"])
+
+
+def project_box(
+    x_in: float, x_out: float, z_near: float, length: float = 4.5, height: float = 1.5
+) -> np.ndarray:
+    """Image box (clipped to the frame) of a kerb-parallel car: lateral x_in..x_out (m, + right),
+    forward z_near..z_near+length, on flat ground under CAM (zero pitch)."""
+    pts = []
+    for x in (x_in, x_out):
+        for z in (z_near, z_near + length):
+            for y in (CAM.height_m, CAM.height_m - height):  # camera y down: ground, roof
+                pts.append((CAM.cx + CAM.fx * x / z, CAM.cy + CAM.fy * y / z))
+    u, v = np.array(pts).T
+    h, w = HW
+    return np.array(
+        [max(u.min(), 0), max(v.min(), 0), min(u.max(), w - 1), min(v.max(), h - 1)], np.float32
+    )
+
+
+def one_sided_spilled_lane() -> LaneResult:
+    """Left boundary measured at x=300; the synthesized right side spilled to the image edge, so
+    the ego mask covers the kerb and the parked cars on the right (rows 250-449)."""
+    mask = np.zeros(HW, bool)
+    mask[250:, 300:] = True
+    return LaneResult(Polyline(np.array([0.0, 0.0, 300.0])), None, mask, 0.6)
+
+
+def det(box: np.ndarray) -> Detection:
+    return Detection(box, 0.9, 0, "car")
+
+
+def test_lateral_offset_matches_projection_and_pitch():
+    assert lateral_offset(400 + 400 * 3.0 / 12.0, 12.0, CAM) == pytest.approx(3.0)
+    assert lateral_offset(400 - 40.0, 10.0, CAM) == pytest.approx(-1.0)
+    pitched = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.5, np.radians(5.0), 1.0, 0.0)
+    zc = 10.0 * np.cos(np.radians(5.0)) + 1.5 * np.sin(np.radians(5.0))
+    assert lateral_offset(440.0, 10.0, pitched) == pytest.approx(0.1 * zc)
+
+
+def test_parked_car_box_centre_offset():
+    """The box of a car parked 2.0-3.8 m to the right spans its near outer to its far inner
+    corner: its centre offset is ~2.2-2.5 m (the configured half-widths sit below that), while
+    its inner edge offset (~1.1 m) would wrongly fall inside any useful corridor."""
+    box = project_box(2.0, 3.8, 6.0)
+    u = float(box[0] + box[2]) / 2
+    assert 2.2 < lateral_offset(u, 6.0, CAM) < 2.6
+    assert lateral_offset(float(box[0]), 6.0, CAM) < 1.3
+
+
+@pytest.mark.parametrize("z", [6.0, 15.0])
+def test_parked_car_with_spilled_one_sided_mask_is_not_in_lane(z):
+    d = det(project_box(2.0, 3.8, z))
+    lanes = one_sided_spilled_lane()
+    assert lanes.contains(*d.bottom_center)  # the old rule: mask spill -> in lane
+    assert not in_ego_lane(d, z, lanes, CAM, CORRIDOR)
+    # also with trusted two-sided lanes whose polylines spill over the kerb
+    wide = LaneResult(lanes.left, Polyline(np.array([0.0, 0.0, 799.0])), lanes.ego_mask, 0.9)
+    assert wide.contains(*d.bottom_center)
+    assert not in_ego_lane(d, z, wide, CAM, CORRIDOR)
+
+
+def test_truncated_parked_car_at_image_bottom_is_not_in_lane():
+    """KITTI frame 319 case: a parked car cut by the image bottom (and right edge), distance from
+    aligned MiDaS / Kalman. Old rule: the extrapolated one-sided mask made it LEAD."""
+    box = project_box(2.0, 3.8, 2.5)
+    assert box[3] == HW[0] - 1 and box[2] == HW[1] - 1  # cut at the bottom and the side
+    d = det(box)
+    lanes = one_sided_spilled_lane()
+    assert lanes.contains(*d.bottom_center)
+    for z in (2.5, 0.8 * 2.5):  # also with the distance 20 % short
+        assert not in_ego_lane(d, z, lanes, CAM, CORRIDOR)
+        assert not in_ego_lane(d, z, None, CAM, CORRIDOR)
+
+
+def two_sided_lane() -> LaneResult:
+    """Lane x 300..500 at every row (the 3.5 m lane converges in reality; the polylines decide
+    only through contains, the corridor uses metres)."""
+    left, right = Polyline(np.array([0.0, 0.0, 300.0])), Polyline(np.array([0.0, 0.0, 500.0]))
+    return LaneResult(left, right, None, 0.9)
+
+
+@pytest.mark.parametrize("z", [6.0, 25.0])
+@pytest.mark.parametrize("kind", ["two_sided", "one_sided", "low_conf", "none"])
+def test_car_straight_ahead_is_in_lane(z, kind):
+    lanes = {
+        "two_sided": two_sided_lane(),
+        "one_sided": one_sided_spilled_lane(),
+        "low_conf": LaneResult(two_sided_lane().left, two_sided_lane().right, None, 0.1),
+        "none": None,
+    }[kind]
+    d = det(project_box(-0.9, 0.9, z))
+    assert in_ego_lane(d, z, lanes, CAM, CORRIDOR)
+    # a lead car at the edge of its lane (centre 0.85 m) too, also with a 20 % distance error
+    edge = det(project_box(-0.05, 1.75, z))
+    assert in_ego_lane(edge, 1.2 * z, lanes, CAM, CORRIDOR)
+    # end to end through DistanceFusion (geometric distance)
+    frame = DistanceFusion(CFG, CAM).update([Track(1, d)], lanes, 0.0, 0, HW)
+    assert frame.objects[0].in_ego_lane and frame.lead_object() is frame.objects[0]
+
+
+def test_truncated_lead_at_image_bottom_is_in_lane():
+    """A close car straight ahead cut by the image bottom (no geometric distance): MiDaS gives it
+    a distance and it stays the lead with one-sided lanes and with none."""
+    fusion = DistanceFusion(CFG, CAM)
+    tracks = [track(1, 8.0, x=150), track(2, 15.0, x=600), track(3, 25.0, x=700)]
+    near = Track(4, det(project_box(-0.9, 0.9, 2.5)))
+    assert near.det.bbox_xyxy[3] == HW[0] - 1
+    s, t = 0.004, 0.01
+    inv = inv_depth_for(tracks, s, t)
+    inv[330:450, 300:500] = (1.0 / 2.5 - t) / s  # lower-central part of the box
+    for lanes in (one_sided_spilled_lane(), None):
+        fusion.reset()
+        frame = fusion.update([*tracks, near], lanes, 0.0, 0, HW, inv_depth=inv)
+        lead = frame.lead_object()
+        assert lead is not None and lead.track.track_id == 4
+        assert lead.distance_m == pytest.approx(2.5, rel=0.02)
+        assert {o.track.track_id for o in frame.objects if o.in_ego_lane} == {4}
+
+
+def lane_around(u: float, cam: CameraModel, half_px: float = 40.0) -> LaneResult:
+    """Trusted two-sided lane whose polylines contain column u at every row."""
+    return LaneResult(
+        Polyline(np.array([0.0, 0.0, u - half_px])),
+        Polyline(np.array([0.0, 0.0, u + half_px])),
+        None,
+        0.9,
+    )
+
+
+def test_two_sided_lanes_curve_allowance():
+    """On a curve the lane (and the lead in it) drifts sideways in the camera frame by ~Z^2/2R.
+    The trusted-lane corridor grows by Z^2 / (2 curve_radius_m): a lead centred in a lane of
+    radius 400 m at 30 m (drift 1.1 m) plus 0.85 m in-lane offset stays in, while a 3.5 m offset
+    is vetoed at every range even when the polylines contain it."""
+    z = 30.0
+    drift = z * z / (2 * CORRIDOR.curve_radius_m)
+    u = CAM.cx + CAM.fx * (drift + 0.85) / z
+    d = det(np.array([u - 15, 200, u + 15, CAM.row_of_distance(z)], np.float32))
+    assert in_ego_lane(d, z, lane_around(u, CAM), CAM, CORRIDOR)
+    assert not in_ego_lane(d, z, None, CAM, CORRIDOR)  # no lanes: straight corridor says no
+    for zz in (8.0, 15.0, 24.0, 30.0):
+        uu = CAM.cx + CAM.fx * 3.5 / zz
+        dd = det(np.array([uu - 15, 200, uu + 15, CAM.row_of_distance(zz)], np.float32))
+        lanes = lane_around(uu, CAM)
+        assert lanes.contains(*dd.bottom_center) and not in_ego_lane(dd, zz, lanes, CAM, CORRIDOR)
+
+
+# KITTI tracking 0001 regressions (W&B 0gju6sqc, kernel v3): (frame, track, bbox, distance).
+KITTI = CameraModel(
+    1242, 375, 721.5377, 721.5377, 609.5593, 172.854, 1.65, 0.0, 2.0, float(np.radians(0.5))
+)
+KITTI_PARKED_TWO_SIDED = [  # both lanes measured (conf 0.36-0.73), YOLOP area covers the cars
+    (49, 17, [477, 185, 535, 225], 24.1),
+    (50, 17, [469, 189, 531, 232], 21.9),
+    (51, 17, [460, 187, 526, 233], 20.2),
+    (52, 17, [448, 186, 520, 235], 18.7),
+    (53, 17, [436, 186, 515, 239], 17.2),
+    (281, 107, [731, 179, 841, 258], 15.0),
+    (282, 107, [736, 178, 853, 260], 13.7),
+    (283, 107, [742, 173, 869, 261], 12.9),
+    (284, 107, [747, 165, 887, 260], 12.3),
+    (291, 123, [762, 194, 875, 272], 12.4),
+    (292, 122, [731, 186, 816, 249], 15.9),
+    (293, 122, [735, 185, 828, 251], 14.9),
+    (294, 122, [741, 183, 839, 255], 14.0),
+    (295, 122, [746, 183, 854, 260], 13.2),
+]
+
+
+@pytest.mark.parametrize("case", KITTI_PARKED_TWO_SIDED, ids=lambda c: f"f{c[0]}-t{c[1]}")
+def test_kitti_parked_cars_with_two_sided_lanes_are_not_in_lane(case):
+    _, _, box, z = case
+    d = det(np.array(box, np.float32))
+    lanes = LaneResult(  # polylines spanning the whole image: contains() alone says yes
+        Polyline(np.array([0.0, 0.0, 0.0])), Polyline(np.array([0.0, 0.0, 1241.0])), None, 0.6
+    )
+    assert lanes.contains(*d.bottom_center)
+    assert not in_ego_lane(d, z, lanes, KITTI, CORRIDOR)
+
+
+@pytest.mark.parametrize(
+    "box, z_filtered, z_measured",
+    [([838, 191, 1150, 361], 1.2, 6.0), ([790, 187, 1044, 329], 2.7, 6.6)],
+    ids=["f313-t124", "f322-t131"],
+)
+def test_kitti_reacquired_parked_car_with_short_coasted_distance(box, z_filtered, z_measured):
+    """Frames 313/322: one-sided lanes, the coasted distance is far too short and shrinks the
+    lateral offset to < 1.2 m. The lateral test uses max(filtered, measured) -> ~3.2 m: out."""
+    d = det(np.array(box, np.float32))
+    lanes = LaneResult(Polyline(np.array([0.0, 0.0, 300.0])), None, None, 0.58)
+    assert in_ego_lane(d, z_filtered, lanes, KITTI, CORRIDOR)  # filtered distance alone: in
+    assert not in_ego_lane(d, z_filtered, lanes, KITTI, CORRIDOR, z_lateral=z_measured)
+    # a car straight ahead keeps its flag whatever the (longer) measured distance
+    ahead = det(np.array([500, 191, 720, 361], np.float32))
+    assert in_ego_lane(ahead, z_filtered, lanes, KITTI, CORRIDOR, z_lateral=z_measured)
+
+
+def test_reacquired_track_restarts_instead_of_coasting():
+    """KITTI 0001 track 124: measured closing at ~10 m/s (ego passing a parked car) down to 7 m,
+    lost by the tracker for 5 frames, re-detected at 6 m. Coasting would output the extrapolated
+    ~1 m with TTC ~0.1 s; after a gap > reacquire_restart_gap_s the filter restarts on 6 m."""
+    for gap_frames, expect_restart in ((5, True), (0, False)):
+        bank = FilterBank(KF)
+        for k in range(10):  # 10 Hz, 16 m -> 7 m
+            out = bank.update(124, 0, 0.1 * k, 16.0 - 1.0 * k, 0.2)
+        t = 0.1 * (9 + gap_frames + 1)
+        predicted = 7.0 - 10.0 * (t - 0.9)
+        out = bank.update(124, 0, t, 6.0 if gap_frames else predicted + 4.0, 0.2)
+        if expect_restart:
+            assert out.restarted and not out.coasted
+            assert out.distance_m == pytest.approx(6.0) and out.ttc_s is None
+        else:  # one outlier on consecutive frames still coasts (closing speed survives)
+            assert out.coasted and not out.restarted and out.ttc_s is not None
+
+
+def test_reacquire_through_fusion_uses_the_measurement():
+    """Same through DistanceFusion with geometric distances on the KITTI camera."""
+    fusion = DistanceFusion(CFG, KITTI)
+    hw = (KITTI.height, KITTI.width)
+
+    def tr(z: float) -> Track:
+        v = KITTI.row_of_distance(z)
+        return Track(124, det(np.array([900, v - 60, 1100, v], np.float32)))
+
+    for k in range(10):
+        fusion.update([tr(16.0 - k)], None, 0.1 * k, k, hw)
+    frame = fusion.update([tr(8.0)], None, 1.5, 15, hw)  # 5 frames lost, predicted ~1 m
+    o = frame.objects[0]
+    assert o.distance_m == pytest.approx(8.0, rel=1e-3) and o.ttc_s is None
+    assert not o.in_ego_lane and frame.lead_object() is None
+
+
+def test_ego_corridor_config_validation():
+    bad = {**CFG["fusion"]["ego_lane"], "half_width_no_lanes_m": -1.0}
+    with pytest.raises(ValueError, match="half_width_no_lanes_m"):
+        EgoCorridor.from_dict(bad)
+    missing = {k: v for k, v in CFG["fusion"]["ego_lane"].items() if k != "curve_radius_m"}
+    with pytest.raises(KeyError):
+        EgoCorridor.from_dict(missing)
+    with pytest.raises(ValueError, match="curve_radius_m"):
+        EgoCorridor.from_dict({**CFG["fusion"]["ego_lane"], "curve_radius_m": 0.0})
+
+
+# ------------------------------------------------------------------ QA gate M4.5/M4.6 edge cases
+
+
+def test_lateral_offset_inverts_a_pitched_projection():
+    """Independent check of the pitch handling: project ground points through an explicit
+    camera rotation (pitched down by p), then recover X from u and the forward distance Z."""
+    p = np.radians(6.0)
+    cam = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.5, float(p), 1.0, 0.0)
+    for x_true, z in ((1.0, 5.0), (-2.5, 12.0), (3.0, 40.0)):
+        # level camera frame: x right, y down, z forward; ground point at (X, h, Z)
+        yc = cam.height_m * np.cos(p) - z * np.sin(p)
+        zc = cam.height_m * np.sin(p) + z * np.cos(p)
+        u = cam.cx + cam.fx * x_true / zc
+        v = cam.cy + cam.fy * yc / zc
+        assert v == pytest.approx(cam.row_of_distance(z))  # same projection as the distance model
+        assert lateral_offset(u, z, cam) == pytest.approx(x_true)
+
+
+def test_in_ego_lane_uses_intrinsics_scaled_to_the_frame():
+    """DistanceFusion must rescale the camera to the frame size before the lateral test: on a
+    half-resolution frame a centred car is still in the corridor and a car 3 m to the side is
+    not (with the unscaled cx = 400 on a 400 px wide frame the centred car would read X ~ -6 m)."""
+    hw = (HW[0] // 2, HW[1] // 2)
+    centred = Track(1, Detection(box_at(12.0) * 0.5, 0.9, 0, "car"))
+    side = Track(2, Detection(box_at(12.0, x_center=400 + 3.0 * 400 / 12.0) * 0.5, 0.9, 0, "car"))
+    frame = DistanceFusion(CFG, CAM).update([centred, side], None, 0.0, 0, hw)
+    by_id = {o.track.track_id: o for o in frame.objects}
+    assert by_id[1].distance_m == pytest.approx(12.0, rel=0.02)
+    assert by_id[1].in_ego_lane and not by_id[2].in_ego_lane
+
+
+def test_reacquire_gap_boundary_at_10hz():
+    """10 Hz, stationary target at 20 m, then a +10 m jump (gated). One missed frame (gap 0.2 s
+    <= reacquire_restart_gap_s) coasts on the prediction; two missed frames (0.3 s) restart."""
+    for missed, restart in ((1, False), (2, True)):
+        bank = FilterBank(KF)
+        for k in range(10):
+            bank.update(1, 0, 0.1 * k, 20.0, 0.2)
+        out = bank.update(1, 0, 0.1 * (10 + missed), 30.0, 0.2)
+        assert out.restarted is restart and out.coasted is not restart
+        assert out.distance_m == pytest.approx(30.0 if restart else 20.0, abs=0.5)
+        assert out.distance_m >= 0.0
+
+
+def test_ttc_gate_honoured_after_reacquire_restart():
+    """After a re-acquisition restart the TTC clock starts again: no TTC until the restarted
+    filter is min_track_s_for_ttc old with min_updates_for_ttc updates, then TTC comes back
+    for a steady approach."""
+    bank = FilterBank(KF)
+    for k in range(10):  # stationary at 30 m
+        bank.update(1, 0, 0.1 * k, 30.0, 0.2)
+    t0, v = 1.5, 10.0  # lost for 5 frames, re-detected 10 m closer and approaching at 10 m/s
+    ttcs = []
+    for k in range(12):
+        out = bank.update(1, 0, t0 + 0.1 * k, 20.0 - v * 0.1 * k, 0.2)
+        if k == 0:
+            assert out.restarted and out.ttc_s is None
+        ttcs.append(out.ttc_s)
+    young = int(np.ceil(KF["min_track_s_for_ttc"] / 0.1 - 1e-9))
+    assert all(t is None for t in ttcs[:young])
+    assert ttcs[-1] is not None
+    assert ttcs[-1] == pytest.approx((20.0 - v * 1.1) / v, rel=0.25)

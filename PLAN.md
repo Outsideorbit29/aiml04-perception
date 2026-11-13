@@ -89,14 +89,14 @@ On the laptop (one short session):
 - [x] M4.3 Scale alignment plus a per-track Kalman filter, giving distance, closing speed and TTC
 - [x] M4.4 Eval vs KITTI LiDAR on Kaggle: AbsRel and RMSE by distance bin
 - [x] M4.5 `DistanceFusion` produces a `PerceptionFrame` with an `in_ego_lane` flag
-- [ ] M4.6 `perception.pipeline` runs the full offline pipeline on a video on Kaggle and writes an annotated MP4
+- [x] M4.6 `perception.pipeline` runs the full offline pipeline on a video on Kaggle and writes an annotated MP4
 
 ## M5 – CARLA + ROS2 closed loop (Nov 16–19) 💻 [sim-ros-integrator]
 Code is written and unit-tested without the simulator. The laptop runs CARLA only in short, planned sessions.
 - [ ] M5.1 `perception_msgs` package (TrackedObject, TrackedObjectArray, LaneBoundaries, EgoControl)
 - [ ] M5.2 `carla_bridge_node`: synchronous mode, spawn ego + RGB + depth cameras, publish topics, apply control
 - [ ] M5.3 `perception_node` wrapping `perception.pipeline` on ONNX Runtime/TensorRT (no PyTorch on the laptop)
-- [ ] M5.4 `control_node` with AEB/ACC rules (thresholds in `configs/carla.yaml`)
+- [ ] M5.4 `control_node` with AEB/ACC rules (thresholds in `configs/carla.yaml`); a lead must persist for several frames before AEB/ACC acts (M4.6 found one-frame false leads)
 - [ ] M5.5 Scenarios: stopped car, pedestrian crossing, cut-in, night/rain (Town01/Town02, the lightest maps)
 - [ ] M5.6 **Session A (~20 min):** record ~3k CARLA frames with GT, upload them as Kaggle dataset `aiml04-carla-frames`, and run the sim eval (mAP, distance error) on Kaggle
 - [ ] M5.7 `stack.launch.py` and rosbag + MP4 recording
