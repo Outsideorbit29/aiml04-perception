@@ -84,11 +84,11 @@ On the laptop (one short session):
 - [ ] M3.5 **(S)** Fine-tune a YOLO-seg lane model
 
 ## M4 – Depth and distance (Nov 15–16) ☁ [lane-depth]
-- [ ] M4.1 MiDaS-small and DPT-Hybrid wrappers (`DepthEstimator`)
-- [ ] M4.2 Geometric distance from camera intrinsics, height and pitch (`configs/camera.yaml` for KITTI and CARLA)
-- [ ] M4.3 Scale alignment plus a per-track Kalman filter, giving distance, closing speed and TTC
-- [ ] M4.4 Eval vs KITTI LiDAR on Kaggle: AbsRel and RMSE by distance bin
-- [ ] M4.5 `DistanceFusion` produces a `PerceptionFrame` with an `in_ego_lane` flag
+- [x] M4.1 MiDaS-small and DPT-Hybrid wrappers (`DepthEstimator`)
+- [x] M4.2 Geometric distance from camera intrinsics, height and pitch (`configs/camera.yaml` for KITTI and CARLA)
+- [x] M4.3 Scale alignment plus a per-track Kalman filter, giving distance, closing speed and TTC
+- [x] M4.4 Eval vs KITTI LiDAR on Kaggle: AbsRel and RMSE by distance bin
+- [x] M4.5 `DistanceFusion` produces a `PerceptionFrame` with an `in_ego_lane` flag
 - [ ] M4.6 `perception.pipeline` runs the full offline pipeline on a video on Kaggle and writes an annotated MP4
 
 ## M5 – CARLA + ROS2 closed loop (Nov 16–19) 💻 [sim-ros-integrator]

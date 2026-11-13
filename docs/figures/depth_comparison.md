@@ -1,6 +1,6 @@
-# M4.4 distance vs KITTI (1000 frames, git 61e8ac98, Tesla T4)
+# M4.4 distance vs KITTI (1000 frames, git 5655462b, Tesla T4)
 
-Boxes: KITTI GT 2D boxes (score 1), not detector output. MiDaS: per frame 1/Z = s*m + t on anchors' geometric distances, leave-one-out for anchors.
+Boxes: KITTI GT 2D boxes (score 1), not detector output. MiDaS: per frame 1/Z = s*m + t on anchors' geometric distances, leave-one-out for anchors. Fused: inverse-variance mean in inverse depth (1/Z), assumed error correlation 0.8 (std only).
 
 ## GT = LiDAR (primary), each method on the objects it covers
 | method | bin | n | coverage | AbsRel | RMSE (m) | bias | median rel |
@@ -17,14 +17,14 @@ Boxes: KITTI GT 2D boxes (score 1), not detector output. MiDaS: per frame 1/Z = 
 | dpt_hybrid | 10-30 | 1494 | 0.91 | 0.204 | 6.67 | 0.001 | 0.158 |
 | dpt_hybrid | 30-60 | 808 | 0.87 | 0.316 | 18.50 | 0.096 | 0.223 |
 | dpt_hybrid | all | 2666 | 0.88 | 0.234 | 11.37 | 0.034 | 0.165 |
-| fused_midas_small | 0-10 | 446 | 0.99 | 0.121 | 1.22 | 0.035 | 0.084 |
-| fused_midas_small | 10-30 | 1640 | 1.00 | 0.153 | 4.48 | -0.025 | 0.123 |
-| fused_midas_small | 30-60 | 922 | 1.00 | 0.218 | 10.60 | -0.078 | 0.187 |
-| fused_midas_small | all | 3008 | 1.00 | 0.168 | 6.76 | -0.032 | 0.130 |
-| fused_dpt_hybrid | 0-10 | 446 | 0.99 | 0.121 | 1.36 | 0.011 | 0.083 |
-| fused_dpt_hybrid | 10-30 | 1640 | 1.00 | 0.159 | 5.19 | -0.016 | 0.123 |
-| fused_dpt_hybrid | 30-60 | 922 | 1.00 | 0.237 | 12.44 | -0.014 | 0.185 |
-| fused_dpt_hybrid | all | 3008 | 1.00 | 0.177 | 7.90 | -0.012 | 0.132 |
+| fused_midas_small | 0-10 | 446 | 0.99 | 0.125 | 1.26 | 0.049 | 0.087 |
+| fused_midas_small | 10-30 | 1640 | 1.00 | 0.154 | 4.76 | 0.002 | 0.122 |
+| fused_midas_small | 30-60 | 922 | 1.00 | 0.221 | 11.00 | -0.029 | 0.181 |
+| fused_midas_small | all | 3008 | 1.00 | 0.170 | 7.05 | -0.001 | 0.128 |
+| fused_dpt_hybrid | 0-10 | 446 | 0.99 | 0.119 | 1.29 | 0.024 | 0.082 |
+| fused_dpt_hybrid | 10-30 | 1640 | 1.00 | 0.159 | 5.33 | 0.003 | 0.125 |
+| fused_dpt_hybrid | 30-60 | 922 | 1.00 | 0.240 | 12.86 | 0.020 | 0.177 |
+| fused_dpt_hybrid | all | 3008 | 1.00 | 0.178 | 8.15 | 0.012 | 0.129 |
 
 ## GT = LiDAR, common subset (objects every method estimated)
 | method | bin | n | coverage | AbsRel | RMSE (m) | bias | median rel |
@@ -41,14 +41,14 @@ Boxes: KITTI GT 2D boxes (score 1), not detector output. MiDaS: per frame 1/Z = 
 | dpt_hybrid | 10-30 | 1488 | - | 0.201 | 6.31 | -0.002 | 0.157 |
 | dpt_hybrid | 30-60 | 762 | - | 0.295 | 17.00 | 0.065 | 0.216 |
 | dpt_hybrid | all | 2532 | - | 0.225 | 10.53 | 0.020 | 0.163 |
-| fused_midas_small | 0-10 | 282 | - | 0.093 | 1.05 | -0.015 | 0.072 |
-| fused_midas_small | 10-30 | 1488 | - | 0.153 | 4.41 | -0.025 | 0.124 |
-| fused_midas_small | 30-60 | 762 | - | 0.208 | 9.83 | -0.091 | 0.181 |
-| fused_midas_small | all | 2532 | - | 0.163 | 6.38 | -0.044 | 0.131 |
-| fused_dpt_hybrid | 0-10 | 282 | - | 0.103 | 1.26 | -0.035 | 0.073 |
-| fused_dpt_hybrid | 10-30 | 1488 | - | 0.157 | 4.73 | -0.018 | 0.124 |
-| fused_dpt_hybrid | 30-60 | 762 | - | 0.219 | 10.65 | -0.035 | 0.175 |
-| fused_dpt_hybrid | all | 2532 | - | 0.170 | 6.89 | -0.025 | 0.134 |
+| fused_midas_small | 0-10 | 282 | - | 0.099 | 1.13 | 0.006 | 0.073 |
+| fused_midas_small | 10-30 | 1488 | - | 0.154 | 4.71 | 0.004 | 0.123 |
+| fused_midas_small | 30-60 | 762 | - | 0.210 | 10.19 | -0.034 | 0.175 |
+| fused_midas_small | all | 2532 | - | 0.165 | 6.67 | -0.007 | 0.128 |
+| fused_dpt_hybrid | 0-10 | 282 | - | 0.100 | 1.15 | -0.014 | 0.072 |
+| fused_dpt_hybrid | 10-30 | 1488 | - | 0.157 | 4.89 | 0.004 | 0.126 |
+| fused_dpt_hybrid | 30-60 | 762 | - | 0.222 | 11.12 | 0.005 | 0.166 |
+| fused_dpt_hybrid | all | 2532 | - | 0.170 | 7.17 | 0.002 | 0.130 |
 
 ## GT = LiDAR, MiDaS split by alignment mode (affine vs scale-only fit)
 | method | bin | n | coverage | AbsRel | RMSE (m) | bias | median rel |
@@ -85,14 +85,14 @@ Boxes: KITTI GT 2D boxes (score 1), not detector output. MiDaS: per frame 1/Z = 
 | dpt_hybrid | 10-30 | 1483 | 0.91 | 0.202 | 6.78 | 0.023 | 0.146 |
 | dpt_hybrid | 30-60 | 784 | 0.87 | 0.319 | 18.80 | 0.108 | 0.221 |
 | dpt_hybrid | all | 2667 | 0.88 | 0.233 | 11.41 | 0.054 | 0.158 |
-| fused_midas_small | 0-10 | 485 | 0.99 | 0.125 | 1.25 | 0.068 | 0.086 |
-| fused_midas_small | 10-30 | 1630 | 1.00 | 0.148 | 4.50 | -0.006 | 0.116 |
-| fused_midas_small | 30-60 | 894 | 1.00 | 0.215 | 10.55 | -0.072 | 0.180 |
-| fused_midas_small | all | 3009 | 1.00 | 0.164 | 6.66 | -0.014 | 0.122 |
-| fused_dpt_hybrid | 0-10 | 485 | 0.99 | 0.120 | 1.31 | 0.044 | 0.084 |
-| fused_dpt_hybrid | 10-30 | 1630 | 1.00 | 0.156 | 5.32 | 0.004 | 0.119 |
-| fused_dpt_hybrid | 30-60 | 894 | 1.00 | 0.235 | 12.43 | -0.009 | 0.180 |
-| fused_dpt_hybrid | all | 3009 | 1.00 | 0.174 | 7.84 | 0.007 | 0.125 |
+| fused_midas_small | 0-10 | 485 | 0.99 | 0.131 | 1.30 | 0.083 | 0.087 |
+| fused_midas_small | 10-30 | 1630 | 1.00 | 0.151 | 4.89 | 0.022 | 0.115 |
+| fused_midas_small | 30-60 | 894 | 1.00 | 0.219 | 10.95 | -0.023 | 0.178 |
+| fused_midas_small | all | 3009 | 1.00 | 0.168 | 6.99 | 0.018 | 0.122 |
+| fused_dpt_hybrid | 0-10 | 485 | 0.99 | 0.119 | 1.26 | 0.058 | 0.086 |
+| fused_dpt_hybrid | 10-30 | 1630 | 1.00 | 0.157 | 5.52 | 0.025 | 0.118 |
+| fused_dpt_hybrid | 30-60 | 894 | 1.00 | 0.238 | 12.85 | 0.025 | 0.174 |
+| fused_dpt_hybrid | all | 3009 | 1.00 | 0.175 | 8.12 | 0.030 | 0.122 |
 
 ## GT = label_2 location z (secondary, box centre: expect negative bias)
 | method | bin | n | coverage | AbsRel | RMSE (m) | bias | median rel |
@@ -109,20 +109,20 @@ Boxes: KITTI GT 2D boxes (score 1), not detector output. MiDaS: per frame 1/Z = 
 | dpt_hybrid | 10-30 | 1503 | 0.91 | 0.210 | 5.79 | -0.065 | 0.179 |
 | dpt_hybrid | 30-60 | 880 | 0.88 | 0.310 | 18.03 | 0.053 | 0.236 |
 | dpt_hybrid | all | 2669 | 0.88 | 0.242 | 11.25 | -0.024 | 0.189 |
-| fused_midas_small | 0-10 | 363 | 0.99 | 0.158 | 1.55 | -0.027 | 0.134 |
-| fused_midas_small | 10-30 | 1643 | 1.00 | 0.176 | 4.63 | -0.083 | 0.156 |
-| fused_midas_small | 30-60 | 1000 | 1.00 | 0.228 | 10.88 | -0.108 | 0.207 |
-| fused_midas_small | all | 3006 | 1.00 | 0.191 | 7.17 | -0.085 | 0.167 |
-| fused_dpt_hybrid | 0-10 | 363 | 0.99 | 0.159 | 1.70 | -0.051 | 0.131 |
-| fused_dpt_hybrid | 10-30 | 1643 | 1.00 | 0.179 | 4.74 | -0.079 | 0.153 |
-| fused_dpt_hybrid | 30-60 | 1000 | 1.00 | 0.246 | 12.70 | -0.046 | 0.202 |
-| fused_dpt_hybrid | all | 3006 | 1.00 | 0.199 | 8.14 | -0.065 | 0.165 |
+| fused_midas_small | 0-10 | 363 | 0.99 | 0.157 | 1.55 | -0.016 | 0.127 |
+| fused_midas_small | 10-30 | 1643 | 1.00 | 0.172 | 4.66 | -0.058 | 0.150 |
+| fused_midas_small | 30-60 | 1000 | 1.00 | 0.228 | 11.10 | -0.061 | 0.199 |
+| fused_midas_small | all | 3006 | 1.00 | 0.189 | 7.29 | -0.054 | 0.160 |
+| fused_dpt_hybrid | 0-10 | 363 | 0.99 | 0.154 | 1.63 | -0.041 | 0.127 |
+| fused_dpt_hybrid | 10-30 | 1643 | 1.00 | 0.175 | 4.75 | -0.061 | 0.152 |
+| fused_dpt_hybrid | 30-60 | 1000 | 1.00 | 0.245 | 12.92 | -0.013 | 0.195 |
+| fused_dpt_hybrid | all | 3006 | 1.00 | 0.196 | 8.26 | -0.042 | 0.161 |
 
 ## Speed (Tesla T4)
 | model | input | estimate ms (pre+model+post) | FPS | model-only ms by input |
 |---|---|---|---|---|
-| midas_small | [256, 832] | 25.4 | 39.4 | 256x448: 13.8, 256x832: 20.7 |
-| dpt_hybrid | [384, 1248] | 404.2 | 2.5 | 384x672: 210.2, 384x1248: 409.9 |
+| midas_small | [256, 832] | 26.8 | 37.3 | 256x448: 14.7, 256x832: 21.4 |
+| dpt_hybrid | [384, 1248] | 424.2 | 2.4 | 384x672: 212.4, 384x1248: 417.3 |
 
 No LiDAR support: {"total_objects": 3077, "no_lidar": 18, "by_label_z_bin": {"30-60": 13, "10-30": 3, "other": 2}, "by_class": {"car": 13, "rider": 2, "truck": 2, "person": 1}, "by_occluded": {"1": 12, "0": 6}, "zero_points": 9}
 Label z - LiDAR z by class: {"car": {"n": 2279, "median_m": 1.479263129398234, "p90_m": 1.9324381199317664}, "person": {"n": 524, "median_m": 0.05593728043975155, "p90_m": 0.1304350103703392}, "rider": {"n": 156, "median_m": 0.056145327532282074, "p90_m": 0.26569103811504036}, "truck": {"n": 100, "median_m": 4.999785382657954, "p90_m": 6.085294216043107}}
