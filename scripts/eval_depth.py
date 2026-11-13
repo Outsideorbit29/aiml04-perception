@@ -37,8 +37,10 @@ Methods (all metric distances, MiDaS is never reported unaligned):
   estimate (coverage < 100 %). Each object records the mode and anchor count of the fit that
   produced its distance (``<model>_mode``), and ``<model>@affine`` / ``<model>@scale`` rows
   split the scores by mode.
-* ``fused_<model>``: inverse-variance mean of geometric and aligned <model>, as in
-  perception.fusion.DistanceFusion (no Kalman: KITTI object frames are independent).
+* ``fused_<model>``: inverse-variance mean of geometric and aligned <model> in INVERSE depth
+  (weights 1 / std(1/Z)^2), as in perception.fusion.DistanceFusion (no Kalman: KITTI object
+  frames are independent). Fusing distances with Z^2 stds biased this row short (the shorter
+  estimate always got more weight); runs before that fix are not comparable on fused rows.
 
 Metrics per GT distance bin (``bins``) and over 0-60 m: n, coverage (estimates / GT objects),
 AbsRel = mean |d - g| / g, RMSE, bias = mean (d - g) / g (signed; a wrong camera height or
@@ -650,6 +652,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         "boxes": "KITTI GT 2D boxes (score 1), not detector output",
         "alignment": "per frame 1/Z = s*m + t on anchors' geometric distances"
         + (", leave-one-out for anchors" if cfg["leave_one_out"] else ""),
+        "fusion": "inverse-variance mean in inverse depth (1/Z), assumed error correlation "
+        f"{dcfg_depth['fusion']['correlation']} (std only)",
     }
     print(json.dumps(info, indent=1), flush=True)
 
@@ -751,7 +755,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     md = [
         f"# M4.4 distance vs KITTI ({len(ids)} frames, git {info['git_sha'][:8]}, {info['gpu']})",
         "",
-        f"Boxes: {info['boxes']}. MiDaS: {info['alignment']}.",
+        f"Boxes: {info['boxes']}. MiDaS: {info['alignment']}. Fused: {info['fusion']}.",
         "",
         "## GT = LiDAR (primary), each method on the objects it covers",
         markdown_table(results["primary"], methods, "methods"),

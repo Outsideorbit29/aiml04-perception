@@ -2,6 +2,7 @@
 
 cam = load_camera("configs/camera.yaml", "kitti")       # flat-ground geometric distance
 est = DepthEstimator(load_depth_config("configs/depth.yaml"))  # MiDaS relative inv. depth
+# (shipped backend: onnx for the laptop runtime; pass backend="torch" on Kaggle)
 align = ScaleAligner(cfg["alignment"]).fit(m, z_geo)    # relative -> metric
 """
 

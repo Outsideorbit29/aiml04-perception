@@ -1,6 +1,7 @@
 """Monocular relative depth with MiDaS-small (live) or DPT-Hybrid (offline only) (M4.1).
 
-    est = DepthEstimator(load_depth_config("configs/depth.yaml"))
+    est = DepthEstimator(load_depth_config("configs/depth.yaml"))   # onnx backend (laptop)
+    est = DepthEstimator(load_depth_config("configs/depth.yaml", backend="torch"))  # Kaggle
     inv = est.estimate(frame_bgr)   # HxW float32 RELATIVE inverse depth (bigger = closer)
 
 The output is NOT metric: it is inverse depth up to an unknown per-frame scale and shift.

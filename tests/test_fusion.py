@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from perception.depth import CameraModel
-from perception.fusion import DistanceFusion, FilterBank, fuse
+from perception.fusion import DistanceFusion, FilterBank, fuse, fuse_inverse
 from perception.types import Detection, LaneResult, Polyline, Track
 
 KF = {
@@ -20,7 +20,9 @@ KF = {
     "max_gap_s": 1.0,
     "max_age_s": 2.0,
     "min_updates_for_ttc": 3,
+    "min_track_s_for_ttc": 0.5,
     "min_closing_speed_mps": 0.5,
+    "ttc_speed_sigma_k": 2.0,
     "gate_restart_count": 2,
     "restart_on_class_change": False,
 }
@@ -40,7 +42,11 @@ CFG = {
         "min_spread_ratio": 1.5,
         "no_dof_inflation": 2.0,
     },
-    "fusion": {"object_classes": ["car", "person"], "reuse_alignment_frames": 2},
+    "fusion": {
+        "object_classes": ["car", "person"],
+        "reuse_alignment_frames": 2,
+        "correlation": 0.0,
+    },
     "kalman": KF,
 }
 HW = (450, 800)
@@ -132,11 +138,42 @@ def test_class_flip_keeps_filter_state():
     assert bank.restarts == 0
 
 
-def test_fuse_inverse_variance():
-    assert fuse([None, None]) is None
-    z, s = fuse([(10.0, 1.0), (14.0, 1.0)])
-    assert z == pytest.approx(12.0) and s == pytest.approx(1 / np.sqrt(2))
+def test_fuse_inverse_variance_in_inverse_depth():
+    assert fuse([None, None]) is None and fuse_inverse([None]) is None
+    # equal inverse-depth stds: the mean of 1/10 and 1/20, std sqrt(1/2) of either
+    k = 0.004
+    z, s = fuse_inverse([(1 / 10, k), (1 / 20, k)])
+    assert z == pytest.approx(1 / 0.075) and s == pytest.approx(z * z * k / np.sqrt(2))
+    # fuse() takes distance estimates with std(Z) = Z^2 * k and gives the same answer
+    assert fuse([(10.0, 100 * k), (20.0, 400 * k)]) == pytest.approx((z, s))
+    # unequal: weights 1/std^2 in inverse depth
+    z, _ = fuse_inverse([(0.1, k), (0.05, 2 * k)])
+    assert 1 / z == pytest.approx((4 * 0.1 + 0.05) / 5)
+    # a single estimate is returned unchanged
     assert fuse([(10.0, 1.0), None]) == (10.0, 1.0)
+    assert fuse([(10.0, 1.0), (np.nan, 1.0), (5.0, 0.0)]) == (10.0, 1.0)
+
+
+def test_fuse_correlation_inflates_std_only():
+    k = 0.004
+    est = [(1 / 10, k), (1 / 12, k)]
+    z0, s0 = fuse_inverse(est, 0.0)
+    z5, s5 = fuse_inverse(est, 0.5)
+    z1, s1 = fuse_inverse(est, 1.0)
+    assert z0 == z5 == z1  # the fused distance does not depend on the correlation
+    assert s0 == pytest.approx(z0 * z0 * k / np.sqrt(2))
+    assert s5 == pytest.approx(z0 * z0 * k * np.sqrt(0.75))  # sqrt((1 + rho) / 2)
+    assert s1 == pytest.approx(z0 * z0 * k)  # fully correlated: no gain over either
+    with pytest.raises(ValueError, match="correlation"):
+        fuse_inverse(est, 1.5)
+    with pytest.raises(ValueError, match="correlation"):
+        DistanceFusion({**CFG, "fusion": {**CFG["fusion"], "correlation": -0.1}}, CAM)
+
+
+def test_distance_fusion_rejects_zero_sigma_camera():
+    flat = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.5, 0.0)  # sigmas default to 0
+    with pytest.raises(ValueError, match="sigma"):
+        DistanceFusion(CFG, flat)
 
 
 # ------------------------------------------------------------------ DistanceFusion
@@ -332,12 +369,6 @@ def test_closing_speed_with_irregular_stamps():
     assert out.ttc_s == pytest.approx(out.distance_m / v, rel=0.05)
 
 
-@pytest.mark.xfail(
-    reason="QA M4 finding: fuse() weights each estimate by its own Z^2 std, so the shorter "
-    "estimate always gets more weight and the fused distance is biased short (~-10 % at 45 m "
-    "with KITTI noise). Fusing in inverse depth removes it.",
-    strict=False,
-)
 def test_fused_distance_is_not_biased_short():
     rng = np.random.default_rng(0)
     k, z = 0.0055, 45.0  # inverse-depth std (1/m) of the KITTI camera; object at 45 m
@@ -348,3 +379,77 @@ def test_fused_distance_is_not_biased_short():
         if a > 0 and b > 0:
             out.append(fuse([(a, a * a * k), (b, b * b * 2 * k)])[0])
     assert abs(np.median(out) / z - 1.0) < 0.03
+
+
+def test_measure_fuses_in_inverse_depth():
+    """A far, non-anchor object where aligned MiDaS says 50 m and geometry 45 m, with equal
+    inverse-depth stds: the fused distance is the harmonic mean, not pulled to the shorter one."""
+    fusion = DistanceFusion(CFG, CAM)
+    tracks = [track(1, 8.0, x=100), track(2, 15.0, x=250), track(3, 25.0, x=400)]
+    far = track(4, 45.0, x=650)
+    s, t = 0.004, 0.01
+    inv = inv_depth_for(tracks, s, t)
+    x1, y1, x2, y2 = far.det.bbox_xyxy.astype(int)
+    inv[y1 : y2 + 1, x1 : x2 + 1] = (1.0 / 50.0 - t) / s
+    meas, align = fusion.measure([tr.det for tr in [*tracks, far]], HW, inv)
+    ms = meas[3]
+    assert not ms.anchor and ms.geometric[0] == pytest.approx(45.0, rel=1e-3)
+    assert ms.midas[0] == pytest.approx(50.0, rel=1e-3)
+    k = CAM.inv_depth_std()
+    assert align.inv_std(k) == pytest.approx(k)  # exact fit: floored at the camera's noise
+    z = 1.0 / ((1 / 45.0 + 1 / 50.0) / 2)
+    assert ms.fused[0] == pytest.approx(z, rel=1e-3)
+    assert ms.fused[1] == pytest.approx(z * z * k / np.sqrt(2), rel=1e-3)
+    # correlated errors: same distance, larger std
+    corr = DistanceFusion({**CFG, "fusion": {**CFG["fusion"], "correlation": 0.8}}, CAM)
+    ms_c = corr.measure([tr.det for tr in [*tracks, far]], HW, inv)[0][3]
+    assert ms_c.fused[0] == pytest.approx(ms.fused[0], rel=1e-12)
+    assert ms_c.fused[1] == pytest.approx(ms.fused[1] * np.sqrt(1.8), rel=1e-3)
+
+
+def test_stationary_target_never_gets_short_ttc():
+    """A parked car at 10 or 20 m, measured at 20 Hz with realistic noise (white in inverse depth,
+    std 0.0055 1/m = KITTI geometric only, the pessimistic case; R from the measured distance as
+    in DistanceFusion), must never get TTC < 2 s (that would trigger AEB). Parameters pinned
+    here; accel_std is the loose runtime value, which is what exposes the start-up problem."""
+    kf = {
+        **KF,
+        "accel_std": 3.0,
+        "min_updates_for_ttc": 3,
+        "min_track_s_for_ttc": 0.75,
+        "ttc_speed_sigma_k": 2.0,
+    }
+    old = {**kf, "min_track_s_for_ttc": 0.0, "ttc_speed_sigma_k": 0.0}  # 3 updates only
+
+    def min_ttc(cfg: dict, z: float, seed: int) -> float:
+        rng = np.random.default_rng(seed)
+        bank, k, best = FilterBank(cfg), 0.0055, np.inf
+        for i in range(60):  # 3 s at 20 Hz
+            zm = 1.0 / (1.0 / z + rng.normal(0, k))
+            out = bank.update(1, 0, 0.05 * i, zm, zm * zm * k)
+            if out.ttc_s is not None:
+                best = min(best, out.ttc_s)
+        return best
+
+    for z in (10.0, 20.0):
+        new = [min_ttc(kf, z, s) for s in range(200)]
+        assert min(new) >= 2.0, (z, min(new))
+        # the same seeds with the old count-only gate do raise false alarms
+        assert min(min_ttc(old, z, s) for s in range(200)) < 2.0
+
+
+def test_coasting_never_goes_below_zero():
+    """6 m away closing at 8 m/s, then no measurements: the prediction stops at contact (0 m,
+    TTC 0) instead of going negative."""
+    bank = FilterBank(KF)
+    dt, v = 0.05, 8.0
+    for i in range(21):  # 1 s of measurements, ends at 6 m
+        out = bank.update(1, 0, i * dt, 14.0 - v * i * dt, 0.1)
+    assert out.distance_m == pytest.approx(6.0, abs=0.1) and out.ttc_s is not None
+    for j in range(1, 19):  # coast for 0.9 s (would reach 6 - 7.2 = -1.2 m)
+        pred = bank.predict_only(1, 1.0 + j * dt)
+        assert pred is not None and pred.distance_m >= 0.0
+    assert pred.distance_m == 0.0 and pred.ttc_s == 0.0
+    # a gated (outlier) measurement after crossing also coasts at >= 0
+    out = bank.update(1, 0, 1.95, 30.0, 0.1)
+    assert out.coasted and out.distance_m == 0.0

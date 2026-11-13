@@ -19,7 +19,20 @@ import numpy as np
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CAMERA_KEYS = ("width", "height", "fx", "fy", "cx", "cy", "height_m", "pitch_deg")
+# The sigmas are required: a missing one would make the geometric std 0, and fusion cannot use
+# an estimate with zero std (every object would silently lose its geometric distance).
+CAMERA_KEYS = (
+    "width",
+    "height",
+    "fx",
+    "fy",
+    "cx",
+    "cy",
+    "height_m",
+    "pitch_deg",
+    "sigma_v_px",
+    "sigma_pitch_deg",
+)
 
 
 def resolve_path(path: str | Path) -> Path:
@@ -56,8 +69,8 @@ class CameraModel:
             cy=float(d["cy"]),
             height_m=float(d["height_m"]),
             pitch_rad=math.radians(float(d["pitch_deg"])),
-            sigma_v_px=float(d.get("sigma_v_px", 0.0)),
-            sigma_pitch_rad=math.radians(float(d.get("sigma_pitch_deg", 0.0))),
+            sigma_v_px=float(d["sigma_v_px"]),
+            sigma_pitch_rad=math.radians(float(d["sigma_pitch_deg"])),
         )
 
     def with_intrinsics(self, P: np.ndarray, hw: tuple[int, int]) -> CameraModel:

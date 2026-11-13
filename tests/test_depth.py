@@ -111,6 +111,26 @@ def test_load_camera_requires_keys(tmp_path):
         load_camera(p, "missing")
 
 
+@pytest.mark.parametrize("key", ["sigma_v_px", "sigma_pitch_deg"])
+def test_camera_sigmas_are_required(key):
+    """A missing sigma used to default to 0: geometric std 0, and fusion dropped every object."""
+    d = {
+        "width": 800,
+        "height": 450,
+        "fx": 400.0,
+        "fy": 400.0,
+        "cx": 400.0,
+        "cy": 225.0,
+        "height_m": 1.6,
+        "pitch_deg": 0.0,
+        "sigma_v_px": 1.5,
+        "sigma_pitch_deg": 0.3,
+    }
+    assert CameraModel.from_dict(d).inv_depth_std() > 0
+    with pytest.raises(KeyError, match=key):
+        CameraModel.from_dict({k: v for k, v in d.items() if k != key})
+
+
 # ------------------------------------------------------------------ scale alignment
 
 

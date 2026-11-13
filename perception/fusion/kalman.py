@@ -17,8 +17,16 @@ process noise is white acceleration with std ``accel_std`` (m/s^2).
   consecutive gated measurements mean a different object, and the filter restarts from the
   latest one instead of blending two objects;
 - a stamp that does not advance (dt <= 0) restarts the filter.
-TTC is reported only after ``min_updates_for_ttc`` measurements and when the closing speed is
-above ``min_closing_speed_mps``; otherwise it is None. Pure numpy.
+TTC = distance / closing speed is reported only when all of these hold, otherwise it is None:
+- the filter has been measured for at least ``min_track_s_for_ttc`` seconds (first to last
+  measurement of this filter; a restart starts the clock again, coasting does not count) and
+  ``min_updates_for_ttc`` times. The velocity of a young filter is dominated by the first few
+  measurements, and a parked car can look like it is closing fast (false AEB trigger);
+- the closing speed exceeds ``min_closing_speed_mps`` and ``ttc_speed_sigma_k`` times its own
+  std ``sqrt(P[1, 1])`` (closing must be significant, not noise).
+The distance never goes below 0: a prediction (coasting without measurements, or a gated
+measurement) that would cross 0 is clamped to 0, and then TTC is 0 if the gates above pass.
+Pure numpy.
 """
 
 from __future__ import annotations
@@ -36,7 +44,9 @@ REQUIRED_KEYS = (
     "max_gap_s",
     "max_age_s",
     "min_updates_for_ttc",
+    "min_track_s_for_ttc",
     "min_closing_speed_mps",
+    "ttc_speed_sigma_k",
     "gate_restart_count",
     "restart_on_class_change",
 )
@@ -60,6 +70,7 @@ class DistanceKalman:
         self.x = np.array([z, 0.0])
         self.P = np.diag([r_std * r_std, float(cfg["init_velocity_std"]) ** 2])
         self.stamp = stamp  # time of the state (advanced by predict)
+        self.first_meas = stamp  # time of the first measurement of this filter
         self.last_meas = stamp  # time of the last measurement
         self.cls = cls
         self.updates = 1
@@ -75,6 +86,8 @@ class DistanceKalman:
         self.x = F @ self.x
         self.P = F @ self.P @ F.T + Q
         self.stamp = stamp
+        if self.x[0] < 0.0:  # coasting past the object: it cannot be closer than contact
+            self.x[0] = 0.0
 
     def nis(self, z: float, r_std: float) -> float:
         """Normalised innovation squared of a measurement (after ``predict``)."""
@@ -91,13 +104,15 @@ class DistanceKalman:
         self.updates += 1
 
     def output(self, restarted: bool, coasted: bool = False) -> FilterOutput:
-        d = float(self.x[0])
+        d = max(float(self.x[0]), 0.0)
         closing = -float(self.x[1])
+        speed_std = math.sqrt(max(self.P[1, 1], 0.0))
         ttc = None
         if (
             self.updates >= int(self.cfg["min_updates_for_ttc"])
+            and self.last_meas - self.first_meas >= float(self.cfg["min_track_s_for_ttc"])
             and closing > float(self.cfg["min_closing_speed_mps"])
-            and d > 0
+            and closing > float(self.cfg["ttc_speed_sigma_k"]) * speed_std
         ):
             ttc = d / closing
         std = math.sqrt(max(self.P[0, 0], 0.0))

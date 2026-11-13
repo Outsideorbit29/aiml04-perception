@@ -4,7 +4,8 @@
 
 estimator:
   model: midas_small        # midas_small (live) | dpt_hybrid (offline comparison only)
-  backend: torch            # torch (Kaggle, torch.hub) | onnx (laptop runtime, model from M6)
+  backend: onnx             # onnx (laptop runtime, model exported in M6) | torch (Kaggle,
+                            # torch.hub; the eval and Kaggle video jobs override it to torch)
   device: null              # torch: null = cuda if available
   half: false               # torch FP16 on CUDA
   onnx_providers: null      # onnx: null = all available (CUDA first when installed)
@@ -65,6 +66,13 @@ alignment:                  # perception.depth.ScaleAligner: 1/Z = s*m + t
 fusion:
   object_classes: [car, truck, bus, person, rider, bicycle, motorcycle]  # road users only
   reuse_alignment_frames: 5 # reuse the last fit this many frames when anchors give none
+  correlation: 0.8          # assumed error correlation of geometric and aligned MiDaS, used only
+                            # for the fused std (Kalman measurement noise), not the fused
+                            # distance. MiDaS is fitted to the anchors' geometric distances, so it
+                            # inherits their shared error: the pitch term is ~90 % of the KITTI
+                            # and ~65 % of the CARLA geometric inverse-depth variance
+                            # (configs/camera.yaml). 0.8 is deliberately conservative; with equal
+                            # stds the fused std is sqrt((1 + 0.8) / 2) = 0.95 x either one.
 
 kalman:                     # perception.fusion.FilterBank (per track id)
   accel_std: 3.0            # m/s^2 white-acceleration process noise
@@ -75,5 +83,11 @@ kalman:                     # perception.fusion.FilterBank (per track id)
                                   # common, and the gate already catches a real id switch
   max_gap_s: 1.0            # no measurement for longer -> restart on the next one
   max_age_s: 2.0            # prune filters older than this
-  min_updates_for_ttc: 3    # TTC only after this many measurements
+  min_updates_for_ttc: 3    # TTC only after this many measurements ...
+  min_track_s_for_ttc: 0.75 # ... spanning at least this long (first to last measurement of the
+                            # filter). Simulated parked car at 10-20 m, 20 Hz, inverse-depth noise
+                            # 0.004-0.0055 1/m: with 3 updates only, 6-25 % of tracks showed
+                            # TTC < 2 s in their first second; 0.5 s still 0.2-1 % at 20 m,
+                            # 0.75 s none in 1500 x 10 s tracks
   min_closing_speed_mps: 0.5  # slower closing -> ttc None
+  ttc_speed_sigma_k: 2.0    # and closing speed > this x its std sqrt(P[1, 1]) (significant)

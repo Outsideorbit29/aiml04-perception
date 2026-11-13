@@ -14,9 +14,18 @@ contact and would otherwise become false lead objects):
 3. Per-frame alignment ``1/Z = s*m + t`` on anchors = confident, near objects with a valid
    geometric distance (``anchors``). If no fit is possible, the last fit is reused for up to
    ``fusion.reuse_alignment_frames`` frames; MiDaS never yields a distance without a fit.
-4. Inverse-variance fusion of the geometric and aligned-MiDaS distances. The aligned-MiDaS
-   std is never below the camera's geometric inverse-depth noise (the anchors' own error), and
-   exactly determined fits are inflated (perception.depth.Alignment.inv_std).
+4. Inverse-variance fusion of the geometric and aligned-MiDaS estimates in INVERSE depth
+   (``fuse_inverse``), where both errors are roughly Gaussian with a std that does not depend
+   on the distance (CameraModel.inv_depth_std, perception.depth.Alignment.inv_std). Fusing
+   distances with stds Z^2 * k evaluated at each estimate's own Z would give the shorter
+   estimate more weight and bias the result short (-10 % at 45 m with KITTI noise). The
+   aligned-MiDaS std is never below the camera's geometric inverse-depth noise (the anchors'
+   own error), and exactly determined fits are inflated. The two estimates are NOT independent:
+   MiDaS is fitted to the geometric distances of the anchors, so it inherits their shared
+   error (mostly the pitch error). The fused std therefore assumes a correlation
+   ``fusion.correlation`` between them (the weights, and so the fused distance, do not depend
+   on it); 0 would be the independent-errors std, 1 gives no gain over the better estimate.
+   std(Z) = Z^2 * std(1/Z).
 5. Per-track Kalman filter (perception.fusion.kalman) -> distance, std, closing speed, TTC.
 6. ``in_ego_lane`` = ``LaneResult.contains(box bottom-centre)``.
 Objects with no distance at all (no geometric, no aligned MiDaS, no live filter) are left out
@@ -56,14 +65,48 @@ class Measurement:
     align_anchors: int = 0  # anchors in that fit
 
 
-def fuse(estimates: list[Estimate | None]) -> Estimate | None:
-    """Inverse-variance weighted mean of the available estimates."""
-    valid = [e for e in estimates if e is not None and math.isfinite(e[0]) and e[1] > 0]
+def fuse_inverse(estimates: list[Estimate | None], correlation: float = 0.0) -> Estimate | None:
+    """Fuse inverse-depth estimates ``(1/Z, std of 1/Z)`` -> distance estimate ``(Z, std Z)``.
+
+    Inverse-variance weighted mean in inverse depth. The returned std is the std of that
+    weighted mean when every pair of estimates has error correlation ``correlation`` (in [0, 1];
+    0 = independent), propagated with std(Z) = Z^2 std(1/Z). A single valid estimate is
+    returned as is.
+    """
+    if not 0.0 <= correlation <= 1.0:
+        raise ValueError(f"correlation {correlation} not in [0, 1]")
+    valid = [
+        e
+        for e in estimates
+        if e is not None and math.isfinite(e[0]) and e[0] > 0 and math.isfinite(e[1]) and e[1] > 0
+    ]
     if not valid:
         return None
-    w = np.array([1.0 / (s * s) for _, s in valid])
-    z = np.array([d for d, _ in valid])
-    return float((w * z).sum() / w.sum()), float(1.0 / math.sqrt(w.sum()))
+    u = np.array([v for v, _ in valid])
+    sd = np.array([s for _, s in valid])
+    a = 1.0 / (sd * sd)
+    a /= a.sum()
+    inv = float((a * u).sum())
+    corr = np.full((len(valid), len(valid)), correlation)
+    np.fill_diagonal(corr, 1.0)
+    asd = a * sd
+    inv_std = math.sqrt(max(float(asd @ corr @ asd), 0.0))
+    z = 1.0 / inv
+    return z, z * z * inv_std
+
+
+def fuse(estimates: list[Estimate | None], correlation: float = 0.0) -> Estimate | None:
+    """Fuse distance estimates ``(Z, std Z)`` whose error is Gaussian in inverse depth
+    (std(1/Z) = std(Z) / Z^2, as for flat-ground geometry and aligned MiDaS): converts them and
+    calls ``fuse_inverse``. A single valid estimate is returned as is."""
+    valid = [
+        e
+        for e in estimates
+        if e is not None and math.isfinite(e[0]) and e[0] > 0 and math.isfinite(e[1]) and e[1] > 0
+    ]
+    if len(valid) == 1:
+        return valid[0]
+    return fuse_inverse([(1.0 / z, s / (z * z)) for z, s in valid], correlation)
 
 
 class DistanceFusion:
@@ -82,6 +125,14 @@ class DistanceFusion:
         f = cfg["fusion"]
         self.classes = set(f["object_classes"])
         self.reuse_frames = int(f["reuse_alignment_frames"])
+        self.correlation = float(f["correlation"])
+        if not 0.0 <= self.correlation <= 1.0:
+            raise ValueError(f"fusion.correlation {self.correlation} not in [0, 1]")
+        if not camera.inv_depth_std() > 0:
+            raise ValueError(
+                "camera sigma_v_px and sigma_pitch_deg are both 0: the geometric distance would "
+                "have zero std and could not be fused (set them in configs/camera.yaml)"
+            )
         self.aligner = ScaleAligner(cfg["alignment"])
         self.bank = FilterBank(cfg["kalman"])
         self.last_alignment: Alignment | None = None
@@ -136,6 +187,11 @@ class DistanceFusion:
         Returns the measurements and the alignment fitted on all anchors (or the fallback).
         """
         cam = (camera or self.camera).scaled_to(hw)
+        geo_inv_std = cam.inv_depth_std()
+        if not geo_inv_std > 0:
+            raise ValueError(
+                "camera has zero geometric inverse-depth std (sigma_v_px, sigma_pitch)"
+            )
         geo = [self.geometric(d, cam) for d in dets]
         if inv_depth is not None:
             if inv_depth.shape[:2] != tuple(hw):
@@ -158,17 +214,21 @@ class DistanceFusion:
                 keep[i] = False
                 a = self.aligner.fit(m[keep], z_geo[keep])
             midas = None
+            inv_midas = None
             if a is not None and math.isfinite(m[i]):
                 z = float(a.to_depth(m[i]))
                 if math.isfinite(z):
-                    midas = (z, float(a.depth_std(z, cam.inv_depth_std())))
+                    inv_s = a.inv_std(geo_inv_std)
+                    midas = (z, z * z * inv_s)
+                    inv_midas = (1.0 / z, inv_s)
+            inv_geo = (1.0 / geo[i][0], geo_inv_std) if geo[i] is not None else None
             out.append(
                 Measurement(
                     d,
                     geo[i],
                     float(m[i]),
                     midas,
-                    fuse([geo[i], midas]),
+                    fuse_inverse([inv_geo, inv_midas], self.correlation),
                     bool(anchor[i]),
                     a.mode if midas is not None else None,
                     a.n_anchors if midas is not None else 0,
