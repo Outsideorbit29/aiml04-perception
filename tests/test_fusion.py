@@ -726,3 +726,67 @@ def test_ego_corridor_config_validation():
         EgoCorridor.from_dict(missing)
     with pytest.raises(ValueError, match="curve_radius_m"):
         EgoCorridor.from_dict({**CFG["fusion"]["ego_lane"], "curve_radius_m": 0.0})
+
+
+# ------------------------------------------------------------------ QA gate M4.5/M4.6 edge cases
+
+
+def test_lateral_offset_inverts_a_pitched_projection():
+    """Independent check of the pitch handling: project ground points through an explicit
+    camera rotation (pitched down by p), then recover X from u and the forward distance Z."""
+    p = np.radians(6.0)
+    cam = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.5, float(p), 1.0, 0.0)
+    for x_true, z in ((1.0, 5.0), (-2.5, 12.0), (3.0, 40.0)):
+        # level camera frame: x right, y down, z forward; ground point at (X, h, Z)
+        yc = cam.height_m * np.cos(p) - z * np.sin(p)
+        zc = cam.height_m * np.sin(p) + z * np.cos(p)
+        u = cam.cx + cam.fx * x_true / zc
+        v = cam.cy + cam.fy * yc / zc
+        assert v == pytest.approx(cam.row_of_distance(z))  # same projection as the distance model
+        assert lateral_offset(u, z, cam) == pytest.approx(x_true)
+
+
+def test_in_ego_lane_uses_intrinsics_scaled_to_the_frame():
+    """DistanceFusion must rescale the camera to the frame size before the lateral test: on a
+    half-resolution frame a centred car is still in the corridor and a car 3 m to the side is
+    not (with the unscaled cx = 400 on a 400 px wide frame the centred car would read X ~ -6 m)."""
+    hw = (HW[0] // 2, HW[1] // 2)
+    centred = Track(1, Detection(box_at(12.0) * 0.5, 0.9, 0, "car"))
+    side = Track(2, Detection(box_at(12.0, x_center=400 + 3.0 * 400 / 12.0) * 0.5, 0.9, 0, "car"))
+    frame = DistanceFusion(CFG, CAM).update([centred, side], None, 0.0, 0, hw)
+    by_id = {o.track.track_id: o for o in frame.objects}
+    assert by_id[1].distance_m == pytest.approx(12.0, rel=0.02)
+    assert by_id[1].in_ego_lane and not by_id[2].in_ego_lane
+
+
+def test_reacquire_gap_boundary_at_10hz():
+    """10 Hz, stationary target at 20 m, then a +10 m jump (gated). One missed frame (gap 0.2 s
+    <= reacquire_restart_gap_s) coasts on the prediction; two missed frames (0.3 s) restart."""
+    for missed, restart in ((1, False), (2, True)):
+        bank = FilterBank(KF)
+        for k in range(10):
+            bank.update(1, 0, 0.1 * k, 20.0, 0.2)
+        out = bank.update(1, 0, 0.1 * (10 + missed), 30.0, 0.2)
+        assert out.restarted is restart and out.coasted is not restart
+        assert out.distance_m == pytest.approx(30.0 if restart else 20.0, abs=0.5)
+        assert out.distance_m >= 0.0
+
+
+def test_ttc_gate_honoured_after_reacquire_restart():
+    """After a re-acquisition restart the TTC clock starts again: no TTC until the restarted
+    filter is min_track_s_for_ttc old with min_updates_for_ttc updates, then TTC comes back
+    for a steady approach."""
+    bank = FilterBank(KF)
+    for k in range(10):  # stationary at 30 m
+        bank.update(1, 0, 0.1 * k, 30.0, 0.2)
+    t0, v = 1.5, 10.0  # lost for 5 frames, re-detected 10 m closer and approaching at 10 m/s
+    ttcs = []
+    for k in range(12):
+        out = bank.update(1, 0, t0 + 0.1 * k, 20.0 - v * 0.1 * k, 0.2)
+        if k == 0:
+            assert out.restarted and out.ttc_s is None
+        ttcs.append(out.ttc_s)
+    young = int(np.ceil(KF["min_track_s_for_ttc"] / 0.1 - 1e-9))
+    assert all(t is None for t in ttcs[:young])
+    assert ttcs[-1] is not None
+    assert ttcs[-1] == pytest.approx((20.0 - v * 1.1) / v, rel=0.25)
