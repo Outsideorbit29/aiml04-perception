@@ -16,8 +16,8 @@ import cv2
 import numpy as np
 import pytest
 
-from perception.depth import DepthEstimator, load_camera
-from perception.detection import Detector
+from perception.depth import DepthEstimator, load_camera, load_depth_config
+from perception.detection import Detector, load_config
 from perception.detection.processing import RawDetections
 from perception.fusion import DistanceFusion
 from perception.lanes import build_lane_detector
@@ -27,6 +27,7 @@ from perception.pipeline import (
     dumps_frame,
     frame_to_dict,
     load_pipeline_config,
+    main,
     object_label,
     open_source,
     run,
@@ -144,9 +145,13 @@ def test_stage_configs_overrides():
     assert sc["camera_name"] == "kitti"
     plain = stage_configs(CFG, lanes_method="classical")
     assert plain["lanes"]["method"] == "classical"
-    assert plain["depth"]["models"]["midas_small"]["input_hw"] == [256, 448]  # carla: 16:9
-    assert plain["detector"]["backend"] == "torch"  # module config default, untouched
-    assert plain["depth"]["estimator"]["backend"] == "onnx"
+    # without CLI overrides the module configs' own values pass through untouched
+    det_cfg = load_config(CFG["detector_config"])
+    depth_cfg = load_depth_config(CFG["depth_config"])
+    assert plain["detector"]["backend"] == det_cfg["backend"]
+    assert plain["depth"]["estimator"]["backend"] == depth_cfg["estimator"]["backend"]
+    assert (plain["depth"]["models"]["midas_small"]["input_hw"]
+            == depth_cfg["models"]["midas_small"]["input_hw"])
 
 
 def test_process_wires_perception_frame():
@@ -288,3 +293,28 @@ def test_summarize_and_snapshots():
     assert s["lanes_both_sides_frac"] == 0.0 and s["lanes_ego_mask_frac"] == 1.0
     assert snapshot_indices(50, 3) == {12, 24, 37}
     assert snapshot_indices(None, 3) == set() and snapshot_indices(10, 0) == set()
+
+
+def test_cli_main_on_fixture_clip(tmp_path, monkeypatch):
+    """``python -m perception.pipeline`` entry point, with the stage factory faked."""
+    import perception.pipeline as pl
+
+    seen = {}
+
+    def fake_from_config(cfg, **kw):
+        seen.update(kw)
+        pipe, _, sc = make_pipeline(camera="kitti", scale=0.32, fps=kw["fps"])
+        pipe.stage_cfgs = sc
+        return pipe
+
+    monkeypatch.setattr(pl.Pipeline, "from_config", staticmethod(fake_from_config))
+    out, jl, sm = tmp_path / "o.mp4", tmp_path / "f.jsonl", tmp_path / "s.json"
+    summary = main([
+        "--source", str(FIX / "clip_kitti.mp4"), "--out", str(out), "--json", str(jl),
+        "--summary", str(sm), "--snapshots", str(tmp_path / "snaps"), "--max-frames", "8",
+        "--backend", "torch", "--camera", "kitti", "--lanes", "classical",
+    ])
+    assert seen["backend"] == "torch" and seen["camera_name"] == "kitti"
+    assert seen["lanes_method"] == "classical" and seen["fps"] == pytest.approx(10.0)
+    assert out.stat().st_size > 0 and len(jl.read_text().splitlines()) == 8
+    assert json.loads(sm.read_text())["frames"] == 8 == summary["frames"]
