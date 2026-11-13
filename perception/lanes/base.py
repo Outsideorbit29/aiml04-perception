@@ -190,6 +190,7 @@ class LaneDetector(ABC):
             self.last_timing_ms = timing
         else:
             self.last_timing_ms_stateless = timing
+        self._call_timing_ms = {}  # later direct backend calls must not edit the published dict
         return res
 
     def _lanes_from_binary(self, binary: np.ndarray, smooth: bool = True) -> LaneResult:

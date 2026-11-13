@@ -5,7 +5,9 @@
 estimator:
   model: midas_small        # midas_small (live) | dpt_hybrid (offline comparison only)
   backend: onnx             # onnx (laptop runtime, model exported in M6) | torch (Kaggle,
-                            # torch.hub; the eval and Kaggle video jobs override it to torch)
+                            # torch.hub). depth_eval.yaml overrides it to torch; any other Kaggle
+                            # job (e.g. the M5 video pipeline) must pass backend="torch" until the
+                            # M6 ONNX export exists
   device: null              # torch: null = cuda if available
   half: false               # torch FP16 on CUDA
   onnx_providers: null      # onnx: null = all available (CUDA first when installed)
