@@ -313,8 +313,11 @@ def _label(img: np.ndarray, text: str, x: int, y: int, color: tuple, viz: dict) 
     cv2.putText(img, text, (x, y - base), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 0, 0), 1, cv2.LINE_AA)
 
 
-def object_label(o: ObjectState, lead: bool = False) -> str:
+def object_label(o: ObjectState, lead: bool = False, compact: bool = False) -> str:
+    """``#id class d+-std m TTC t s``; ``compact`` (small, far boxes) is ``#id d m``."""
     t = o.track
+    if compact:
+        return f"#{t.track_id} {o.distance_m:.0f}m"
     txt = f"#{t.track_id} {t.det.cls_name} {o.distance_m:.1f}+-{o.distance_std:.1f}m"
     if o.ttc_s is not None:
         txt += f" TTC {o.ttc_s:.1f}s"
@@ -368,7 +371,8 @@ def draw_frame(
         cv2.rectangle(out, (x1, y1), (x2, y2), color, int(viz["object_thickness"]))
         warn = o.ttc_s is not None and o.ttc_s < float(viz["ttc_warn_s"])
         bg = tuple(viz["warn_color"]) if warn else (tuple(viz["lead_color"]) if is_lead else color)
-        _label(out, object_label(o, is_lead), x1, y1, bg, viz)
+        compact = not is_lead and (y2 - y1) < int(viz["full_label_min_h_px"])
+        _label(out, object_label(o, is_lead, compact), x1, y1, bg, viz)
     lines = list(info or [])
     tm = pf.timings_ms
     if tm.get("total_ms"):

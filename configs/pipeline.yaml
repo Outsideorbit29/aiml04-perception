@@ -62,3 +62,4 @@ viz:
   text_bg: [0, 0, 0]
   warn_color: [0, 0, 255]
   info_line_px: 16               # line height of the top-left info block
+  full_label_min_h_px: 40        # shorter boxes (far objects) get a compact '#id 37m' label

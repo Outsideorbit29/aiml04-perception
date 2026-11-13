@@ -27,6 +27,7 @@ from perception.pipeline import (
     dumps_frame,
     frame_to_dict,
     load_pipeline_config,
+    object_label,
     open_source,
     run,
     snapshot_indices,
@@ -223,6 +224,10 @@ def test_draw_frame_on_synthetic_frame():
     # lane boundary at x = 200 drawn inside the measured rows only
     assert not np.array_equal(vis[400, 199:202], img[400, 199:202])
     assert np.array_equal(vis[150, 199:202], img[150, 199:202])
+    car = pf.objects[0]
+    assert object_label(car, lead=True).startswith("LEAD #1 car 8.")
+    assert "TTC 1.5s" in object_label(car)
+    assert object_label(car, compact=True) == f"#1 {car.distance_m:.0f}m"
     # empty frame (no objects, no lanes) still draws
     empty = PerceptionFrame(0.0, 0, [], LaneResult(None, None, None, 0.0), {})
     assert draw_frame(img, empty, CFG["viz"]).shape == img.shape
