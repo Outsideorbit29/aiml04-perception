@@ -119,18 +119,20 @@ MiDaS outputs **relative** inverse depth, so it needs a metric scale. The design
 2. **MiDaS (DPT-Hybrid or MiDaS-small)** gives a dense relative depth map. The median depth inside each box (lower 50%, to avoid background) is taken.
 3. **Scale alignment** fits a per-frame scale and shift between MiDaS values and the geometric estimates of confident, near objects (robust least squares), then applies them to every object. This fixes cases where the geometric estimate breaks (hills, occlusion).
 4. **Fusion** combines the geometric and aligned MiDaS estimates as an inverse-variance mean in inverse depth (1/Z), which avoids the short bias of averaging in metres.
-5. **Temporal filter** runs a per-track Kalman filter on distance, which also yields closing speed and time-to-collision `TTC = d / v_close`. TTC is reported only once a track is `kalman.min_track_s_for_ttc` (0.75 s) old and its closing speed exceeds `ttc_speed_sigma_k` (2) standard deviations of the speed estimate, so a parked car does not trigger AEB from distance noise.
+5. **Temporal filter** runs a per-track Kalman filter on distance, which also yields closing speed and time-to-collision `TTC = d / v_close`. TTC is reported only once a track is `kalman.min_track_s_for_ttc` (0.75 s) old and its closing speed exceeds `ttc_speed_sigma_k` (2) standard deviations of the speed estimate, so a parked car does not trigger AEB from distance noise. A track re-detected after more than `kalman.reacquire_restart_gap_s` (0.25 s) whose measurement fails the innovation gate restarts its filter instead of coasting on the extrapolated prediction.
 
 Evaluation: absolute relative error and RMSE against KITTI LiDAR and the CARLA depth camera, reported by distance bin (0–10, 10–30, 30–60 m).
 
 ### 3.6 Fusion output (`perception/fusion/`)
 `DistanceFusion` merges tracks, distances and lanes into a `PerceptionFrame`. It flags each object
 as `in_ego_lane` from the lane result plus a metric lateral corridor: the lateral offset of the box
-bottom-center is `X = (u − cx)·Z / fx` at the filtered distance Z (`fusion.ego_lane` in
-`configs/depth.yaml`).
+bottom-center is `X = (u − cx)·Z / fx`, with Z the larger of the filtered and this frame's measured
+distance (a too-short Z, e.g. a coasted prediction, shrinks |X| towards 0). Settings in
+`fusion.ego_lane` of `configs/depth.yaml`.
 - Both boundaries measured and `confidence ≥ min_lane_confidence`: `LaneResult.contains(bottom-center)`
-  and, up to `range_lanes_m` (12 m), `|X| ≤ half_width_lanes_m` (1.8 m). Beyond that range the
-  polylines alone decide, since a camera-frame corridor drifts sideways on curves.
+  and `|X| ≤ half_width_lanes_m + Z²/(2·curve_radius_m)` (1.5 m, R = 400 m) at every range. The
+  second term allows for the sideways drift of a curving lane; the gate is never switched off,
+  because YOLOP's ego area covers kerb-parked cars on unmarked streets.
 - One side synthesized, low confidence or no lanes: corridor only, `|X| ≤ half_width_no_lanes_m`
   (1.2 m) up to `range_no_lanes_m` (30 m). The synthesized one-sided mask can spill over the kerb,
   so it is not used; a lead car on an unmarked street is still found.

@@ -85,12 +85,15 @@ fusion:
                             # ~1.6 m when also cut by the image bottom in CARLA at 2.5 m.
     min_lane_confidence: 0.3  # both sides measured AND LaneResult.confidence (mean fraction of
                               # sliding windows hit) >= this -> lanes are trusted
-    half_width_lanes_m: 1.8   # with trusted lanes: veto for a lane mask/polyline that spills
-                              # over the kerb; between a lane-edge lead (0.85 m, + 0.7 m curve
-                              # drift at 12 m for R = 100 m) and a parked car (>= 2.2 m beyond
-                              # 4 m; closer, contains() must also say yes)
-    range_lanes_m: 12.0       # with trusted lanes the corridor applies up to here; beyond, the
-                              # polylines alone decide (camera-frame drift Z^2 / 2R on curves)
+    half_width_lanes_m: 1.5   # with trusted lanes: |X| <= this + Z^2 / (2 curve_radius_m), at
+                              # every range (YOLOP's ego area covers kerb-parked cars on unmarked
+                              # streets, KITTI 0001: X 2.3-3.6 m at 12-24 m). 1.5 m sits between a
+                              # lane-edge lead (0.85 m) and a parked car (>= 2.2 m)
+    curve_radius_m: 400.0     # curve allowance: a lane of radius R drifts Z^2 / 2R sideways in
+                              # the camera frame. 400 m keeps the KITTI 0001 parked cars out to
+                              # ~36 m (allowance 1.6 m there); on R = 100 m a lead centred in its
+                              # lane is kept to ~25 m (TTC 2 s there needs 12.5 m/s, about the top
+                              # speed on such a curve)
     half_width_no_lanes_m: 1.2  # one-sided / low-confidence / no lanes: corridor only. Worst
                                 # parked case: car cut by the image bottom AND side of the 90 deg
                                 # CARLA camera at 2.5 m, box centre 1.6 m. 1.2 m tolerates its
@@ -105,6 +108,9 @@ kalman:                     # perception.fusion.FilterBank (per track id)
   init_velocity_std: 10.0   # m/s, velocity is unknown on the first measurement
   gate_chi2: 16.0           # innovation NIS above this (4 sigma) = outlier: coast on prediction
   gate_restart_count: 2     # this many gated measurements in a row = id switch -> restart
+  reacquire_restart_gap_s: 0.25  # a gated measurement after the id was unmeasured this long
+                                 # restarts at once (no coasting on an extrapolated prediction):
+                                 # > 2 missed frames at 10 Hz (KITTI), > 4 at 20 Hz (CARLA)
   restart_on_class_change: false  # ByteTrack ignores class; car/truck flips on one object are
                                   # common, and the gate already catches a real id switch
   max_gap_s: 1.0            # no measurement for longer -> restart on the next one
