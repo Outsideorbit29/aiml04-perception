@@ -118,7 +118,8 @@ MiDaS outputs **relative** inverse depth, so it needs a metric scale. The design
 1. **Geometric estimate** per object. Using the pinhole model with known camera height `h` and pitch, the distance to the bottom-center of the box is `Z ≈ f·h / (v_bottom − v_horizon)`. It is reliable for objects on a flat road.
 2. **MiDaS (DPT-Hybrid or MiDaS-small)** gives a dense relative depth map. The median depth inside each box (lower 50%, to avoid background) is taken.
 3. **Scale alignment** fits a per-frame scale and shift between MiDaS values and the geometric estimates of confident, near objects (robust least squares), then applies them to every object. This fixes cases where the geometric estimate breaks (hills, occlusion).
-4. **Temporal filter** runs a per-track Kalman filter on distance, which also yields closing speed and time-to-collision `TTC = d / v_close`.
+4. **Fusion** combines the geometric and aligned MiDaS estimates as an inverse-variance mean in inverse depth (1/Z), which avoids the short bias of averaging in metres.
+5. **Temporal filter** runs a per-track Kalman filter on distance, which also yields closing speed and time-to-collision `TTC = d / v_close`. TTC is reported only once a track is `kalman.min_track_s_for_ttc` (0.75 s) old and its closing speed exceeds `ttc_speed_sigma_k` (2) standard deviations of the speed estimate, so a parked car does not trigger AEB from distance noise.
 
 Evaluation: absolute relative error and RMSE against KITTI LiDAR and the CARLA depth camera, reported by distance bin (0–10, 10–30, 30–60 m).
 

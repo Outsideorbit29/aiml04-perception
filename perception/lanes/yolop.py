@@ -10,11 +10,13 @@ PyTorch. Steps per frame:
      channel normalised over the two channels;
    - `logits`: p = softmax(ll)[1].
    `auto` decides on the first frame (all values in [0, 1] -> probs) and prints the output
-   min/max and the chosen kind once, so the Kaggle log shows the real range. In both cases
-   p >= 0.5 is exactly YOLOP's argmax. The threshold is applied as an equivalent linear test on
-   a decision margin (no exp or division at full resolution, see `decision_margin`).
-4. Resize the margin to the frame, threshold it (`yolop.lane_threshold` as a probability), and
-   hand the binary to the same `LaneFitter`/`LaneSmoother` as the classical backend.
+   min/max and the chosen kind once, so the Kaggle log shows the real range. A pixel is lane
+   iff p > t (strict). In both cases p > 0.5 is exactly YOLOP's argmax (torch.max / np.argmax
+   pick channel 0, background, on an exact tie), and a `probs` pixel with both channels 0 has
+   p = 0.5 (lane only for t < 0.5). The threshold is applied as an equivalent linear test on a
+   decision margin (no exp or division at full resolution, see `decision_margin`).
+4. Resize the margin to the frame, threshold it (`margin > margin_threshold`), and hand the
+   binary to the same `LaneFitter`/`LaneSmoother` as the classical backend.
 
 The drivable-area and detection heads are ignored: detection comes from perception.detection
 and the ego lane is the region between the fitted boundaries for every backend.
@@ -109,6 +111,9 @@ def letterbox_params(
 
 
 OUTPUT_KINDS = ("auto", "probs", "logits")
+# |margin| given to a `probs` pixel with both channels 0 (p = 0.5): only its sign matters, and
+# it is small next to real margins so bilinear resizing is dominated by the neighbours.
+ZERO_TOTAL_MARGIN = 1e-6
 
 
 def detect_output_kind(ll: np.ndarray) -> str:
@@ -121,7 +126,8 @@ def lane_probability(ll: np.ndarray, kind: str | None = None) -> np.ndarray:
     """(2, H, W) lane-line output -> (H, W) float32 probability of the lane class.
 
     `kind` 'probs': ll[1] / (ll[0] + ll[1]) (0.5 where both are 0); 'logits': softmax(ll)[1];
-    None: detected from the value range. Either way p >= 0.5 <=> ll[1] >= ll[0] (YOLOP argmax).
+    None: detected from the value range. Either way p > 0.5 <=> ll[1] > ll[0] <=> YOLOP's
+    argmax picks the lane channel (an exact tie goes to channel 0, background).
     """
     ll = np.asarray(ll, dtype=np.float32)
     if (kind or detect_output_kind(ll)) == "probs":
@@ -135,7 +141,7 @@ def lane_probability(ll: np.ndarray, kind: str | None = None) -> np.ndarray:
 def lane_margin_threshold(threshold: float) -> float:
     """Probability threshold t on softmax(ll)[1] -> threshold on the logit margin ll[1] - ll[0].
 
-    softmax(ll)[1] >= t  <=>  ll[1] - ll[0] >= log(t / (1 - t)); t = 0.5 gives 0 (argmax).
+    softmax(ll)[1] > t  <=>  ll[1] - ll[0] > log(t / (1 - t)); t = 0.5 gives 0 (argmax).
     Only valid for logit outputs; probability outputs use `decision_margin` with threshold 0.
     """
     t = min(max(float(threshold), 1e-6), 1.0 - 1e-6)
@@ -143,21 +149,25 @@ def lane_margin_threshold(threshold: float) -> float:
 
 
 def decision_margin(ll: np.ndarray, kind: str, threshold: float) -> tuple[np.ndarray, float]:
-    """(margin, margin threshold): `margin >= margin threshold` <=> lane probability >= t.
+    """(margin, margin threshold): `margin > margin threshold` <=> `lane_probability > t`.
 
     - logits: margin = ll[1] - ll[0], threshold log(t / (1 - t)).
-    - probs:  ll[1] / (ll[0] + ll[1]) >= t  <=>  (ll[1] - ll[0]) - (2t - 1)(ll[0] + ll[1]) >= 0
-      (for ll[0] + ll[1] > 0), threshold 0.
-    Both margins are linear in ll, so they can be bilinearly resized before thresholding, and at
-    t = 0.5 both reduce to exactly `ll[1] - ll[0] >= 0` (YOLOP's argmax).
+    - probs:  ll[1] / (ll[0] + ll[1]) > t  <=>  (ll[1] - ll[0]) - (2t - 1)(ll[0] + ll[1]) > 0
+      for ll[0] + ll[1] > 0, threshold 0. Where both channels are 0, `lane_probability` is 0.5,
+      so the margin is set to a tiny value with the sign of 0.5 - t (exactly 0 at t = 0.5).
+    Both margins are linear in ll (away from all-zero pixels), so they can be bilinearly resized
+    before thresholding, and at t = 0.5 both reduce to exactly `ll[1] - ll[0] > 0` (YOLOP's
+    argmax, background on a tie).
     """
     margin = ll[1] - ll[0]
     if kind == "logits":
         return margin, lane_margin_threshold(threshold)
     k = 2.0 * float(threshold) - 1.0
     if k != 0.0:
-        margin = margin - np.float32(k) * (ll[0] + ll[1])
-    return margin, 0.0
+        total = ll[0] + ll[1]
+        margin = margin - np.float32(k) * total
+        margin = np.where(total > 0, margin, np.float32(-k * ZERO_TOTAL_MARGIN))
+    return margin.astype(np.float32, copy=False), 0.0
 
 
 class YolopLaneDetector(LaneDetector):
@@ -244,27 +254,27 @@ class YolopLaneDetector(LaneDetector):
 
     def _lane_output(self, frame_bgr: np.ndarray) -> np.ndarray:
         """Run the model; (2, new_h, new_w) float32 lane-line output with the padding cropped.
-        Fills `last_timing_ms` with pre_ms and model_ms."""
+        Adds pre_ms and model_ms to the current call's timing (`_call_timing_ms`)."""
         t0 = time.perf_counter()
         x, (new_w, new_h, px, py) = self.preprocess(frame_bgr)
         t1 = time.perf_counter()
         (ll,) = self.session.run([self.output_name], {self.input_name: x})
         t2 = time.perf_counter()
-        self.last_timing_ms.update({"pre_ms": 1e3 * (t1 - t0), "model_ms": 1e3 * (t2 - t1)})
+        self._call_timing_ms.update({"pre_ms": 1e3 * (t1 - t0), "model_ms": 1e3 * (t2 - t1)})
         return np.asarray(ll, dtype=np.float32)[0, :, py : py + new_h, px : px + new_w]
 
     def lane_margin(self, frame_bgr: np.ndarray) -> np.ndarray:
         """HxW float32 decision margin at frame resolution; lane where
-        `margin >= self.margin_threshold` (see `decision_margin`; with `output_kind: auto` the
-        threshold is final after the first call). Fills `last_timing_ms` with pre_ms, model_ms
-        (session.run) and post_ms."""
+        `margin > self.margin_threshold` (see `decision_margin`; with `output_kind: auto` the
+        threshold is final after the first call). Adds pre_ms, model_ms (session.run) and
+        post_ms to the current call's timing (`_call_timing_ms`)."""
         h, w = frame_bgr.shape[:2]
         ll = self._lane_output(frame_bgr)
         t2 = time.perf_counter()
         kind = self._resolve_output_kind(ll)
         m, self.margin_threshold = decision_margin(ll, kind, self.threshold)
         margin = cv2.resize(m, (w, h), interpolation=cv2.INTER_LINEAR)
-        self.last_timing_ms["post_ms"] = 1e3 * (time.perf_counter() - t2)
+        self._call_timing_ms["post_ms"] = 1e3 * (time.perf_counter() - t2)
         return margin
 
     def lane_prob(self, frame_bgr: np.ndarray) -> np.ndarray:
@@ -276,7 +286,7 @@ class YolopLaneDetector(LaneDetector):
 
     def lane_binary(self, frame_bgr: np.ndarray) -> np.ndarray:
         margin = self.lane_margin(frame_bgr)
-        return margin >= self.margin_threshold
+        return margin > self.margin_threshold
 
 
 def benchmark_session(session: Any, input_hw: tuple[int, int], runs: int, warmup: int) -> dict:

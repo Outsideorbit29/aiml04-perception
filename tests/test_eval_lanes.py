@@ -196,7 +196,7 @@ class FixedDetector:
     def __init__(self, res: LaneResult, hw: tuple[int, int]) -> None:
         self.res = res
         self.last_debug_stateless = {"binary": np.zeros(hw, bool), "y_top": None, "y_bottom": None}
-        self.last_timing_ms = {"binary_ms": 1.0, "fit_ms": 2.0}
+        self.last_timing_ms_stateless = {"binary_ms": 1.0, "fit_ms": 2.0}
 
     def detect(self, img, stateless=False):
         assert stateless

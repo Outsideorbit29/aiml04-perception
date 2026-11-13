@@ -820,7 +820,7 @@ def evaluate_image(
         t0 = time.perf_counter()
         res = det.detect(img, stateless=True)
         timings[m].append(1e3 * (time.perf_counter() - t0))
-        for k, v in (getattr(det, "last_timing_ms", None) or {}).items():
+        for k, v in (getattr(det, "last_timing_ms_stateless", None) or {}).items():
             timings[f"{m}/{k}"].append(v)
         dbg = getattr(det, "last_debug_stateless", None) or {}  # debug of this stateless call
         left, right, syn = measured_sides(res, dbg.get("synthesized_side"))

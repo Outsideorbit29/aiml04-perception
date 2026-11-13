@@ -12,7 +12,9 @@ Two calling modes:
 
 Debug data (lane binary, fitted rows, synthesized side) of the last backend run goes to
 `last_debug` for video calls and to `last_debug_stateless` for stateless calls, so stateless
-calls never overwrite the debug data a video overlay is drawing from.
+calls never overwrite the debug data a video overlay is drawing from. Stage times work the same
+way: `last_timing_ms` (video) and `last_timing_ms_stateless` (stateless). `reset()` clears all
+four.
 
 Single-side fallback (`single_side_fallback: true` in the config): when only one boundary is
 found, the other is synthesized by offsetting the found one by `fallback_lane_width_frac` of the
@@ -125,7 +127,10 @@ class LaneDetector(ABC):
                 raise ValueError(f"fallback_conf_mult {self.fallback_conf_mult} not in [0, 1]")
         self.last_debug: dict = {}  # last video-mode (`detect(frame)`) backend run
         self.last_debug_stateless: dict = {}  # last `detect(frame, stateless=True)` run
-        self.last_timing_ms: dict[str, float] = {}  # stage times of the last backend run
+        self.last_timing_ms: dict[str, float] = {}  # stage times of the last video backend run
+        self.last_timing_ms_stateless: dict[str, float] = {}  # ... of the last stateless run
+        # stage times of the backend run in progress; backends add their keys here
+        self._call_timing_ms: dict[str, float] = {}
         self._frame_idx = 0
         self._last: LaneResult | None = None
         self._frame_hw: tuple[int, int] | None = None
@@ -162,22 +167,30 @@ class LaneDetector(ABC):
         self._frame_hw = None
         self.smoother.reset()
         self.last_debug = {}
+        self.last_debug_stateless = {}
+        self.last_timing_ms = {}
+        self.last_timing_ms_stateless = {}
 
     @abstractmethod
     def lane_binary(self, frame_bgr: np.ndarray) -> np.ndarray:
         """HxW bool mask of lane-marking pixels in image coordinates."""
 
     def _infer(self, frame_bgr: np.ndarray, smooth: bool = True) -> LaneResult:
-        """Backend binary + shared fit. Fills `last_timing_ms` with `binary_ms` (whole backend
-        stage) and `fit_ms`; backends may add finer keys (YOLOP: pre/model/post)."""
-        self.last_timing_ms = {}
+        """Backend binary + shared fit. Records `binary_ms` (whole backend stage) and `fit_ms`;
+        backends may add finer keys to `_call_timing_ms` (YOLOP: pre/model/post). The times go to
+        `last_timing_ms` for video calls (`smooth`) and `last_timing_ms_stateless` otherwise."""
+        timing: dict[str, float] = {}
+        self._call_timing_ms = timing
         t0 = time.perf_counter()
         binary = self.lane_binary(frame_bgr)
         t1 = time.perf_counter()
         res = self._lanes_from_binary(binary, smooth=smooth)
-        self.last_timing_ms.update(
-            {"binary_ms": 1e3 * (t1 - t0), "fit_ms": 1e3 * (time.perf_counter() - t1)}
-        )
+        timing.update({"binary_ms": 1e3 * (t1 - t0), "fit_ms": 1e3 * (time.perf_counter() - t1)})
+        if smooth:  # video call
+            self.last_timing_ms = timing
+        else:
+            self.last_timing_ms_stateless = timing
+        self._call_timing_ms = {}  # later direct backend calls must not edit the published dict
         return res
 
     def _lanes_from_binary(self, binary: np.ndarray, smooth: bool = True) -> LaneResult:

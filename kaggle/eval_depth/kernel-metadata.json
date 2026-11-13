@@ -1,0 +1,16 @@
+{
+  "id": "anish2906/aiml04-eval-depth",
+  "title": "aiml04-eval-depth",
+  "code_file": "runner.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "anish2906/aiml04-secrets",
+    "garymk/kitti-3d-object-detection-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

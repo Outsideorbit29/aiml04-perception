@@ -38,6 +38,7 @@ def cfg() -> dict:
     c["fitting"]["roi"]["polygon"] = ROI
     c["fitting"]["warp"]["src"] = SRC
     c["fitting"]["warp"]["dst"] = DST
+    c["yolop"]["output_kind"] = "auto"  # the fake sessions return logits or sigmoid outputs
     return c
 
 
@@ -627,7 +628,7 @@ def test_lane_probability_softmax_and_sigmoid_outputs():
     p = lane_probability(logits)
     assert p.shape == (1, 2) and p[0, 0] < 0.5 < p[0, 1]
     sig = np.array([[[0.9, 0.2]], [[0.3, 0.7]]], np.float32)  # per-channel sigmoid like YOLOP
-    np.testing.assert_array_equal(lane_probability(sig) >= 0.5, np.argmax(sig, axis=0) == 1)
+    np.testing.assert_array_equal(lane_probability(sig) > 0.5, np.argmax(sig, axis=0) == 1)
 
 
 @pytest.mark.parametrize("kind", ["probs", "logits"])
@@ -644,7 +645,7 @@ def test_decision_margin_equals_probability_threshold(kind):
     for t in (0.1, 0.3, 0.5, 0.75, 0.8, 0.95):
         m, thr = decision_margin(ll, kind, t)
         clear = np.abs(p - t) > 1e-4  # ignore float ties on the boundary
-        np.testing.assert_array_equal((m >= thr)[clear], (p >= t)[clear])
+        np.testing.assert_array_equal((m > thr)[clear], (p > t)[clear])
     m, thr = decision_margin(ll, kind, 0.5)  # 0.5: exactly the argmax margin, as before
     assert thr == 0.0
     np.testing.assert_array_equal(m, ll[1] - ll[0])
@@ -689,7 +690,9 @@ def test_yolop_mocked_recovers_lines(cfg, shape_hw):
     tol = max(4.0, 0.006 * w)
     assert np.abs(res.left.x_at(ys) - left_x(ys)).max() < tol
     assert np.abs(res.right.x_at(ys) - right_x(ys)).max() < tol
-    assert set(det.last_timing_ms) == {"pre_ms", "model_ms", "post_ms", "binary_ms", "fit_ms"}
+    keys = {"pre_ms", "model_ms", "post_ms", "binary_ms", "fit_ms"}
+    assert set(det.last_timing_ms_stateless) == keys
+    assert det.last_timing_ms == {}  # stateless calls never touch the video timing
 
 
 def test_yolop_every_n_frames_and_stateless(cfg):
@@ -698,9 +701,42 @@ def test_yolop_every_n_frames_and_stateless(cfg):
     img, _, _ = _painted_road()
     r0 = det.detect(img)
     assert det.detect(img) is r0 and sess.calls == 1  # 2nd frame reuses the result
+    video_timing = det.last_timing_ms
+    assert set(video_timing) >= {"model_ms", "binary_ms", "fit_ms"}
     det.detect(img, stateless=True)
     det.detect(img, stateless=True)
     assert sess.calls == 3  # stateless always runs the model
+    # stateless timing is kept apart: a video caller still sees its own last run
+    assert det.last_timing_ms is video_timing
+    assert det.last_timing_ms_stateless is not video_timing
+    assert set(det.last_timing_ms_stateless) == set(video_timing)
+    det.reset()
+    assert det.last_debug == {} and det.last_debug_stateless == {}
+    assert det.last_timing_ms == {} and det.last_timing_ms_stateless == {}
+
+
+@pytest.mark.parametrize("kind", ["probs", "logits"])
+def test_yolop_ties_and_all_zero_pixels_match_lane_probability_and_argmax(kind):
+    """An exact tie is background (YOLOP argmax picks channel 0); a probs pixel with both
+    channels 0 has p = 0.5, so it is lane only for thresholds below 0.5."""
+    from perception.lanes.yolop import decision_margin, lane_probability
+
+    if kind == "probs":
+        ll = np.array([[[0.0, 0.6, 0.3, 0.9]], [[0.0, 0.6, 0.7, 0.1]]], np.float32)
+    else:
+        ll = np.array([[[0.0, 2.0, -1.0, 3.0]], [[0.0, 2.0, 1.0, -3.0]]], np.float32)
+    argmax_lane = np.argmax(ll, axis=0) == 1
+    assert not argmax_lane[0, 0] and not argmax_lane[0, 1]  # ties -> background
+    m, thr = decision_margin(ll, kind, 0.5)
+    np.testing.assert_array_equal(m > thr, argmax_lane)
+    p = lane_probability(ll, kind)
+    for t in (0.2, 0.4, 0.5, 0.6, 0.8):
+        m, thr = decision_margin(ll, kind, t)
+        np.testing.assert_array_equal(m > thr, p > t)
+    if kind == "probs":
+        assert p[0, 0] == 0.5
+        assert (decision_margin(ll, kind, 0.3)[0] > 0)[0, 0]  # all-zero: lane below 0.5 ...
+        assert not (decision_margin(ll, kind, 0.7)[0] > 0)[0, 0]  # ... background above
 
 
 def test_ensure_weights_uses_existing_file_and_needs_url(tmp_path, monkeypatch):
@@ -948,7 +984,7 @@ def test_yolop_mocked_odd_and_horizontal_padding(cfg, shape_hw):
         assert (640 - new_h) % 2 == 1  # odd total pad
     margin = det.lane_margin(img)
     assert margin.shape == (h, w)
-    binary = margin >= det.margin_threshold
+    binary = margin > det.margin_threshold
     ys = np.linspace(0.64 * (h - 1), 0.88 * (h - 1), 10)
     tol = max(4.0, 0.01 * w)
     for fx in (left_x, right_x):

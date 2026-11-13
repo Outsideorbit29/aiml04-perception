@@ -50,12 +50,12 @@ _Last updated: 2026-11-13_
 | M1 Data | Done | 20k BDD subset + 10k val in YOLO format (kernel `anish2906/aiml04-data-prep`), EDA, fixtures, class decision. |
 | M2 Detection/tracking | M2.1–M2.6 done (M2.7 stretch open) | YOLO11s mAP@0.5 **0.553** (zero-shot 0.361), artifact `yolo11s-bdd-best`, eval W&B `8tzih6my`. MOT on 8 KITTI sequences (W&B `qvrkp7t1`): MOTA 52.5, IDF1 67.4, IDSW 176 with tuned ByteTrack (buffer 60, 2 consecutive frames); vehicles 63.7 / 75.7, pedestrians 38.5 / 54.9. New ids appear 2 frames after first detection. Det+track 52 FPS on T4. |
 | M3 Lanes | M3.1–M3.4 done (M3.5 stretch open) | 500 BDD val (W&B `bf4xp164`): lane F1 YOLOP **0.52** vs classical 0.23; ego-lane IoU tie ~0.42 (YOLOP finds no line on 129/500: faint markings, snow, traffic). YOLOP is the live default (switch `method` in M5). BDD uses `configs/lanes_bdd.yaml`; single-side fallback builds the ego mask from one line. Figures in `docs/figures/lanes_*`. |
-| M4 Depth/distance | Not started | Planned Nov 15–16. |
+| M4 Depth/distance | M4.1–M4.5 done (M4.6 pipeline open) | 1000 KITTI frames vs LiDAR (W&B `amgl803i`): AbsRel geometric 0.168, fused geometric+MiDaS-small **0.170** with coverage 1.00 (geometric 0.96), bias −0.001; 30–60 m 0.221. MiDaS-small is live (27 ms at 256x832 on T4); DPT-Hybrid is no better and 424 ms. Table in `docs/figures/depth_comparison.md`. TTC gate: track ≥ 0.75 s and closing > 2σ. |
 | M5 CARLA + ROS2 | Not started | Needs M0.7–M0.8 first. |
 | M6 ONNX/TensorRT | Not started | |
 | M7 Deliverables | Not started | |
 
-**Schedule:** M2 and M3 done on 2026-11-13, on PLAN.md dates. Next: M4 depth/distance (Nov 15–16); M0.7–M0.8 local CARLA/ROS2 setup needed before M5 (Nov 16).
+**Schedule:** M2, M3 and M4.1–M4.5 done on 2026-11-13, ahead of PLAN.md dates. Next: M4.6 `perception/pipeline.py` (sim-ros-integrator; use `backend="torch"` on Kaggle until the M6 ONNX export); M0.7–M0.8 local CARLA/ROS2 setup needed before M5 (Nov 16).
 
 Useful facts learned so far:
 - The Kaggle CLI is at `C:\Users\anish\AppData\Roaming\Python\Python314\Scripts\kaggle.exe` (not on PATH).
@@ -64,7 +64,9 @@ Useful facts learned so far:
 - Run a `MODE = "smoke"` job first and look at its debug outputs before any full run; implausible numbers (e.g. whole groups at 0.000) have meant eval bugs.
 - Don't switch branches in the main checkout while a subagent is editing; merge through `git worktree` instead.
 - `LaneResult.contains()` uses the ego mask only on its measured rows; below/above it uses the polylines or extends the mask edges. M4.5 `in_ego_lane` can call it with the box bottom-centre directly.
-- YOLOP ONNX outputs probabilities (range ~0.41–1), not logits; `yolop.output_kind: auto` handles both.
+- YOLOP ONNX outputs probabilities (range ~0.41–1), not logits; `configs/lanes.yaml` sets `yolop.output_kind: probs` (`auto` also works).
+- MiDaS via `torch.hub` loads a nested hub repo (`rwightman/gen-efficientnet-pytorch`) that must be pre-trusted (`trusted_hub_repos` in `configs/depth.yaml`), or the Kaggle job hangs on a stdin prompt. `configs/depth.yaml` defaults to `backend: onnx`; Kaggle scripts pass `backend="torch"`.
+- Distance fusion is done in inverse depth; averaging in metres biased fused distances short (−0.08 at 30–60 m).
 - A 50-epoch YOLO11s run on 20k images at 640 takes ~4.6 h on a Kaggle T4 (fits one session).
 
 ## Claude-specific notes
