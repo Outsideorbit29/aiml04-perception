@@ -248,3 +248,103 @@ def test_reset_and_alignment_reuse():
     fusion.reset()
     assert fusion.last_alignment is None and not fusion.bank.filters
     assert fusion.update([near], None, 0.2, 2, HW).objects == []
+
+
+# ------------------------------------------------------------------ QA additions (M4 gate)
+
+
+def test_empty_frame_with_depth_map_then_track():
+    """Tracker returns nothing (e.g. right after Tracker.reset()) while MiDaS ran: no crash, empty
+    frame, and an id that shows up later still gets a distance."""
+    fusion = DistanceFusion(CFG, CAM)
+    inv = np.full(HW, 100.0, np.float32)
+    frame = fusion.update([], None, 0.0, 0, HW, inv_depth=inv)
+    assert frame.objects == [] and fusion.last_stats["aligned"] == 0
+    frame = fusion.update([track(3, 12.0)], None, 0.1, 1, HW, inv_depth=None)
+    assert len(frame.objects) == 1 and frame.objects[0].distance_m == pytest.approx(12.0, rel=1e-3)
+
+
+def test_nan_depth_in_box_is_not_an_anchor_and_distances_stay_finite():
+    fusion = DistanceFusion(CFG, CAM)
+    tracks = [track(1, 8.0, x=150), track(2, 15.0, x=400), track(3, 25.0, x=650)]
+    near = Track(4, Detection(np.array([300, 330, 500, 449], np.float32), 0.9, 0, "car"))
+    inv = inv_depth_for(tracks, 0.004, 0.01)
+    x1, y1, x2, y2 = tracks[1].det.bbox_xyxy.astype(int)
+    inv[y1 : y2 + 1, x1 : x2 + 1] = np.nan  # MiDaS invalid on object 2
+    frame = fusion.update([*tracks, near], None, 0.0, 0, HW, inv_depth=inv)
+    ms = {m.det.bbox_xyxy.tobytes(): m for m in fusion.last_measurements}
+    m2 = ms[tracks[1].det.bbox_xyxy.tobytes()]
+    assert not m2.anchor and m2.midas is None and m2.geometric is not None
+    assert fusion.last_stats["anchors"] == 2
+    assert all(np.isfinite(o.distance_m) and np.isfinite(o.distance_std) for o in frame.objects)
+    by_id = {o.track.track_id: o for o in frame.objects}
+    assert by_id[2].distance_m == pytest.approx(15.0, rel=1e-3)  # geometric only
+
+
+def test_leave_one_out_does_not_see_the_scored_anchor():
+    """An anchor's leave-one-out MiDaS distance must not change when its own geometric distance
+    changes (no leakage of the scored object into its fit)."""
+    fusion = DistanceFusion(CFG, CAM)
+    zs = (6.0, 10.0, 15.0, 22.0, 30.0)
+    tracks = [track(i, z, x=80 + 150 * i) for i, z in enumerate(zs)]
+    dets = [t.det for t in tracks]
+    inv = inv_depth_for(tracks, 0.004, 0.01)
+    x1, y1, x2, y2 = dets[2].bbox_xyxy.astype(int)
+    inv[y1 - 20 : y2 + 21, x1 : x2 + 1] = inv[y2, x1]  # MiDaS value of object 2 around its box
+    base, _ = fusion.measure(dets, HW, inv, leave_one_out=True)
+    moved = [*dets]
+    moved[2] = Detection(dets[2].bbox_xyxy + np.array([0, 4, 0, 4], np.float32), 0.9, 0, "car")
+    shifted, _ = fusion.measure(moved, HW, inv, leave_one_out=True)
+    assert shifted[2].anchor and shifted[2].geometric[0] < base[2].geometric[0] - 0.5
+    assert shifted[2].midas[0] == pytest.approx(base[2].midas[0], rel=1e-9)
+    # contrast: plain least squares (robust rejection off) without leave-one-out lets the scored
+    # anchor's own geometric distance move its MiDaS distance
+    plain = {**CFG, "alignment": {**CFG["alignment"], "huber_k": 1e6, "reject_k": 1e6}}
+    ls = DistanceFusion(plain, CAM)
+    a, _ = ls.measure(dets, HW, inv)
+    b, _ = ls.measure(moved, HW, inv)
+    assert a[2].midas[0] != pytest.approx(b[2].midas[0], rel=1e-6)
+
+
+def test_leave_one_out_with_three_and_one_anchors():
+    fusion = DistanceFusion(CFG, CAM)
+    tracks = [track(1, 8.0, x=150), track(2, 15.0, x=400), track(3, 25.0, x=650)]
+    dets = [t.det for t in tracks]
+    inv = inv_depth_for(tracks, 0.004, 0.0)  # zero shift: scale-only fits are exact
+    meas, align = fusion.measure(dets, HW, inv, leave_one_out=True)
+    assert align.mode == "affine" and align.n_anchors == 3
+    for ms, z in zip(meas, (8.0, 15.0, 25.0), strict=True):
+        assert ms.align_mode == "scale" and ms.align_anchors == 2  # 3 - 1 < min_points_affine
+        assert ms.midas[0] == pytest.approx(z, rel=1e-3)
+    lone, _ = fusion.measure(dets[:1], HW, inv, leave_one_out=True)
+    assert lone[0].anchor and lone[0].midas is None and lone[0].align_mode is None
+
+
+def test_closing_speed_with_irregular_stamps():
+    """dt comes from the stamps: dropped/late frames do not change the speed estimate (m/s)."""
+    bank = FilterBank(KF)
+    v, t, out = 7.0, 0.0, None
+    steps = [0.05, 0.10, 0.05, 0.15] * 12
+    for dt in steps:
+        out = bank.update(1, 0, t, 45.0 - v * t, 0.1)
+        t += dt
+    assert out.closing_speed_mps == pytest.approx(v, abs=0.3)
+    assert out.ttc_s == pytest.approx(out.distance_m / v, rel=0.05)
+
+
+@pytest.mark.xfail(
+    reason="QA M4 finding: fuse() weights each estimate by its own Z^2 std, so the shorter "
+    "estimate always gets more weight and the fused distance is biased short (~-10 % at 45 m "
+    "with KITTI noise). Fusing in inverse depth removes it.",
+    strict=False,
+)
+def test_fused_distance_is_not_biased_short():
+    rng = np.random.default_rng(0)
+    k, z = 0.0055, 45.0  # inverse-depth std (1/m) of the KITTI camera; object at 45 m
+    out = []
+    for _ in range(4000):
+        a = 1.0 / (1.0 / z + rng.normal(0, k))
+        b = 1.0 / (1.0 / z + rng.normal(0, 2 * k))
+        if a > 0 and b > 0:
+            out.append(fuse([(a, a * a * k), (b, b * b * 2 * k)])[0])
+    assert abs(np.median(out) / z - 1.0) < 0.03

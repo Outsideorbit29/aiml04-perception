@@ -199,3 +199,38 @@ def test_overlays_render():
     maps = {"midas_small": np.random.default_rng(0).random((375, 1242)).astype(np.float32)}
     pred = draw_pred_overlay(gt, frame, ["geometric", "midas_small"], maps, dcfg)
     assert pred.shape == (375 + 50, 1242, 3)
+
+
+# ------------------------------------------------------------------ QA additions (M4 gate)
+
+
+def test_velo_to_rect_applies_tr_then_r0_rect():
+    """x_rect = R0_rect @ Tr_velo_to_cam @ x_velo. With a non-identity R0_rect the opposite order
+    gives a different point, so this pins the composition (the identity calib above cannot)."""
+    a = math.radians(2.0)
+    r0 = np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
+    r0_line = "R0_rect: " + " ".join(map(str, r0.ravel()))
+    text = CALIB_TEXT.replace("R0_rect: 1 0 0 0 1 0 0 0 1", r0_line)
+    c = parse_calib(text)
+    p = np.array([[20.0, 2.0, -1.0]])
+    expected = r0 @ (TR[:, :3] @ p[0] + TR[:, 3])
+    np.testing.assert_allclose(velo_to_rect(p, c)[0], expected, atol=1e-12)
+    wrong = np.eye(4)[:3] @ (c["Tr_velo_to_cam"] @ c["R0_rect"]) @ np.append(p[0], 1.0)
+    assert np.abs(wrong - expected).max() > 0.1
+
+
+def test_geometric_distance_from_kitti_p2_round_trip():
+    """A ground point 1.65 m below the camera projected with a real KITTI P2 comes back at its
+    depth from CameraModel.with_intrinsics(P2) (the P2 translation column is ignored: < 1 %)."""
+    p2 = np.array(
+        [
+            [721.5377, 0.0, 609.5593, 44.85728],
+            [0.0, 721.5377, 172.854, 0.2163791],
+            [0.0, 0.0, 1.0, 0.002745884],
+        ]
+    )
+    base = CameraModel(1242, 375, 1.0, 1.0, 1.0, 1.0, 1.65, 0.0, 2.0, 0.0)
+    cam = base.with_intrinsics(p2, HW)
+    for z in (5.0, 15.0, 30.0):
+        v = project_rect(np.array([[0.5, 1.65, z]]), p2)[0, 1]
+        assert cam.ground_distance(v)[0] == pytest.approx(z, rel=1e-2)
