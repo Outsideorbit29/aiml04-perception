@@ -63,9 +63,11 @@ yolop:                     # M3.2: pretrained YOLOP ONNX (hustvl/YOLOP), lane-li
   std: [0.229, 0.224, 0.225]
   lane_output: lane_line_seg # ONNX output name, shape (1, 2, H_in, W_in)
   lane_threshold: 0.5        # on the lane-class probability, in (0, 1); 0.5 == YOLOP's argmax
-  output_kind: auto          # auto | probs | logits. probs: per-channel sigmoid, p = ll1/(ll0+ll1);
+  output_kind: probs         # auto | probs | logits. probs: per-channel sigmoid, p = ll1/(ll0+ll1);
                              # logits: p = softmax(ll)[1]. auto: all values in [0, 1] on the first
-                             # frame -> probs (range and choice are printed once)
+                             # frame -> probs (range and choice are printed once). probs is set
+                             # explicitly: the M3.3 Kaggle log showed lane_line_seg in
+                             # [0.407, 1.0] (sigmoid outputs), and a first frame could not flip it
 
 viz:                       # overlay colours (BGR) for perception.lanes.render
   left_color: [255, 0, 0]
