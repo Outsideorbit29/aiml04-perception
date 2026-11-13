@@ -108,9 +108,10 @@ kalman:                     # perception.fusion.FilterBank (per track id)
   init_velocity_std: 10.0   # m/s, velocity is unknown on the first measurement
   gate_chi2: 16.0           # innovation NIS above this (4 sigma) = outlier: coast on prediction
   gate_restart_count: 2     # this many gated measurements in a row = id switch -> restart
-  reacquire_restart_gap_s: 0.25  # a gated measurement after the id was unmeasured this long
-                                 # restarts at once (no coasting on an extrapolated prediction):
-                                 # > 2 missed frames at 10 Hz (KITTI), > 4 at 20 Hz (CARLA)
+  reacquire_restart_gap_s: 0.275  # a gated measurement whose gap to the last measurement exceeds
+                                  # this restarts at once (no coasting on an extrapolated
+                                  # prediction): >= 2 missed frames at 10 Hz (KITTI, gap 0.3 s),
+                                  # >= 5 at 20 Hz (CARLA); half a frame away from both boundaries
   restart_on_class_change: false  # ByteTrack ignores class; car/truck flips on one object are
                                   # common, and the gate already catches a real id switch
   max_gap_s: 1.0            # no measurement for longer -> restart on the next one

@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
-REF = "m4-pipeline"  # branch, tag or commit SHA to run; set back to "main" before merging
+REF = "main"  # branch, tag or commit SHA to run; set back to "main" before merging
 MODE = "full"  # smoke | full
 EXTRA = ["--smoke"] if MODE == "smoke" else []
 JOB_CMDS = [

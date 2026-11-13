@@ -624,6 +624,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     )
     text = json.dumps(summary, indent=2, allow_nan=False)
     if args.summary:
+        Path(args.summary).parent.mkdir(parents=True, exist_ok=True)
         Path(args.summary).write_text(text, encoding="utf-8")
     print(text, flush=True)
     return summary
