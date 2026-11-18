@@ -100,7 +100,7 @@ Code is written and unit-tested without the simulator. The laptop runs CARLA onl
 - [x] M5.5 Scenarios: stopped car, pedestrian crossing, cut-in, night/rain (Town01/Town02, the lightest maps)
 - [x] M5.6 (frames recorded + uploaded 2026-11-18; Kaggle sim eval done 2026-11-18, W&B `ytp5wgb0`) **Session A (~20 min):** record ~3k CARLA frames with GT, upload them as Kaggle dataset `aiml04-carla-frames`, and run the sim eval (mAP, distance error) on Kaggle
 - [x] M5.7 `stack.launch.py` and rosbag + MP4 recording
-- [ ] M5.8 **Sessions B–D (~30 min each):** debug the loop, then record each scenario for the demo
+- [x] M5.8 **Sessions B–D (~30 min each):** debug the loop, then record each scenario for the demo
 - [x] M5.9 **(S)** Fine-tune YOLO for 5 epochs on a BDD + CARLA mix, on Kaggle
 - Exit: in every scenario the ego car stops before colliding. Screen-record each.
 
