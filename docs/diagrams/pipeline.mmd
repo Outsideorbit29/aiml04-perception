@@ -1,0 +1,32 @@
+%% Data flow of perception.pipeline.Pipeline.process (one BGR frame -> PerceptionFrame).
+%% Stage order and types checked against perception/pipeline.py and perception/types.py.
+%% The same Pipeline runs offline (python -m perception.pipeline) and inside perception_node.
+flowchart TB
+    IN["BGR frame (HxWx3 uint8)<br/>+ stamp, frame_id"]
+    DET["1. Detector.detect(frame)<br/>letterbox 640, YOLO11s, NMS<br/>backend: torch / onnx / tensorrt"]
+    TRK["2. Tracker.update(dets, frame)<br/>ByteTrack (supervision)<br/>id after 2 consecutive frames"]
+    LANE["3. LaneDetector.detect(frame)<br/>classical (OpenCV) or YOLOP<br/>lane binary, bird's-eye warp, polyfit, smoothing"]
+    DEPTH["4. DepthEstimator.maybe_estimate(frame)<br/>MiDaS-small relative inverse depth<br/>None on skipped frames (every_n_frames)"]
+    subgraph FUSION["5. DistanceFusion.update(tracks, lanes, stamp, frame_id, hw, inv_depth)"]
+        direction TB
+        GEO["Geometric distance<br/>box bottom row + camera height/pitch<br/>(+ optional detector-box calibration)"]
+        ALIGN["Per-frame scale/shift fit<br/>MiDaS -> metric on near, confident anchors"]
+        MODE["fusion.mode<br/>inverse_depth_weighted (KITTI/BDD)<br/>geometric_first (CARLA)"]
+        KF["Per-track Kalman filter<br/>distance, closing speed, gated TTC"]
+        EGO["in_ego_lane<br/>LaneResult.contains + metric lateral corridor"]
+        GEO --> MODE
+        ALIGN --> MODE
+        MODE --> KF --> EGO
+    end
+    OUT["PerceptionFrame<br/>objects: list of ObjectState<br/>lanes: LaneResult<br/>timings_ms: detect/track/lanes/depth/fusion/total"]
+    LEAD["PerceptionFrame.lead_object()<br/>closest in-ego-lane object"]
+    SINKS["Outputs<br/>offline: annotated MP4, frames.jsonl, summary.json<br/>live: ROS2 messages to control_node"]
+
+    IN --> DET -->|"list of Detection"| TRK
+    IN --> LANE
+    IN --> DEPTH
+    TRK -->|"list of Track"| FUSION
+    LANE -->|"LaneResult"| FUSION
+    DEPTH -->|"HxW inverse depth or None"| FUSION
+    FUSION --> OUT --> LEAD
+    OUT --> SINKS
