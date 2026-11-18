@@ -1,0 +1,16 @@
+{
+  "id": "anish2906/aiml04-sim-eval",
+  "title": "aiml04-sim-eval",
+  "code_file": "runner.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "anish2906/aiml04-secrets",
+    "anish2906/aiml04-carla-frames"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
