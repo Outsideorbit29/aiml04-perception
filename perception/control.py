@@ -29,15 +29,25 @@ Rules (ARCHITECTURE.md 3.7, thresholds in ``control`` of configs/carla.yaml), ev
 6. Leaving ACC/GAP (hysteresis + dwell). Back to ``AUTOPILOT`` only when, for
    ``exit_confirm_frames`` consecutive frames, the TTC is clear (none or
    ``>= acc_exit_ttc_s``), the gap is clear (``d >= desired gap + gap_exit_margin_m`` or the lead
-   opens faster than ``gap_exit_opening_mps``) and the standstill guard is off, and the mode has
-   lasted ``min_engaged_frames``. A lead dropout keeps the mode and the last brake for
-   ``lead_lost_exit_frames`` frames.
-7. Standstill guard (soft HOLD). In ACC/GAP, below ``standstill_speed_mps`` with the lead closer
-   than ``standstill_hold_distance_m``, the brake is at least ``standstill_brake`` and the mode
-   cannot exit, so the car does not creep forward and re-brake.
-8. The ACC/GAP brake changes by at most ``brake_rate_up`` / ``brake_rate_down`` per frame. AEB
-   (full brake) and HOLD are applied at once; entry into AEB has no dwell or hysteresis.
-9. Otherwise ``AUTOPILOT`` (no override).
+   opens faster than ``gap_exit_opening_mps``), the standstill guard is off and the lead is not
+   *tracked* (rule 7), and the mode has lasted ``min_engaged_frames``. A lead dropout keeps the
+   mode and the last brake for ``lead_lost_exit_frames`` frames.
+7. Lead tracking (no early exit). A lead within ``follow_range_m`` that is stationary or closing
+   (not opening faster than ``gap_exit_opening_mps``) keeps ACC/GAP engaged: the autopilot
+   would accelerate towards it at cruise speed and ACC would re-engage (the 2026-11-19 Session B
+   ACC -> AUTOPILOT -> ACC/GAP stop-and-go).
+8. Approach (controlled creep). Engaged, with no brake requested or still applied, the ego
+   slower than ``approach_speed_mps`` and the lead at least ``approach_margin_m`` beyond the
+   desired gap, the controller creeps: throttle ``approach_throttle * (1 - v /
+   approach_speed_mps)``. The ego therefore never exceeds the approach speed under ACC/GAP and
+   closes up to the gap, where the gap brake and the standstill guard stop it.
+9. Standstill guard (soft HOLD). In ACC/GAP, below ``standstill_speed_mps`` with the lead closer
+   than ``standstill_hold_distance_m``, the brake is at least ``standstill_brake``, there is no
+   throttle and the mode cannot exit. Beyond that distance (but inside ``follow_range_m``) a
+   stopped ego creeps closer (rule 8) instead.
+10. The ACC/GAP brake changes by at most ``brake_rate_up`` / ``brake_rate_down`` per frame. AEB
+    (full brake) and HOLD are applied at once; entry into AEB has no dwell or hysteresis.
+11. Otherwise ``AUTOPILOT`` (no override).
 """
 
 from __future__ import annotations
@@ -71,6 +81,10 @@ REQUIRED_KEYS = (
     "standstill_speed_mps",
     "standstill_hold_distance_m",
     "standstill_brake",
+    "follow_range_m",
+    "approach_speed_mps",
+    "approach_throttle",
+    "approach_margin_m",
     "brake_rate_up",
     "brake_rate_down",
 )
@@ -128,6 +142,11 @@ class LongitudinalController:
             raise ValueError("acc_exit_ttc_s must be >= acc_ttc_s")
         if float(cfg["brake_rate_up"]) <= 0 or float(cfg["brake_rate_down"]) <= 0:
             raise ValueError("brake_rate_up and brake_rate_down must be > 0")
+        if float(cfg["standstill_hold_distance_m"]) < float(cfg["gap_min_m"]):
+            raise ValueError("standstill_hold_distance_m must be >= gap_min_m (no creep into gap)")
+        thr, v_app = float(cfg["approach_throttle"]), float(cfg["approach_speed_mps"])
+        if not 0.0 <= thr <= 1.0 or v_app < 0.0:
+            raise ValueError("approach_throttle must be in [0, 1] and approach_speed_mps >= 0")
         self.reset()
 
     def reset(self) -> None:
@@ -220,11 +239,11 @@ class LongitudinalController:
         standstill = v < float(c["standstill_speed_mps"]) and d < float(
             c["standstill_hold_distance_m"]
         )
+        opening = lead.closing_speed_mps < -float(c["gap_exit_opening_mps"])
+        tracked = d <= float(c["follow_range_m"]) and not opening
         ttc_clear = ttc is None or ttc >= float(c["acc_exit_ttc_s"])
-        gap_clear = d >= gap + float(c["gap_exit_margin_m"]) or lead.closing_speed_mps < -float(
-            c["gap_exit_opening_mps"]
-        )
-        clear = ttc_clear and gap_clear and not standstill
+        gap_clear = d >= gap + float(c["gap_exit_margin_m"]) or opening
+        clear = ttc_clear and gap_clear and not standstill and not tracked
         self._clear_frames = self._clear_frames + 1 if clear else 0
         if self._clear_frames >= int(c["exit_confirm_frames"]) and self._mode_frames >= int(
             c["min_engaged_frames"]
@@ -241,7 +260,17 @@ class LongitudinalController:
         if standstill and target < float(c["standstill_brake"]):
             target = float(c["standstill_brake"])
             why = f"standstill hold, d {d:.1f}m"
-        return self._ramped(self._mode, target, lead, why)
+        out = self._ramped(self._mode, target, lead, why)
+        v_app = float(c["approach_speed_mps"])
+        if (
+            out.brake == 0.0
+            and not standstill
+            and v < v_app
+            and d >= gap + float(c["approach_margin_m"])
+        ):
+            out.throttle = float(c["approach_throttle"]) * (1.0 - v / v_app)
+            out.reason = f"approach, d {d:.1f}m"
+        return out
 
     def _set_mode(self, mode: str) -> None:
         if mode != self._mode:

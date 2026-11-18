@@ -103,8 +103,16 @@ control:                       # control_node -> perception.control.Longitudinal
   exit_confirm_frames: 10      # exit conditions must hold this many consecutive frames (0.5 s)
   lead_lost_exit_frames: 10    # in ACC/GAP a lead dropout keeps mode + last brake this long
   standstill_speed_mps: 0.5    # soft HOLD: below this speed ...
-  standstill_hold_distance_m: 15.0  # ... with the lead closer than this, ACC/GAP do not release
+  standstill_hold_distance_m: 13.0  # ... with the lead closer than this (= gap_min_m +
+                               # gap_exit_margin_m), ACC/GAP do not release and do not creep
   standstill_brake: 0.3        # ... and brake at least this (no creep-and-rebrake)
+  # Stop-and-go (2026-11-19 Session B: ACC exited to AUTOPILOT with a stationary lead 13-18 m
+  # ahead, then re-engaged or would have rolled up at cruise throttle).
+  follow_range_m: 30.0         # a stationary/closing lead within this keeps ACC/GAP engaged
+                               # (> desired gap at cruise 10 + 8.3 * 1.5 = 22.5 m + margin)
+  approach_speed_mps: 2.0      # engaged and slower than this, lead beyond the gap: creep ...
+  approach_throttle: 0.3       # ... with throttle approach_throttle * (1 - v / approach_speed)
+  approach_margin_m: 1.0       # ... only while d >= desired gap + this (no creep into the gap)
   brake_rate_up: 0.1           # max ACC/GAP brake increase per frame (2.0/s); AEB is immediate
   brake_rate_down: 0.05        # max ACC/GAP brake decrease per frame (1.0/s)
 
@@ -120,7 +128,9 @@ scenario:                      # sim/scenarios/run.py (shared settings)
   ego_wait_s: 60.0             # wait for the bridge to spawn the ego
   arm_speed_mps: 3.0           # stop detection starts once the ego has driven this fast
   stop_speed_mps: 0.2          # ego counts as stopped below this ...
-  stop_hold_s: 2.0             # ... for this long -> scenario ends
+  stop_hold_s: 2.0             # ... for this long -> stop detected (outcome "stopped")
+  post_stop_s: 3.0             # keep running this long after the stop (demo footage shows the
+                               # car settled; a collision in the tail still fails the run)
   timeout_s: 90.0              # sim seconds
   in_path_margin_m: 0.5        # lateral margin for "in the ego path" when measuring the gap
   results: runs/scenarios/results.jsonl

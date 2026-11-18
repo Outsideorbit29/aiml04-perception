@@ -24,12 +24,16 @@ class EpisodeMonitor:
     ``update(t, speed, gap)``: sim time (s), ego forward speed (m/s), bumper gap to the hazard
     when it is in the ego path (None otherwise). The episode is ``stopped`` once the ego, after
     having reached ``arm_speed_mps``, stays below ``stop_speed_mps`` for ``stop_hold_s``.
+    ``update`` then keeps returning None for ``post_stop_s`` more seconds (demo footage of the
+    settled car; ``stop_gap_m`` is the gap at the stop, ``final_gap_m`` the gap at the end). A
+    collision in that tail still ends the episode as ``collision``.
     """
 
     arm_speed_mps: float
     stop_speed_mps: float
     stop_hold_s: float
     timeout_s: float
+    post_stop_s: float = 0.0
     t0: float | None = None
     t: float = 0.0
     frames: int = 0
@@ -43,6 +47,8 @@ class EpisodeMonitor:
     _slow_since: float | None = None
     _last_gap: float | None = None
     _last_speed: float = 0.0
+    _stop_t: float | None = None
+    post_stop_max_speed_mps: float | None = None
     outcome: str | None = None  # stopped | collision | timeout | aborted
     events: list[str] = field(default_factory=list)
 
@@ -60,17 +66,29 @@ class EpisodeMonitor:
             self.armed = True
             self.events.append(f"armed at t={t - self.t0:.2f}s")
         if self.outcome is not None:
-            return self.outcome
+            return self._finished(t, speed_mps)
         if self.armed and speed_mps < self.stop_speed_mps:
             if self._slow_since is None:
                 self._slow_since = t
             if t - self._slow_since >= self.stop_hold_s:
                 self.stop_gap_m = self._last_gap
                 self.outcome = "stopped"
+                self._stop_t = t
+                self.events.append(f"stopped at t={t - self.t0:.2f}s")
+                return self._finished(t, speed_mps)
         else:
             self._slow_since = None
         if self.outcome is None and t - self.t0 >= self.timeout_s:
             self.outcome = "timeout"
+        return self.outcome
+
+    def _finished(self, t: float, speed_mps: float) -> str | None:
+        """The outcome, or None while the post-stop tail of a ``stopped`` episode runs."""
+        if self.outcome == "stopped" and self._stop_t is not None:
+            prev = self.post_stop_max_speed_mps
+            self.post_stop_max_speed_mps = speed_mps if prev is None else max(prev, speed_mps)
+            if t - self._stop_t < self.post_stop_s:
+                return None
         return self.outcome
 
     def on_collision(self, other: str) -> None:
@@ -90,6 +108,9 @@ class EpisodeMonitor:
             "collision_speed_mps": _r(self.collision_speed_mps),
             "min_gap_m": _r(self.min_gap_m),
             "stop_gap_m": _r(self.stop_gap_m),
+            "final_gap_m": _r(self._last_gap),
+            "post_stop_s": _r(self.post_stop_s),
+            "post_stop_max_speed_mps": _r(self.post_stop_max_speed_mps),
             "max_speed_mps": _r(self.max_speed_mps),
             "sim_duration_s": _r(self.t - self.t0) if self.t0 is not None else 0.0,
             "frames": self.frames,
