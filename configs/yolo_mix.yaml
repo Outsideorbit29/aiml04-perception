@@ -35,6 +35,7 @@ pseudo:
   classes: [rider, traffic light, traffic sign]
   conf: 0.4
   imgsz: 640
+  batch: 32                          # frames per predict() call (a list source is one batch)
 
 mix:
   carla_share: 0.25                  # target share of CARLA entries in the train list

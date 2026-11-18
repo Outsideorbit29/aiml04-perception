@@ -136,6 +136,12 @@ def pseudo_rows(
     ]
 
 
+def chunks(items: Sequence[Any], size: int) -> list[list[Any]]:
+    """Consecutive slices of at most ``size`` items."""
+    size = max(1, int(size))
+    return [list(items[i : i + size]) for i in range(0, len(items), size)]
+
+
 def merge_label_text(gt_text: str, rows: Sequence[str]) -> str:
     lines = [ln for ln in gt_text.splitlines() if ln.strip()] + list(rows)
     return "\n".join(lines) + ("\n" if lines else "")
@@ -221,14 +227,17 @@ def pseudo_label(
         from ultralytics import YOLO
 
         model = YOLO(str(base))
-        for r in model.predict(
-            source=[str(p) for p in train], stream=True, conf=float(pc["conf"]), classes=keep,
-            imgsz=int(pc["imgsz"]), verbose=False,
-        ):
-            b = r.boxes
-            rows[Path(r.path).stem] = pseudo_rows(
-                b.cls.tolist(), b.xywhn.tolist(), b.conf.tolist(), keep, float(pc["conf"])
-            )
+        # A list source is predicted as one batch, so feed it in chunks (2,180 frames at once
+        # asked for 16 GB on the T4).
+        for chunk in chunks([str(p) for p in train], int(pc["batch"])):
+            for r in model.predict(
+                source=chunk, conf=float(pc["conf"]), classes=keep, imgsz=int(pc["imgsz"]),
+                verbose=False,
+            ):
+                b = r.boxes
+                rows[Path(r.path).stem] = pseudo_rows(
+                    b.cls.tolist(), b.xywhn.tolist(), b.conf.tolist(), keep, float(pc["conf"])
+                )
     counts: Counter = Counter()
     for p in train:
         counts.update(names[int(r.split()[0])] for r in rows[p.stem])

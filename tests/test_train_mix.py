@@ -7,6 +7,7 @@ import yaml
 
 from scripts.train_mix import (
     block_split,
+    chunks,
     delta_rows,
     flat,
     frame_index,
@@ -76,6 +77,12 @@ def test_pseudo_rows_filter_class_and_conf():
                        keep=[4, 7, 8], conf_thr=0.4)
     assert rows == ["7 0.500000 0.500000 0.100000 0.200000",
                     "4 0.500000 0.500000 0.100000 0.200000"]
+
+
+def test_chunks_cover_all_items_in_order():
+    parts = chunks(list(range(70)), 32)
+    assert [len(p) for p in parts] == [32, 32, 6] and sum(parts, []) == list(range(70))
+    assert chunks([], 32) == []
 
 
 def test_merge_label_text():
