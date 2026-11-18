@@ -64,6 +64,18 @@ KITTI videos are qualitative only (MOT metrics below, M2.6). Fragmentation is vi
 - **False leads (v2).** With one lane line measured, the synthesized side spilled over the kerb and parked cars became the lead (frame 319: LEAD at 6.1 m). v3 added a metric lateral corridor (`fusion.ego_lane` in `configs/depth.yaml`); v4 kept it at all ranges with a curve allowance (`|X| <= 1.5 + Z^2/(2*400)` m with trusted lanes, 1.2 m up to 30 m without) and restarts the Kalman filter when a track is re-acquired with a jumped distance (coasted predictions had reached 1.2 m, TTC 0.12 s).
 - **Remaining (v4).** The one AEB-trigger frame (224) is a car crossing ahead at 7.7 m, 1 cm inside the corridor for one frame. 47 of the 111 lead frames are on objects ≥ 2.2 m lateral at > ~24 m, where the curve allowance lets the lane mask decide; 4 of 5 slow-down (TTC 2–4 s) lead frames are of that kind. M5 `control_node` must require a lead condition to persist over several frames, and the long-range corridor needs tightening (lane-depth follow-up).
 
+## ONNX / TensorRT (M6)
+Full table, method and environment: `docs/benchmarks.md`. T4, batch 1, 200 warm-up + 1000 timed iterations; "model" = network only with host I/O, "module" = live call incl. pre/post-processing.
+
+| Date | Run | Model | PyTorch FP32 p50 ms | ONNX Runtime p50 ms | TensorRT FP16 p50 ms | TRT speed-up | TRT module FPS | Accuracy delta (TRT vs PyTorch) | W&B |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-11-18 | m6-export-smoke + m6-bench-smoke (sanity only) | all 3 | – | – | – | – | – | – | 10 + 50 iterations, 40 val images: every row ran; numbers not used |
+| 2026-11-18 | m6-bench (commit c52e607) | YOLO11s 640 | 9.93 | 10.79 | **3.66** | 2.72x | 102.7 | mAP@0.5 −0.0001, mAP@0.5:0.95 +0.0001 (500 BDD val; ONNX ±0) | [218me22j](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/218me22j) |
+| 2026-11-18 | m6-bench (commit c52e607) | MiDaS-small 256x448 | 10.95 | 9.04 | **2.58** | 4.25x | 83.6 | AbsRel vs PyTorch output 0.0096 (100 frames; ONNX 0.0000) | [218me22j](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/218me22j) |
+| 2026-11-18 | m6-bench (commit c52e607) | YOLOP 640 | 22.78 | 20.22 | **6.70** | 3.40x | 99.9 | lane-mask IoU vs PyTorch 0.9928 (100 frames; ONNX 1.0000) | [218me22j](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/218me22j) |
+
+**M6 notes.** Export + parity run [vhjwlvxw](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/vhjwlvxw): ONNX Runtime vs PyTorch max abs diff on 20 fixture frames: YOLO boxes 1.2e-3 px / scores 2.9e-6, MiDaS 7.4e-3 (range ~1060), YOLOP lane output 2.9e-5. ONNX artifacts: `yolo11s-bdd-onnx:v0` (opset 17, 1x3x640x640), `midas-small-onnx:v0` (opset 17, 1x3x256x448), `yolop-onnx:v0` (hustvl release file, opset 12, sha256 as in `configs/lanes.yaml`). TRT FP16 engines built on the T4 in 140–283 s with the same script as the laptop build. Peak VRAM per model: TRT 173–189 MB, PyTorch 249–291 MB, ONNX Runtime 383–639 MB. With TRT the module time is dominated by CPU pre/post-processing (YOLO ~6 of 9.6 ms, MiDaS ~9.5 of 12.1 ms at 1280x720). Laptop end-to-end row pending (M6.4/M6.5).
+
 ## Closed loop in CARLA (M5)
 | Date | Scenario | Weather | Stopped safely? | Min gap (m) | Pipeline FPS | Video |
 |---|---|---|---|---|---|---|
