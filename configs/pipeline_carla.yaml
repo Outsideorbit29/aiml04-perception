@@ -1,0 +1,23 @@
+# Live pipeline inside CARLA (M5.3): perception_node loads this through
+# perception.pipeline.load_pipeline_config(). Only the differences to pipeline.yaml are listed.
+# Laptop runtime: ONNX Runtime (or TensorRT after M6.4), never PyTorch. Model files come from
+# the M6 export (W&B artifacts) and live in the gitignored models/ folder.
+base: configs/pipeline.yaml
+
+lanes_config: configs/lanes_carla.yaml   # ROI / warp for the 800x450, 90 deg ego camera
+camera: carla
+
+overrides:
+  detector:
+    backend: onnx
+    weights: models/yolo11s-bdd.onnx     # M6.1 export of yolo11s-bdd-best (640x640, opset 17)
+    device: null
+  depth:
+    estimator:
+      backend: onnx                      # models/midas_small.onnx (configs/depth.yaml)
+      every_n_frames: 2                  # 10 Hz MiDaS; geometric + Kalman carry the rest
+                                         # (ARCHITECTURE.md 6: VRAM / latency budget)
+
+source:
+  image_fps: 20.0                        # CARLA fixed_delta_seconds 0.05
+  fallback_fps: 20.0

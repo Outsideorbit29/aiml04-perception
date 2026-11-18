@@ -1,0 +1,146 @@
+# CARLA + ROS2 runtime (M5). Read by sim/smoke_test.py, sim/scenarios/run.py,
+# sim/record_dataset.py and every node in ros2_ws/src/perception_ros (param `config`).
+#
+#   Windows:  D:\CARLA_0.9.15\CarlaUE4.exe -quality-level=Low -RenderOffScreen -fps=20
+#   WSL2:     ros2 launch perception_ros stack.launch.py carla_host:=localhost scenario:=stopped_car
+#
+# With .wslconfig networkingMode=mirrored, WSL2 reaches the Windows CARLA server at localhost.
+
+carla:
+  host: localhost              # launch arg carla_host / --host override this
+  port: 2000
+  timeout_s: 20.0              # client RPC timeout (first connect + map load are slow)
+  town: Town01                 # Town01 / Town02 only: the lightest maps (laptop load)
+  load_town: false             # true: load `town` if another map is loaded (~20-40 s, more VRAM
+                               # churn). false: use whatever map the server has (Town10HD at
+                               # start-up unless loaded before), so pass --town / load_town:=true
+                               # once per session
+  fixed_delta_seconds: 0.05    # synchronous mode, 20 Hz sim step (ARCHITECTURE.md 3.7)
+  tick_timeout_s: 10.0         # world.tick() timeout
+  seed: 42                     # Traffic Manager + spawn randomness
+
+traffic_manager:               # lateral control (and throttle when control_node does not override)
+  port: 8000
+  desired_speed_kmh: 30.0      # ego cruise speed (8.3 m/s: ~5 m stopping distance on dry road)
+  ignore_vehicles_pct: 100     # the TM must NOT brake for obstacles on its own; only
+  ignore_walkers_pct: 100      # control_node (perception) may stop the car
+  ignore_lights_pct: 100       # no red-light stops mid-scenario
+  ignore_signs_pct: 100
+  auto_lane_change: false
+  route: [Straight, Straight, Straight, Straight]   # junction choices (TM set_route); keeps the
+                                                    # ego on the scenario road. [] = TM random
+  update_vehicle_lights: true  # TM switches the ego headlights at night
+
+ego:
+  blueprint: vehicle.lincoln.mkz_2020
+  role_name: hero              # scenarios find the ego by this attribute
+  spawn_point: auto            # auto = spawn point with the longest straight road ahead
+                               # (sim.carla_utils.straight_run_m), or an index into
+                               # map.get_spawn_points()
+  min_straight_m: 80.0         # auto: warn if no spawn point has this much straight road
+
+camera:                        # ego RGB camera; MUST match configs/camera.yaml `carla`
+  width: 800                   # (fx = fy = 400 px for 90 deg FOV, height 1.6 m, pitch 0)
+  height: 450
+  fov_deg: 90.0
+  x: 1.5                       # m forward of the vehicle origin (hood is below the lower FOV
+  y: 0.0                       # edge: 29 deg down from 1.6 m reaches the road 2.9 m ahead)
+  z: 1.6                       # m above the vehicle origin (CARLA vehicle origin ~ road level)
+  pitch_deg: 0.0
+  sensor_tick: 0.0             # 0 = every sim step
+depth_camera:                  # ground-truth depth, same pose and intrinsics as the RGB camera
+  enabled: true
+
+bridge:                        # carla_bridge_node
+  frame_id: ego_camera         # header.frame_id of images
+  odom_frame: map
+  base_frame: ego
+  sensor_timeout_s: 2.0        # wait for the camera data of a tick
+  control_timeout_s: 0.5       # wait for /carla/ego/control of the current frame, then tick
+  first_control_timeout_s: 120.0   # model loading (ONNX sessions) before the first control
+  on_control_timeout: hold_last    # hold_last | autopilot: what to apply when control is late
+  max_frames: 0                # 0 = run until shutdown
+  log_every: 100               # frames between status log lines
+
+perception:                    # perception_node
+  pipeline_config: configs/pipeline_carla.yaml
+  backend: onnx                # onnx | tensorrt (M6). No PyTorch on the laptop.
+  camera: carla                # configs/camera.yaml entry
+  fps: 20.0                    # = 1 / fixed_delta_seconds (Kalman/TTC time base, tracker rate)
+  detector_weights: null       # null = pipeline_carla.yaml (models/yolo11s-bdd.onnx)
+  yolop_weights: null          # null = lanes config (models/yolop-640-640.onnx)
+  publish_debug: true          # /perception/debug_image (annotated, for the recorder)
+  debug_every_n: 1
+
+control:                       # control_node -> perception.control.LongitudinalController
+  lead_persist_frames: 3       # lead must be in the ego lane this many consecutive frames
+                               # (150 ms at 20 Hz; M4.6 one-frame false leads)
+  lead_release_frames: 20      # keep HOLD this many frames after the lead disappears (1 s)
+  max_lead_distance_m: 60.0    # leads farther away are ignored
+  aeb_ttc_s: 2.0               # ARCHITECTURE.md 3.7: TTC < 2 s or distance < 8 m -> full brake
+  aeb_distance_m: 8.0
+  acc_ttc_s: 4.0               # 2-4 s: proportional slow-down
+  acc_min_brake: 0.1           # brake at acc_ttc_s ...
+  acc_max_brake: 0.6           # ... rising to this at aeb_ttc_s
+  hold_brake: 1.0              # brake while latched after an AEB
+  hold_release_distance_m: 12.0  # the latch releases when the lead is farther than this
+  gap_min_m: 6.0               # time-gap following: desired gap = gap_min_m + v * gap_time_s
+  gap_time_s: 1.5
+  gap_brake_gain: 1.0          # brake = gain * (gap - d) / gap, capped at acc_max_brake
+  odom_timeout_s: 1.0          # ego speed older than this counts as 0 (gap rule only)
+
+recorder:                      # recorder_node
+  out_dir: media               # gitignored
+  fps: 20.0                    # sim time base (one debug image per sim step)
+  fourcc: mp4v
+  overlay_control: true        # control mode + ego speed in the bottom-left corner
+  bag_topics: [/perception/objects, /perception/lanes, /carla/ego/control, /carla/ego/odom]
+                               # stack.launch.py record_bag:=true; images are left out (21 MB/s)
+
+scenario:                      # sim/scenarios/run.py (shared settings)
+  ego_wait_s: 60.0             # wait for the bridge to spawn the ego
+  arm_speed_mps: 3.0           # stop detection starts once the ego has driven this fast
+  stop_speed_mps: 0.2          # ego counts as stopped below this ...
+  stop_hold_s: 2.0             # ... for this long -> scenario ends
+  timeout_s: 90.0              # sim seconds
+  in_path_margin_m: 0.5        # lateral margin for "in the ego path" when measuring the gap
+  results: runs/scenarios/results.jsonl
+
+scenarios:
+  stopped_car:
+    distance_m: 60.0           # obstacle spawned this far ahead on the ego lane
+    blueprint: vehicle.audi.a2
+  pedestrian_crossing:
+    distance_m: 45.0           # crossing point ahead on the ego lane
+    blueprint: walker.pedestrian.0001
+    start_offset_m: 4.0        # walker starts this far right of the lane centre
+    trigger_distance_m: 30.0   # walker starts when the ego is this close (bumper to crossing)
+    speed_mps: 1.4
+    pause_in_lane_s: 4.0       # stands in the lane centre this long, then walks on
+    end_offset_m: -4.0         # walks until this lateral offset (left side)
+  cut_in:
+    distance_m: 40.0           # NPC waits this far ahead of the ego, in the adjacent lane
+    blueprint: vehicle.tesla.model3
+    lateral_offset_m: 3.5      # adjacent lane (Town01: oncoming lane, scripted same-direction)
+    trigger_distance_m: 18.0   # cut-in starts when the ego bumper is this close to its rear
+    speed_mps: 5.0             # NPC speed while cutting in (ego cruises at 8.3 m/s)
+    cut_in_duration_s: 1.5     # lateral move 3.5 m -> 0
+    decel_mps2: 3.0            # after the cut-in the NPC brakes to a stop in the ego lane
+  night_rain:
+    base: stopped_car          # same layout as stopped_car ...
+    weather: HardRainNight     # ... under this carla.WeatherParameters preset
+    lights: true               # ego + obstacle low beams
+
+dataset:                       # sim/record_dataset.py (M5.6 Session A)
+  out_dir: runs/carla_frames
+  frames: 3000
+  every_n_ticks: 5             # 4 Hz sampling: less near-duplicate frames
+  n_vehicles: 40
+  n_walkers: 30
+  weathers: [ClearNoon, CloudyNoon, WetNoon, ClearSunset, HardRainNoon, ClearNight]
+  frames_per_weather: 500
+  max_box_distance_m: 80.0     # GT boxes beyond this are dropped
+  min_box_px: 6                # smaller projected boxes are dropped
+  min_visible_frac: 0.25       # depth-test: fraction of box sample points not occluded
+  depth_tolerance_m: 2.0       # occlusion test tolerance against the depth GT
+  jpg_quality: 92
