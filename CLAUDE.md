@@ -42,17 +42,17 @@ Rules for delegation:
 ## Progress snapshot (update at the end of every session)
 Full checklist is in `PLAN.md`; numbers are in `docs/EXPERIMENTS.md`. This is the short version.
 
-_Last updated: 2026-11-13_
+_Last updated: 2026-11-18_
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 Setup | Done except M0.7–M0.8 | GitHub, Kaggle, W&B, CI working. CARLA + WSL2/ROS2 local setup still open (needs user, laptop). |
+| M0 Setup | Done | CARLA 0.9.15 at `D:/CARLA_0.9.15`; WSL Ubuntu-22.04 at `D:/WSL/Ubuntu-22.04` (root, ROS2 Humble, Cyclone DDS, TensorRT 10.16); `.wslconfig` 6 GB / 4 CPU / mirrored networking. Smoke test passed 2026-11-18. |
 | M1 Data | Done | 20k BDD subset + 10k val in YOLO format (kernel `anish2906/aiml04-data-prep`), EDA, fixtures, class decision. |
 | M2 Detection/tracking | M2.1–M2.6 done (M2.7 stretch open) | YOLO11s mAP@0.5 **0.553** (zero-shot 0.361), artifact `yolo11s-bdd-best`, eval W&B `8tzih6my`. MOT on 8 KITTI sequences (W&B `qvrkp7t1`): MOTA 52.5, IDF1 67.4, IDSW 176 with tuned ByteTrack (buffer 60, 2 consecutive frames); vehicles 63.7 / 75.7, pedestrians 38.5 / 54.9. New ids appear 2 frames after first detection. Det+track 52 FPS on T4. |
 | M3 Lanes | M3.1–M3.4 done (M3.5 stretch open) | 500 BDD val (W&B `bf4xp164`): lane F1 YOLOP **0.52** vs classical 0.23; ego-lane IoU tie ~0.42 (YOLOP finds no line on 129/500: faint markings, snow, traffic). YOLOP is the live default (switch `method` in M5). BDD uses `configs/lanes_bdd.yaml`; single-side fallback builds the ego mask from one line. Figures in `docs/figures/lanes_*`. |
 | M4 Depth/distance | Done | 1000 KITTI frames vs LiDAR (W&B `amgl803i`): AbsRel geometric 0.168, fused geometric+MiDaS-small **0.170** with coverage 1.00 (geometric 0.96), bias −0.001; 30–60 m 0.221. MiDaS-small is live (27 ms at 256x832 on T4); DPT-Hybrid is no better and 424 ms. Table in `docs/figures/depth_comparison.md`. TTC gate: track ≥ 0.75 s and closing > 2σ. M4.6 offline pipeline on KITTI 0001 (W&B `e12sh0xi`): 11.4 FPS stages / 4.8 end-to-end on T4; in_ego_lane uses a metric lateral corridor; 1 AEB-trigger lead frame in 447 (a crossing car). |
-| M5 CARLA + ROS2 | Not started | Needs M0.7–M0.8 first. |
-| M6 ONNX/TensorRT | Not started | |
+| M5 CARLA + ROS2 | M5.1–M5.4, M5.7 done; M5.6 frames recorded | Merged 2026-11-18. `stopped_car` passes (stop gap 6.5 m, no collision). Session A: 3,000 Town01 frames in private Kaggle dataset `anish2906/aiml04-carla-frames`; Kaggle sim eval still to write/run. Open: other scenarios (pedestrian, cut-in, night/rain), M5.8 demo recordings, ACC on/off chatter. |
+| M6 ONNX/TensorRT | M6.1–M6.5 done (M6.1–M6.3 await qa-reviewer gate) | T4 TRT FP16: YOLO 3.7 ms, MiDaS 2.6 ms, YOLOP 6.7 ms (`docs/benchmarks.md`). Laptop engines in `models/*.engine`; live loop 7.6 FPS (ORT on CPU) to 71.6 FPS (TRT). |
 | M7 Deliverables | Not started | |
 
 **Schedule:** M2, M3 and M4 done on 2026-11-13, ahead of PLAN.md dates. Open before/in M5: long-range kerbside false leads (47/111 lead frames, lane-depth to tighten the corridor beyond ~24 m) and a multi-frame lead persistence rule in `control_node`. M0.7–M0.8 local CARLA/ROS2 setup needed before M5 (Nov 16).
@@ -68,6 +68,9 @@ Useful facts learned so far:
 - MiDaS via `torch.hub` loads a nested hub repo (`rwightman/gen-efficientnet-pytorch`) that must be pre-trusted (`trusted_hub_repos` in `configs/depth.yaml`), or the Kaggle job hangs on a stdin prompt. `configs/depth.yaml` defaults to `backend: onnx`; Kaggle scripts pass `backend="torch"`.
 - The offline pipeline needs `--backend torch` on Kaggle until the M6 ONNX export (`configs/depth.yaml` defaults to onnx). Its `pipeline_fps` is stage time only; `wall_fps` includes decode/draw/encode.
 - Distance fusion is done in inverse depth; averaging in metres biased fused distances short (−0.08 at 30–60 m).
+- Laptop runtime is TensorRT only (`configs/carla.yaml` `perception.backend: tensorrt`): ONNX Runtime's CUDA provider can't load in WSL (no cuBLAS/cuDNN), so ORT falls back to the CPU.
+- Building TRT engines while CARLA runs pushes the GPU to ~87 C and takes 4x longer; stop CARLA first.
+- WSL commands with quotes are easiest as a script file run via `MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -u root -- bash <script>`.
 - A 50-epoch YOLO11s run on 20k images at 640 takes ~4.6 h on a Kaggle T4 (fits one session).
 
 ## Claude-specific notes
