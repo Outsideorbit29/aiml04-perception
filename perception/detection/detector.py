@@ -6,13 +6,16 @@
 Backends, chosen by ``cfg["backend"]``:
 - ``torch``: Ultralytics YOLO on a ``.pt`` file (Kaggle, offline video). Imports Ultralytics lazily,
   so this module stays importable without torch (laptop runtime, CI).
-- ``onnx`` / ``tensorrt``: filled in M6 by edge-optimizer. They subclass ``ExportedBackend`` and
-  only implement ``infer(blob) -> raw``; letterbox, decode, NMS and rescale are shared
-  (``perception.detection.processing``), so all backends post-process the same way.
+- ``onnx`` / ``tensorrt`` (M6): ONNX Runtime on the ONNX export, or a TensorRT engine built from
+  it. They subclass ``ExportedBackend`` and only implement ``infer(blob) -> raw``; letterbox,
+  decode, NMS and rescale are shared (``perception.detection.processing``), so all backends
+  post-process the same way. ``cfg["weights"]`` may keep the ``.pt`` name: the file with the
+  backend's suffix next to it is used (``backend_weights``). Neither imports torch.
 """
 
 from __future__ import annotations
 
+import ast
 import logging
 from pathlib import Path
 from typing import Any, Protocol
@@ -22,11 +25,13 @@ import yaml
 
 from perception.detection.processing import (
     RawDetections,
+    as_hw,
     decode_yolo,
     letterbox,
     scale_boxes,
     to_blob,
 )
+from perception.detection.runtime import TrtRunner, check_input_hw, ort_providers
 from perception.types import Detection
 
 log = logging.getLogger(__name__)
@@ -41,7 +46,9 @@ OPTIONAL_DEFAULTS: dict[str, Any] = {
     "agnostic_nms": False,  # Ultralytics default; configs/yolo_detector.yaml turns it on
     "names": None,
     "data_config": None,
+    "onnx_providers": None,  # onnx backend: null = CUDA, then CPU
 }
+BACKEND_SUFFIX = {"torch": ".pt", "onnx": ".onnx", "tensorrt": ".engine"}
 
 
 def resolve_path(path: str | Path) -> Path:
@@ -140,26 +147,85 @@ class ExportedBackend:
         return raw._replace(boxes=scale_boxes(raw.boxes, ratio, pad, frame.shape[:2]))
 
 
+def backend_weights(weights: str | Path, backend: str) -> Path:
+    """Model file for ``backend``: ``weights`` with its suffix switched to the backend's
+    (``.pt`` / ``.onnx`` / ``.engine``), so one ``weights: models/yolo11s-bdd.pt`` entry serves
+    every backend. Paths with another suffix are used as given."""
+    p = resolve_path(weights)
+    want = BACKEND_SUFFIX[backend]
+    if p.suffix.lower() in BACKEND_SUFFIX.values() and p.suffix.lower() != want:
+        p = p.with_suffix(want)
+    return p
+
+
+def names_from_metadata(meta: dict[str, str]) -> dict[int, str] | None:
+    """Class names from Ultralytics ONNX metadata (``names: "{0: 'car', ...}"``), else None."""
+    text = meta.get("names")
+    if not text:
+        return None
+    try:
+        names = ast.literal_eval(text)
+    except (ValueError, SyntaxError):
+        return None
+    return {int(k): str(v) for k, v in names.items()} if isinstance(names, dict) else None
+
+
 class OnnxBackend(ExportedBackend):
-    """ONNX Runtime backend. Filled in M6 (edge-optimizer)."""
+    """ONNX Runtime on the Ultralytics ONNX export (``deploy/export.py``, static 640x640).
+
+    Providers come from ``cfg["onnx_providers"]`` (default CUDA, then CPU; never the TensorRT
+    EP, see ``perception.detection.runtime.ort_providers``).
+    """
 
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__(cfg)
-        raise NotImplementedError(
-            "onnx backend is added in M6: open an onnxruntime.InferenceSession on cfg['weights'] "
-            "here and implement infer(blob)"
-        )
+        path = backend_weights(cfg["weights"], "onnx")
+        if not path.exists():
+            raise FileNotFoundError(f"ONNX detector not found at {path} (deploy/export.py)")
+        import onnxruntime as ort  # lazy: CI and the torch path do not need it
+
+        providers = ort_providers(cfg.get("onnx_providers"), ort.get_available_providers())
+        self.session = ort.InferenceSession(str(path), providers=providers)
+        inp = self.session.get_inputs()[0]
+        check_input_hw(inp.shape, as_hw(self.imgsz), str(path))
+        self.input_name = inp.name
+        self.names = names_from_metadata(self.session.get_modelmeta().custom_metadata_map)
+        self.path = path
+
+    @property
+    def providers(self) -> list[str]:
+        return list(self.session.get_providers())
+
+    def infer(self, blob: np.ndarray) -> np.ndarray:
+        return self.session.run(None, {self.input_name: blob})[0]
 
 
 class TensorRTBackend(ExportedBackend):
-    """TensorRT engine backend. Filled in M6 (edge-optimizer)."""
+    """TensorRT engine built from the ONNX export (``deploy/build_local_engine.py``).
+
+    No torch: ``perception.detection.runtime.TrtRunner`` uses tensorrt + cuda-python.
+    """
 
     def __init__(self, cfg: dict[str, Any]) -> None:
         super().__init__(cfg)
-        raise NotImplementedError(
-            "tensorrt backend is added in M6: deserialize the engine at cfg['weights'] here and "
-            "implement infer(blob)"
-        )
+        path = backend_weights(cfg["weights"], "tensorrt")
+        if not path.exists():
+            raise FileNotFoundError(
+                f"TensorRT engine not found at {path}; build it from the ONNX file on this GPU "
+                "with deploy/build_local_engine.py"
+            )
+        self.runner = TrtRunner(path)
+        if len(self.runner.inputs) != 1:
+            raise ValueError(f"{path}: expected one input, got {self.runner.input_names}")
+        check_input_hw(self.runner.inputs[0].shape, as_hw(self.imgsz), str(path))
+        self.path = path
+
+    @property
+    def providers(self) -> list[str]:
+        return ["TensorRT"]
+
+    def infer(self, blob: np.ndarray) -> np.ndarray:
+        return self.runner(blob)[0]
 
 
 BACKENDS: dict[str, type] = {
