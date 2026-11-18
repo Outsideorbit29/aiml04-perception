@@ -87,8 +87,8 @@ def test_empty_output_and_bad_frame():
 
 
 def test_backend_selection_errors():
-    for kind in ("onnx", "tensorrt"):  # filled in M6
-        with pytest.raises(NotImplementedError):
+    for kind in ("onnx", "tensorrt"):  # M6: the exported file next to unused.pt is missing
+        with pytest.raises(FileNotFoundError):
             Detector({**CFG, "backend": kind})
     with pytest.raises(ValueError):
         Detector({**CFG, "backend": "openvino"})

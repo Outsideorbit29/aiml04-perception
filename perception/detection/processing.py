@@ -82,14 +82,21 @@ def box_iou(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return inter / np.maximum(area_a[:, None] + area_b[None, :] - inter, 1e-9)
 
 
-def nms(boxes: np.ndarray, scores: np.ndarray, iou_thr: float) -> np.ndarray:
-    """Greedy NMS. Returns kept indices sorted by descending score."""
+def nms(
+    boxes: np.ndarray, scores: np.ndarray, iou_thr: float, max_keep: int | None = None
+) -> np.ndarray:
+    """Greedy NMS. Returns kept indices sorted by descending score.
+
+    ``max_keep`` stops after that many boxes; the result equals ``nms(...)[:max_keep]`` (boxes
+    are kept in score order), but low-confidence decoding (mAP at conf 0.001) skips most of the
+    loop.
+    """
     order = np.argsort(-scores, kind="stable")
     keep: list[int] = []
     while order.size:
         i = int(order[0])
         keep.append(i)
-        if order.size == 1:
+        if order.size == 1 or (max_keep is not None and len(keep) >= max_keep):
             break
         ious = box_iou(boxes[i : i + 1], boxes[order[1:]])[0]
         order = order[1:][ious <= iou_thr]
@@ -126,7 +133,7 @@ def decode_yolo(
     cx, cy, w, h = pred[:, 0], pred[:, 1], pred[:, 2], pred[:, 3]
     boxes = np.stack([cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], axis=1)
     offset = 0.0 if agnostic else cls[:, None] * MAX_WH
-    idx = nms(boxes + offset, scores, iou)[:max_det]
+    idx = nms(boxes + offset, scores, iou, max_det)
     return RawDetections(
         boxes[idx].astype(np.float32), scores[idx].astype(np.float32), cls[idx].astype(np.int64)
     )

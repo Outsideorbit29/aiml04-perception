@@ -1,0 +1,14 @@
+{
+  "id": "anish2906/aiml04-export-bench",
+  "title": "aiml04-export-bench",
+  "code_file": "runner.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": ["anish2906/aiml04-secrets"],
+  "competition_sources": [],
+  "kernel_sources": ["anish2906/aiml04-data-prep"]
+}

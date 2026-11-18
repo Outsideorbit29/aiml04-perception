@@ -13,6 +13,9 @@ Backends (``estimator.backend``):
   runs on Kaggle only. torch is imported lazily inside the backend.
 - ``onnx``: onnxruntime session on an exported model (export is M6, deploy/). Never imports
   torch, so it runs in the laptop runtime.
+- ``tensorrt``: TensorRT engine built from that ONNX file on the machine that runs it
+  (``models.<name>.engine``, default: the ONNX path with ``.engine``). tensorrt + cuda-python,
+  no torch.
 Pre/post-processing (resize to ``input_hw``, normalisation, resize back to the frame) is shared
 numpy/OpenCV code, so both backends see identical tensors.
 """
@@ -102,23 +105,63 @@ class TorchHubBackend:
 
 
 class OnnxBackend:
-    """onnxruntime session on ``models.<name>.onnx`` (exported in M6). No torch import."""
+    """onnxruntime session on ``models.<name>.onnx`` (exported in M6). No torch import.
+
+    ``estimator.onnx_providers`` null = CUDA, then CPU (never the TensorRT EP: the ``tensorrt``
+    backend is the TensorRT path).
+    """
 
     def __init__(self, mcfg: dict[str, Any], ecfg: dict[str, Any]) -> None:
-        import onnxruntime as ort  # lazy: only needed when this backend is selected
-
         path = resolve_path(mcfg["onnx"])
         if not path.exists():
-            raise FileNotFoundError(f"ONNX depth model not found at {path} (exported in M6)")
-        providers = ecfg.get("onnx_providers") or ort.get_available_providers()
-        self.session = ort.InferenceSession(str(path), providers=list(providers))
-        self.input_name = self.session.get_inputs()[0].name
+            raise FileNotFoundError(f"ONNX depth model not found at {path} (deploy/export.py)")
+        import onnxruntime as ort  # lazy: only needed when this backend is selected
+
+        from perception.detection.runtime import check_input_hw, ort_providers
+
+        providers = ort_providers(ecfg.get("onnx_providers"), ort.get_available_providers())
+        self.session = ort.InferenceSession(str(path), providers=providers)
+        inp = self.session.get_inputs()[0]
+        check_input_hw(inp.shape, tuple(int(v) for v in mcfg["input_hw"]), str(path))
+        self.input_name = inp.name
+        self.device = self.session.get_providers()[0]
 
     def __call__(self, blob: np.ndarray) -> np.ndarray:
         return np.asarray(self.session.run(None, {self.input_name: blob})[0])
 
 
-BACKENDS: dict[str, type] = {"torch": TorchHubBackend, "onnx": OnnxBackend}
+def engine_path(mcfg: dict[str, Any]) -> Path:
+    """``models.<name>.engine`` if set, else the ONNX path with an ``.engine`` suffix."""
+    return resolve_path(mcfg.get("engine") or Path(mcfg["onnx"]).with_suffix(".engine"))
+
+
+class TensorRTBackend:
+    """TensorRT engine built from the ONNX export (deploy/build_local_engine.py). No torch."""
+
+    def __init__(self, mcfg: dict[str, Any], ecfg: dict[str, Any]) -> None:
+        from perception.detection.runtime import TrtRunner, check_input_hw
+
+        path = engine_path(mcfg)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"TensorRT depth engine not found at {path}; build it from {mcfg['onnx']} on "
+                "this GPU with deploy/build_local_engine.py"
+            )
+        self.runner = TrtRunner(path)
+        check_input_hw(
+            self.runner.inputs[0].shape, tuple(int(v) for v in mcfg["input_hw"]), str(path)
+        )
+        self.device = "TensorRT"
+
+    def __call__(self, blob: np.ndarray) -> np.ndarray:
+        return self.runner(blob)[0]
+
+
+BACKENDS: dict[str, type] = {
+    "torch": TorchHubBackend,
+    "onnx": OnnxBackend,
+    "tensorrt": TensorRTBackend,
+}
 
 
 def preprocess(frame_bgr: np.ndarray, mcfg: dict[str, Any]) -> np.ndarray:

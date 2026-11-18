@@ -37,7 +37,8 @@ python scripts/train_yolo.py --config configs/yolo_bdd.yaml
 python -m perception.pipeline --source /kaggle/input/<clip.mp4 or image dir> --out /kaggle/working/out.mp4 \
     --json frames.jsonl --summary summary.json --snapshots snaps --backend torch --camera kitti \
     --detector-weights <best.pt> --yolop-weights <yolop-640-640.onnx>   # --backend torch until the M6 ONNX export
-python deploy/export.py --weights best.pt --formats onnx engine --half
+python deploy/export.py --config configs/bench.yaml               # ONNX + parity, W&B artifacts
+python deploy/build_local_engine.py --onnx /kaggle/temp/m6_models/*.onnx --fp16   # T4 engines
 python deploy/benchmark.py --config configs/bench.yaml           # writes docs/benchmarks.md content
 
 # 💻 Quick local tests (CPU only, optional; CI runs them anyway)
@@ -47,6 +48,7 @@ pytest -q
 CarlaUE4.exe -quality-level=Low -RenderOffScreen -fps=20
 
 # 💻 WSL2
+pip install "tensorrt-cu12>=10,<11" "cuda-python>=12,<13" # once; no torch (as on Kaggle)
 python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16      # one time, ~5 min
 cd ros2_ws && colcon build --symlink-install && source install/setup.bash
 ros2 launch perception_ros stack.launch.py carla_host:=<windows-host-ip>
