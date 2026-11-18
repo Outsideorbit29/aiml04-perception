@@ -1,0 +1,48 @@
+%% AIML-04 system architecture (ARCHITECTURE.md section 2).
+%% Source of truth for docs/diagrams/README.md and the README; GitHub renders the copies there.
+%% Topic names and node names checked against ros2_ws/src/perception_ros (2026-11-18).
+flowchart LR
+    subgraph CLOUD["Cloud (online ML plane)"]
+        direction TB
+        GH["GitHub repo<br/>aiml04-perception"]
+        CI["GitHub Actions<br/>ruff + pytest, Python 3.10"]
+        KG["Kaggle T4 jobs (kaggle/*)<br/>data prep, YOLO training,<br/>evals, ONNX export,<br/>TensorRT benchmark"]
+        WB["Weights and Biases<br/>project aiml04-perception<br/>metrics + artifacts<br/>(best.pt, *.onnx)"]
+        GH -->|"push"| CI
+        GH -->|"clone at commit"| KG
+        KG -->|"metrics, best.pt, ONNX"| WB
+    end
+
+    subgraph WIN["Laptop: Windows 11 (RTX 3060 Laptop, 6 GB)"]
+        CARLA["CARLA 0.9.15 server<br/>Town01, Low quality,<br/>synchronous mode, 0.05 s step<br/>ego + 800x450 RGB camera"]
+    end
+
+    subgraph WSL["Laptop: WSL2 Ubuntu 22.04, ROS2 Humble"]
+        direction LR
+        BRIDGE["carla_bridge_node<br/>ticks the world,<br/>applies control"]
+        subgraph PN["perception_node (TensorRT FP16 engines)"]
+            direction TB
+            DET["Detector<br/>YOLO11s-BDD"]
+            TRK["Tracker<br/>ByteTrack"]
+            LANE["LaneDetector<br/>YOLOP, every 2nd frame"]
+            DEPTH["DepthEstimator<br/>MiDaS-small, every 2nd frame"]
+            FUS["DistanceFusion<br/>geometric-first + Kalman,<br/>in_ego_lane"]
+            DET --> TRK --> FUS
+            LANE --> FUS
+            DEPTH --> FUS
+        end
+        CTRL["control_node<br/>LongitudinalController<br/>AUTOPILOT / ACC / GAP / AEB / HOLD"]
+        REC["recorder_node<br/>annotated MP4 in media/"]
+        BAG["rosbag2<br/>(record_bag:=true)"]
+        BRIDGE -->|"/carla/ego/rgb (Image)"| PN
+        BRIDGE -->|"/carla/ego/odom (Odometry)"| CTRL
+        PN -->|"/perception/objects (TrackedObjectArray)"| CTRL
+        PN -->|"/perception/lanes (LaneBoundaries)"| BAG
+        PN -->|"/perception/debug_image (Image)"| REC
+        CTRL -->|"/carla/ego/control (EgoControl)"| BRIDGE
+        CTRL -->|"/carla/ego/control"| REC
+    end
+
+    CARLA <-->|"CARLA client API, TCP 2000-2002"| BRIDGE
+    WB -->|"pull ONNX, build local TRT engines once"| PN
+    CARLA -.->|"recorded frames uploaded as Kaggle dataset"| KG
