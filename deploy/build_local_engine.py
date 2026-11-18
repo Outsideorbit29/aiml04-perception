@@ -1,6 +1,7 @@
 """Build TensorRT engines for THIS GPU from the exported ONNX files (M6.2 on Kaggle, M6.4 laptop).
 
-    # WSL2 Ubuntu 22.04 on the laptop, once (~5 min); needs: pip install tensorrt-cu12 cuda-python
+    # WSL2 Ubuntu 22.04 on the laptop, once (~5 min). No torch; needs
+    #   pip install "tensorrt-cu12>=10,<11" "cuda-python>=12,<13"   (Kaggle used 10.16 / 12.9)
     python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16
     # Kaggle T4 (kaggle/export_bench): same script, engines next to the job's ONNX files
     python deploy/build_local_engine.py --onnx /kaggle/temp/m6_models/*.onnx --fp16
