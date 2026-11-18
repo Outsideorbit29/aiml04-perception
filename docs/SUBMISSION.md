@@ -2,15 +2,15 @@
 
 Each portal requirement mapped to the artifact that satisfies it.
 
-Status updated 2026-11-19 (M7.4–M7.6, branch `m7-slides-reflection`, not merged yet). `[~]` = partly done.
+Status updated 2026-11-19 (M7.1 QA pass; M7.4–M7.6 work merged to `main`). `[~]` = partly done.
 
 | Portal requirement | Artifact | Location | Done | Status / owner |
 |---|---|---|---|---|
-| Working demo | 3–4 min screen recording of the CARLA scenarios with overlay | Drive `AIML-04/demo/` + link in README | [~] | All four scenarios recorded in Session B (`media/*_20261119_*.mp4`, local) and passed. Shot list, overlay guide and closing table: `docs/DEMO_SCRIPT.md`. TODO: re-record in a final session (sim-ros-integrator, M5.8), then edit and upload (user). README has marked placeholders for the GIF and video link. |
-| GitHub repo with clean commits, README, setup | Public repo, `README.md`, `docs/SETUP.md` | GitHub | [~] | README refreshed with M5.9 and Session B results. Demo GIF missing (M7.4). M7.1 fresh-clone check by qa-reviewer still open. No LICENSE file (**user decision**). |
+| Working demo | 3–4 min screen recording of the CARLA scenarios with overlay | Drive `AIML-04/demo/` + link in README | [~] | Final recordings: Session C (`media/*_20261119_01*.mp4` and `night_rain_20261119_020707.mp4`, local), all four passed (M5.8 done). Video builder: `python scripts/make_demo_video.py --config configs/demo_video.yaml` (cards from `docs/DEMO_SCRIPT.md`). TODO: build, check, upload (user). README has marked placeholders for the GIF and video link; `media/demo.gif` is gitignored, so commit a small copy elsewhere (e.g. `docs/figures/`) if the README embeds it. |
+| GitHub repo with clean commits, README, setup | Public repo, `README.md`, `docs/SETUP.md` | GitHub | [~] | README results use the final Session C closed-loop runs (M7.1 QA, 2026-11-19). Fresh clone checked: ruff clean, pytest green (`docs/TEST_REPORT.md`). Demo GIF missing (M7.4). Kaggle fresh-clone run of the offline pipeline not repeated in M7.1 (last run `e12sh0xi`). No LICENSE file (**user decision**). |
 | Architecture diagram | `docs/diagrams/architecture.mmd` + `pipeline.mmd` (Mermaid, rendered by GitHub in `docs/diagrams/README.md` and README) | repo + Drive | [~] | Mermaid done (detector node now the mix model). PNG export for slides/Drive is TODO (**user**: Mermaid Live Editor in a browser, save as `docs/diagrams/architecture.png` and `pipeline.png`). |
 | Data / API documentation | `docs/API.md` (ROS2 topics/messages, Python interfaces, config files); dataset notes in README "Datasets and licences" and `docs/figures/eda_summary.md` | repo | [x] | Done. |
-| Test results | `pytest` report + `docs/EXPERIMENTS.md` | repo + Drive `AIML-04/reports/` | [~] | CI green on `main` (GitHub Actions). Exported pytest report for Drive is TODO (qa-reviewer, M7.1: e.g. `pytest -q --junitxml` artifact from CI). |
+| Test results | `docs/TEST_REPORT.md` (pytest/ruff counts, coverage by module, known gaps) + `docs/EXPERIMENTS.md` | repo + Drive `AIML-04/reports/` | [x] | CI green on `main` (GitHub Actions). Export `docs/TEST_REPORT.md` to PDF for the Drive (user). |
 | Performance / accuracy numbers | mAP, MOTA/IDF1, lane F1, depth AbsRel, `docs/benchmarks.md`, closed-loop table | repo + slides | [~] | In README, `docs/EXPERIMENTS.md`, `docs/benchmarks.md`, slides 5–12. TBD: live-loop p95 latency not logged (sim-ros-integrator); `docs/benchmarks.md` laptop section still quotes the 2026-11-18 "40–45 ms" and not the Session B 35.0–44.0 ms windows (edge-optimizer). |
 | 10-min presentation | `AIML-04_presentation.pptx/pdf` | Drive `AIML-04/` | [~] | Slide markdown with speaker notes and visuals: `presentation/slides.md` (14 slides, ~10 min). TODO (**user**): pandoc to PPTX, insert visuals (diagram PNG, demo clip), rehearse, export PDF. |
 | Individual reflection | `docs/REFLECTION.md` (1 page) | repo + Drive | [~] | Scaffold: `docs/REFLECTION_DRAFT.md` (marked DRAFT). TODO (**user**): rewrite in own words as `docs/REFLECTION.md`. |
@@ -36,7 +36,7 @@ Anish_Kumar_Gupta_Capstone_Projects/          (share: Anyone with the link can v
 │  │  ├─ API.pdf                    docs/API.md
 │  │  ├─ architecture.png, pipeline.png   docs/diagrams exports
 │  │  ├─ lanes_comparison.md, depth_comparison.md, lanes_failures.jpg, eda_*.png   docs/figures
-│  │  └─ pytest_report.xml          CI junit artifact (M7.1)
+│  │  └─ TEST_REPORT.pdf            docs/TEST_REPORT.md (M7.1)
 │  ├─ screenshots/                  one PNG per scenario + overlay freeze frame + KITTI snapshot
 │  └─ data_sample/
 │     ├─ fixtures/                  copy of tests/fixtures/ (5 BDD images + labels, 3 s KITTI clip)

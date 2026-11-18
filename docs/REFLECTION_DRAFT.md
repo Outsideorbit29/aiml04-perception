@@ -107,4 +107,4 @@ from them.
 | Lanes (BDD val 500) | F1 0.515 YOLOP vs 0.231 classical |
 | Distance | AbsRel 0.170 KITTI (fused); 0.081 CARLA-val (mix, uncalibrated) |
 | TensorRT (T4) | 3.66 / 2.58 / 6.70 ms; 2.72x / 4.25x / 3.40x |
-| Closed loop | 4 of 4 scenarios stopped, no collision; gaps 10.1 / 9.6 / 10.2 / 15.5 m |
+| Closed loop | 4 of 4 scenarios stopped, no collision; gaps 11.8 / 9.6 / 10.0 / 11.3 m (stopped car / pedestrian / cut-in / night rain, Session C) |

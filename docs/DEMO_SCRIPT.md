@@ -4,20 +4,19 @@ Target length **3:30** (limit 3–4 min). Edited from the CARLA closed-loop reco
 title cards and a closing benchmark table. Every number on a card comes from
 `docs/EXPERIMENTS.md` or `docs/benchmarks.md`.
 
-> **Status.** The four scenarios were recorded in Session B (2026-11-19) and all four passed. They
-> will be **re-recorded in a final session** (PLAN.md M5.8) before editing; the file names below
-> are the Session B files and are placeholders for the final ones. If a re-recorded run gives a
-> different gap or mode sequence, update the cards from the new `docs/EXPERIMENTS.md` row, not
-> from this script.
+> **Status.** The final recordings are from Session C (2026-11-19, PLAN.md M5.8); all four
+> passed. `scripts/make_demo_video.py --config configs/demo_video.yaml` assembles the video from
+> them; its cards and captions are the source of truth for the on-screen text. If a clip is
+> re-recorded, update the cards from the new `docs/EXPERIMENTS.md` row.
 
 ## Source clips
 
-| Scenario | Session B file (local, `media/`, not in git) | Logged result (EXPERIMENTS.md, Session B) |
+| Scenario | Session C file (local, `media/`, not in git) | Logged result (EXPERIMENTS.md, Session C) |
 |---|---|---|
-| `stopped_car` | `stopped_car_20261119_004127.mp4` | ClearNoon; AUTOPILOT→ACC→AUTOPILOT→ACC→AUTOPILOT→GAP; no AEB; min gap 10.1 m |
-| `pedestrian_crossing` | `pedestrian_crossing_20261119_004254.mp4` | ClearNoon; AEB at TTC 1.5 s from 8.1 m/s → HOLD; min gap 9.6 m |
-| `cut_in` | `cut_in_20261119_004340.mp4` | ClearNoon; car cuts in at 18 m, 5 m/s, then brakes 3 m/s²; ACC→AUTOPILOT→GAP; no AEB; min gap 10.2 m |
-| `night_rain` | `night_rain_20261119_004439.mp4` | HardRainNight, lights on; ACC stop; lead read ~13 % long (17.6 m shown vs 15.5 m true); min gap 15.5 m |
+| `stopped_car` | `stopped_car_20261119_013806.mp4` | ClearNoon; AUTOPILOT→ACC→AUTOPILOT→ACC to standstill; no AEB; min gap 11.8 m |
+| `pedestrian_crossing` | `pedestrian_crossing_20261119_014523.mp4` | ClearNoon; AEB at TTC 1.49 s from 8.1 m/s → HOLD; min gap 9.6 m (final 8.5 m after pulling away) |
+| `cut_in` | `cut_in_20261119_014200.mp4` | ClearNoon; car cuts in at 18 m, 5 m/s, then brakes 3 m/s²; ACC→AUTOPILOT→GAP to standstill; no AEB; min gap 10.0 m |
+| `night_rain` | `night_rain_20261119_020707.mp4` | HardRainNight, lights on; AUTOPILOT→ACC→AUTOPILOT→GAP→ACC to standstill; lead read ~20 % long (13.6 m shown vs 11.3 m true); min gap 11.3 m |
 
 All four: no collision. The loop runs in synchronous mode at 4.9 sim steps/s, so the recordings
 play at **sim speed** (20 fps of sim time), not at the wall-clock speed of the session. Say so
@@ -36,7 +35,7 @@ From `perception.pipeline` (debug image) and `recorder_node` (bottom bar):
 | Bottom bar (colour by mode) | Controller mode (AUTOPILOT / ACC / GAP / AEB / HOLD), brake command, ego speed in km/h, lead id and distance |
 
 Caption to add over the info block in shot 2: "Per-frame stage time. Averaged over 100 frames the
-live perception time was 35–44 ms; the whole loop ran at 4.9 sim steps/s." Do not quote the
+live perception time was 38–49 ms; the whole loop ran at 4.9 sim steps/s." Do not quote the
 one-frame FPS number from the overlay anywhere else (docs/benchmarks.md explains why).
 
 ## Shot list
@@ -45,10 +44,10 @@ one-frame FPS number from the overlay anywhere else (docs/benchmarks.md explains
 |---|---|---|---|---|---|
 | 1 | 0:00 | 0:15 | Title card | "AIML-04 Autonomous Driving Perception Stack. Camera-only perception, CARLA + ROS2 closed loop." Small architecture diagram (`docs/diagrams/architecture.png`, TODO export). | "One front camera. Detection, tracking, lanes and distance run as ROS2 nodes on the laptop GPU, and a rule-based controller brakes for obstacles in the ego lane." |
 | 2 | 0:15 | 0:25 | `stopped_car`, first seconds of driving, then a freeze frame | Freeze with callouts on: one box label, the LEAD tag, lane overlay, info block, bottom bar (table above). | "Each box shows track id, class, distance and time to collision. LEAD marks the object the controller reacts to. The bar at the bottom is the controller mode." Caption on the info block (above). |
-| 3 | 0:40 | 0:40 | `stopped_car` | Approach to the stopped Audi A2 (placed 60 m ahead). Let the bar change AUTOPILOT → ACC → GAP. End on the standstill. | Card: "Stopped car, ClearNoon. ACC and gap control slow the car down; no emergency braking needed. Stopped 10.1 m short, no collision." |
+| 3 | 0:40 | 0:40 | `stopped_car` | Approach to the stopped Audi A2 (placed 60 m ahead). Let the bar change AUTOPILOT → ACC → GAP. End on the standstill. | Card: "Stopped car, ClearNoon. ACC and gap control slow the car down; no emergency braking needed. Stopped 11.8 m short, no collision." |
 | 4 | 1:20 | 0:40 | `pedestrian_crossing` | Walker steps out from 4 m beside the road. Slow down (0.5x) for the 2 s around AEB; the bar turns AEB then HOLD. | Card: "Pedestrian crossing. Emergency braking at TTC 1.5 s from 8.1 m/s, then hold. Stopped 9.6 m short, no collision." |
-| 5 | 2:00 | 0:35 | `cut_in` | Car cuts in at 18 m, then brakes. Show the LEAD tag moving to the cut-in car and the bar changing ACC → AUTOPILOT → GAP. | Card: "Cut-in at 18 m, then the car brakes at 3 m/s². ACC, then gap control. Stopped 10.2 m behind it, no collision." |
-| 6 | 2:35 | 0:30 | `night_rain` | HardRainNight approach, ACC stop. | Card: "Night, heavy rain. Stopped by ACC, 15.5 m short, no collision. At night the lead read about 13 % long (17.6 m shown, 15.5 m true)." |
+| 5 | 2:00 | 0:35 | `cut_in` | Car cuts in at 18 m, then brakes. Show the LEAD tag moving to the cut-in car and the bar changing ACC → AUTOPILOT → GAP. | Card: "Cut-in at 18 m, then the car brakes at 3 m/s². ACC, then gap control. Stopped 10.0 m behind it, no collision." |
+| 6 | 2:35 | 0:30 | `night_rain` | HardRainNight approach, ACC stop. | Card: "Night, heavy rain. Stopped by ACC, 11.3 m short, no collision. At night the lead read about 20 % long (13.6 m shown, 11.3 m true)." |
 | 7 | 3:05 | 0:25 | Benchmark card (static) | Table below. | "Models are exported to ONNX and run as TensorRT FP16 engines: two to four times faster than PyTorch on a T4, with no measurable accuracy loss." |
 | | **3:30** | | | | |
 
@@ -67,7 +66,7 @@ From `docs/benchmarks.md` (T4, batch 1, model p50 latency, W&B `218me22j`):
 | YOLOP 640 | 22.78 ms | 20.22 ms | **6.70 ms** | 3.40x |
 
 Footer line on the card: "FP16 cost: YOLO mAP@0.5 −0.0001, YOLOP lane-mask IoU 0.9928. Live on
-the laptop with CARLA: 35–44 ms mean perception time per frame."
+the laptop with CARLA: 38–49 ms mean perception time per frame."
 
 ## Editing notes
 

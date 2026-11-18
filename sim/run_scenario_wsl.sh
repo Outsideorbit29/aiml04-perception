@@ -7,5 +7,6 @@ source /opt/ros/humble/setup.bash
 source /root/aiml04_ws/install/setup.bash
 export AIML04_REPO_ROOT=/mnt/d/Project_ai RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ROS_LOCALHOST_ONLY=1
 cd /mnt/d/Project_ai
+mkdir -p runs
 timeout 480 ros2 launch perception_ros stack.launch.py town:=Town01 load_town:=true scenario:=${1:-stopped_car} > runs/stack_${1:-stopped_car}.log 2>&1
 echo exit=$?

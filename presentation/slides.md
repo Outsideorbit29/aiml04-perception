@@ -197,30 +197,30 @@ With TensorRT the bottleneck moves to the CPU: for YOLO, letterbox, decode and N
 On the laptop with CARLA rendering on the same GPU, the live perception stage averaged 35 to 44 ms per frame over 100-frame windows.
 :::
 
-## 10. Closed loop in CARLA (Session B)
+## 10. Closed loop in CARLA (final recording, Session C)
 
-| Scenario | Weather | Min gap | AEB? |
+| Scenario | Weather | Stop gap | AEB? |
 |---|---|---|---|
-| `stopped_car` | ClearNoon | 10.1 m | No (ACC, GAP) |
-| `pedestrian_crossing` | ClearNoon | 9.6 m | Yes, TTC 1.5 s from 8.1 m/s |
-| `cut_in` | ClearNoon | 10.2 m | No (ACC, GAP) |
-| `night_rain` | HardRainNight | 15.5 m | No (ACC) |
+| `stopped_car` | ClearNoon | 11.8 m | No (ACC) |
+| `cut_in` | ClearNoon | 10.0 m | No (ACC, GAP) |
+| `pedestrian_crossing` | ClearNoon | 9.6 m | Yes, TTC 1.49 s from 8.1 m/s |
+| `night_rain` | HardRainNight | 11.3 m | No (ACC) |
 
-- No collisions; mix detector as a TensorRT engine, no distance calibration, minimum gap 10 m
-- Mean perception stage time 35.0-44.0 ms per 100-frame window; closed loop 4.9 sim steps/s
+- No collisions; mix detector as a TensorRT engine, no distance calibration, 10 m minimum gap, 3 s post-stop tail
+- Live perception 38.2-49.2 ms per 100-frame window; at night the lead reads ~20 % long (13.6 m shown vs 11.3 m true)
 
 ::: notes
-Visual: 30-40 s of the demo video, cut from `media/stopped_car_20261119_004127.mp4` and `media/pedestrian_crossing_20261119_004254.mp4` (TODO: replace with the final re-recorded clips; see `docs/DEMO_SCRIPT.md`). Keep the table visible next to the clip.
+Visual: 30-40 s of `media/aiml04_demo.mp4` (built from `media/stopped_car_20261119_013806.mp4`, `cut_in_20261119_014200.mp4`, `pedestrian_crossing_20261119_014523.mp4`, `night_rain_20261119_020707.mp4`). Keep the table visible next to the clip. The published deck (presentation/deck/) already has these numbers.
 
 Time: 1:30 (including the clip).
 
-This is the closed loop, recorded on 19 November. In the stopped-car scenario the car slows down with ACC and the gap controller and stops 10.1 m short, without needing emergency braking. Emergency braking is only the backup now.
+This is the final closed-loop recording from 19 November. In the stopped-car scenario the car slows down with adaptive cruise control and stops 11.8 m short, without emergency braking. The cut-in car comes in at 18 m and brakes; gap control stops us 10.0 m behind it.
 
-For the pedestrian, emergency braking fires at a time to collision of 1.5 seconds from 8.1 m/s and the car holds 9.6 m short. The cut-in car comes in at 18 m and brakes; the ego follows and stops 10.2 m behind it.
+For the pedestrian, who appears suddenly, emergency braking fires at a time to collision of 1.5 seconds from 8.1 m/s and the car stops 9.6 m short; after the walker clears it pulls away slowly.
 
-At night in heavy rain the lead read about 13 % long, 17.6 m shown against 15.5 m true, and the car stopped at 15.5 m. A roll-up to the 10 m gap was expected but the scenario ended at its 2-second stop check.
+At night in heavy rain the car stops smoothly 11.3 m short. The lead reads about 20 % long at night, 13.6 m shown against 11.3 m true.
 
-Each scenario ran once, in one town. The 35-44 ms is perception time; the whole loop ran at 4.9 sim steps per second, so the video plays at sim speed.
+Each scenario was recorded once, in one town. The 38-49 ms is perception time; the synchronous loop runs slower than real time, so the video plays at sim speed.
 :::
 
 ## 11. Challenges and what went wrong
@@ -275,7 +275,7 @@ Every number here has a W&B run behind it, listed in docs/EXPERIMENTS.md.
 ## 13. Limitations and next steps
 
 - One run per scenario, one town: repeat runs and test a second town
-- Night distance read ~13 % long; pedestrian AP in CARLA did not improve (15 val boxes)
+- Night distance read ~20 % long; pedestrian AP in CARLA did not improve (15 val boxes)
 - Long-range false leads (KITTI: 47 of 111 lead frames beyond ~24 m) -> tighten the ego corridor
 - Log p95 latency live; move preprocessing to the GPU
 - Stretch goals not done: DeepSORT comparison, YOLO-seg lanes, INT8, Hugging Face Space
