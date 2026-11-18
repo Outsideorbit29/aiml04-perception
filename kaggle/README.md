@@ -14,6 +14,7 @@ repo, installs `requirements.txt`, and runs a single command on Kaggle's GPU.
 | `eval_lanes/`, `eval_depth/` | M3, M4 | lane-depth |
 | `sim_eval/` | M5 | sim-ros-integrator |
 | `export_bench/` | M6 | edge-optimizer |
+| `train_mix/` | M5.9 | detection-tracking |
 
 ## Run a job (from the laptop)
 ```bash

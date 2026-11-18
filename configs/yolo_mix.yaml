@@ -1,0 +1,99 @@
+# M5.9: short fine-tune of the BDD YOLO11s on a BDD + CARLA mix. Used by scripts/train_mix.py,
+# run on Kaggle by kaggle/train_mix/runner.py. Nothing here runs on the laptop.
+#   BDD    data-prep kernel output (anish2906/aiml04-data-prep), staged as in configs/yolo_bdd.yaml
+#   CARLA  private dataset anish2906/aiml04-carla-frames (3,000 Town01 frames, 6 weathers x 500,
+#          labels only for car/truck/bus/person/bicycle/motorcycle), staged by sim/eval_frames.py
+data_config: configs/data_bdd.yaml   # class names (CARLA labels use the same BDD ids)
+search: /kaggle/input                # BDD data-prep output (bdd_yolo/data.yaml), searched recursively
+                                     # as in M2 (the kernel-output mount path varies between jobs)
+stage_dir: /kaggle/temp/bdd_yolo
+lists_dir: /kaggle/temp/lists_mix
+out_dir: /kaggle/working/m5_9        # small outputs saved with the job
+weights_dir: /kaggle/temp/weights_base
+
+carla:                               # passed to sim.eval_frames.stage_dataset (as configs/carla_eval.yaml)
+  search: /kaggle/input
+  search_depth: 6
+  stage_dir: /kaggle/temp/carla_frames
+  train_dir: /kaggle/temp/carla_mix  # images/ (symlink to the staged frames) + labels/ (GT + pseudo)
+
+# Leakage-free split. Consecutive frames (4 Hz) are near-duplicates, so whole blocks are held out:
+# in each weather segment (meta_<town>.json `weathers`, 500 frames each) the block `val_block`
+# of `block_len` frames is CARLA-val; `guard` frames on both sides of it (including the first
+# frames of the next segment, the ego drives on through the weather change) are dropped from
+# both sets. CARLA-val is never trained on.
+split:
+  block_len: 100
+  val_block: -1                      # index of the held-out block in each segment (-1 = last)
+  guard: 20                          # 5 s at 4 Hz
+
+# BDD's traffic light / traffic sign / rider have no CARLA labels, so on CARLA frames they would
+# be trained as background. Pseudo-label them on CARLA-train with the base model instead (only
+# these classes; boxes with conf >= `conf`). CARLA-val keeps its GT labels only.
+pseudo:
+  enabled: true
+  classes: [rider, traffic light, traffic sign]
+  conf: 0.4
+  imgsz: 640
+  batch: 32                          # frames per predict() call (a list source is one batch)
+
+mix:
+  carla_share: 0.25                  # target share of CARLA entries in the train list
+  neg_keep: 0.5                      # fraction of CARLA-train frames without GT boxes kept as
+                                     # negatives (repeated once, never oversampled)
+  seed: 42
+
+rfs:                                 # BDD part: same repeat-factor sampling as M2.2
+  enabled: true
+  threshold: 0.1
+  seed: 42
+
+wandb:
+  project: aiml04-perception
+  entity: anish-grd2004-vellore-institute-of-technology
+  group: detect
+  base_artifact: yolo11s-bdd-best:latest
+  ckpt_artifact: yolo11s-mix-ckpt    # last.pt with optimizer state, every `ckpt_every` epochs
+  best_artifact: yolo11s-mix-best    # final weights (never overwrites yolo11s-bdd-best)
+  onnx_artifact: yolo11s-mix-onnx
+  ckpt_every: 1
+
+# Fixed 5-epoch schedule; the final epoch is the model (`select: last`), so neither BDD val nor
+# CARLA-val is used to pick a checkpoint. `best` would pick by BDD val fitness instead.
+select: last
+
+train:                               # passed straight to Ultralytics model.train()
+  epochs: 5
+  imgsz: 640
+  batch: 32
+  amp: true
+  workers: 4
+  optimizer: AdamW                   # = what Ultralytics "auto" picks for < 10k iterations,
+  lr0: 0.0005                        # set explicitly: a gentle fine-tune of trained weights
+  lrf: 0.1
+  cos_lr: true
+  warmup_epochs: 1
+  warmup_bias_lr: 0.0                # the 0.1 default is meant for SGD from scratch
+  close_mosaic: 2
+  seed: 42
+  plots: true
+  name: yolo11s-mix
+
+time_limit_h: 11.0
+
+eval:
+  imgsz: 640
+  batch: 32
+  per_weather: true                  # CARLA-val per weather (sim.eval_frames.detection_eval)
+
+export:                              # ONNX via deploy/export.py export_yolo (configs/bench.yaml
+  bench_config: configs/bench.yaml   # settings: opset 17, static 1x3x640x640, simplified)
+  file: yolo11s-mix.onnx
+  weights_dir: /kaggle/temp/weights_mix
+
+smoke:                               # --smoke: prove the job end to end in ~15 min
+  train_limit: 640
+  val_limit: 500
+  carla_every: 10                    # every 10th CARLA-train / CARLA-val frame
+  epochs: 1
+  imgsz: 320
