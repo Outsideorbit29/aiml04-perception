@@ -22,7 +22,7 @@ flowchart LR
         BRIDGE["carla_bridge_node<br/>ticks the world,<br/>applies control"]
         subgraph PN["perception_node (TensorRT FP16 engines)"]
             direction TB
-            DET["Detector<br/>YOLO11s-BDD"]
+            DET["Detector<br/>YOLO11s BDD+CARLA mix"]
             TRK["Tracker<br/>ByteTrack"]
             LANE["LaneDetector<br/>YOLOP, every 2nd frame"]
             DEPTH["DepthEstimator<br/>MiDaS-small, every 2nd frame"]

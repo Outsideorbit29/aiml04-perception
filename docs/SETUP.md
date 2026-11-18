@@ -40,7 +40,7 @@ The ONNX models for the laptop (M6.4) are W&B artifacts, not job outputs. On a f
 (Windows, repo root, `wandb` logged in):
 ```powershell
 $p = "anish-grd2004-vellore-institute-of-technology/aiml04-perception"
-foreach ($a in "yolo11s-bdd-onnx:v0","midas-small-onnx:v0","yolop-onnx:v0") { python -m wandb artifact get "$p/$a" --root models }
+foreach ($a in "yolo11s-mix-onnx:v0","yolo11s-bdd-onnx:v0","midas-small-onnx:v0","yolop-onnx:v0") { python -m wandb artifact get "$p/$a" --root models }
 ```
 Then build the engines once in WSL: `python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16`.
 
@@ -90,9 +90,10 @@ current quota). Training saves a checkpoint every epoch and resumes from the las
    ros2 launch perception_ros stack.launch.py carla_host:=localhost town:=Town01 load_town:=true \
        scenario:=stopped_car          # stopped_car | pedestrian_crossing | cut_in | night_rain
    ```
-   Live inference uses ONNX Runtime (TensorRT after M6.4) with the M6 ONNX files in `models/`
-   (`yolo11s-bdd.onnx`, `midas_small.onnx`, `yolop-640-640.onnx`; paths in
-   `configs/pipeline_carla.yaml`). Scenario results are appended to
+   Live inference uses TensorRT FP16 engines built locally from the ONNX files in `models/`
+   (`yolo11s-mix.engine` from the M5.9 BDD + CARLA model, `midas_small.engine`,
+   `yolop-640-640.engine`; paths in `configs/pipeline_carla.yaml`, where `yolo11s-bdd.engine` is
+   the BDD-only fallback). ONNX Runtime also works but falls back to the CPU in WSL2 here. Scenario results are appended to
    `runs/scenarios/results.jsonl`, videos go to `media/`.
 
 ## 5. Keeping the laptop cool during CARLA sessions
