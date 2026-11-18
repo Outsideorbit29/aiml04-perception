@@ -180,6 +180,34 @@ def test_episode_monitor_stop_after_arming():
     assert r["max_speed_mps"] == pytest.approx(8.0)
 
 
+def test_episode_monitor_post_stop_tail():
+    s = CFG["scenario"]
+    assert float(s["post_stop_s"]) > 0.0
+    m = _monitor(post_stop_s=float(s["post_stop_s"]), timeout_s=100.0)
+    t = 0.0
+    m.update(t, 8.0, 20.0)
+    while m.stop_gap_m is None:  # stop detection unchanged by the tail
+        t += 0.05
+        assert m.update(t, 0.0, 10.5) is None
+    t_stop = t
+    assert m.outcome == "stopped" and m.stop_gap_m == pytest.approx(10.5)
+    while m.update(t, 0.0, 10.4) is None:  # the tail keeps the episode running
+        t += 0.05
+    assert t - t_stop == pytest.approx(float(s["post_stop_s"]), abs=0.06)
+    r = m.result()
+    assert r["success"] and r["final_gap_m"] == pytest.approx(10.4)
+    assert r["stop_gap_m"] == pytest.approx(10.5) and r["post_stop_max_speed_mps"] == 0.0
+    # a collision during the tail still fails the run
+    m = _monitor(post_stop_s=3.0)
+    t = 0.0
+    m.update(t, 8.0, 20.0)
+    while m.stop_gap_m is None:
+        t += 0.05
+        m.update(t, 0.0, 10.5)
+    m.on_collision("vehicle.audi.a2")
+    assert m.update(t + 0.05, 0.0, 0.0) == "collision" and not m.result()["success"]
+
+
 def test_episode_monitor_collision_and_timeout():
     m = _monitor()
     m.update(0.0, 8.0, 3.0)

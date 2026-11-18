@@ -7,7 +7,8 @@ The script is a second CARLA client: it waits for the ego (role ``ego.role_name`
 carla_bridge_node, spawns the scenario's actors relative to it, attaches a collision sensor to
 the ego and follows the episode tick by tick (the bridge ticks). The episode ends when the
 ego has stopped (``scenario.stop_hold_s`` below ``stop_speed_mps`` after reaching
-``arm_speed_mps``), on a collision, or after ``scenario.timeout_s`` sim seconds. One JSON line
+``arm_speed_mps``) plus a ``scenario.post_stop_s`` tail (demo footage of the settled car), on a
+collision, or after ``scenario.timeout_s`` sim seconds. One JSON line
 (outcome, min gap, collision, ...) is appended to ``scenario.results``; the scenario's actors
 are destroyed and the weather restored in ``finally``. Exit code 0 only for a stop without
 collision.
@@ -71,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     world = client.get_world()  # the bridge may have loaded another map meanwhile
     mon = EpisodeMonitor(
         float(s["arm_speed_mps"]), float(s["stop_speed_mps"]), float(s["stop_hold_s"]),
-        float(s["timeout_s"]),
+        float(s["timeout_s"]), float(s.get("post_stop_s", 0.0)),
     )
     sc = scls(world, ego, scfg)
     collision_sensor = None
@@ -121,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[scenario] destroyed {n} actors; result -> {path}", flush=True)
         print("[scenario] " + json.dumps({k: res[k] for k in (
             "scenario", "outcome", "success", "collision", "min_gap_m", "stop_gap_m",
-            "max_speed_mps", "sim_duration_s")}), flush=True)
+            "final_gap_m", "post_stop_max_speed_mps", "max_speed_mps", "sim_duration_s")}),
+            flush=True)
     return 0 if res["success"] else 1
 
 

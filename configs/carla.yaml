@@ -128,7 +128,9 @@ scenario:                      # sim/scenarios/run.py (shared settings)
   ego_wait_s: 60.0             # wait for the bridge to spawn the ego
   arm_speed_mps: 3.0           # stop detection starts once the ego has driven this fast
   stop_speed_mps: 0.2          # ego counts as stopped below this ...
-  stop_hold_s: 2.0             # ... for this long -> scenario ends
+  stop_hold_s: 2.0             # ... for this long -> stop detected (outcome "stopped")
+  post_stop_s: 3.0             # keep running this long after the stop (demo footage shows the
+                               # car settled; a collision in the tail still fails the run)
   timeout_s: 90.0              # sim seconds
   in_path_margin_m: 0.5        # lateral margin for "in the ego path" when measuring the gap
   results: runs/scenarios/results.jsonl
