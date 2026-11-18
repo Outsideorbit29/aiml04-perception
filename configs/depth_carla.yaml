@@ -4,18 +4,21 @@
 base: configs/depth.yaml
 
 geometry:
-  calibration:              # decision 1: detected box bottoms sit higher than the GT contact
-                            # row, so raw geometric distances on detections read long.
-                            # Fitted by sim/eval_frames.py (configs/carla_eval.yaml
-                            # `calibration`) on the fit split, checked on the hold-out split.
-                            # Model offset_box (row + a + b * box_h), fitted on the even frame
-                            # positions of the 3,000 Town01 frames (W&B nfekm9vg, GT 5-60 m).
-                            # Hold-out AbsRel of detected-box geometric distance: odd frames
-                            # 0.134 -> 0.112 (bias +0.104 -> +0.047); route halves A->B 0.148 ->
-                            # 0.121, B->A 0.109 -> 0.092. b = 0.070-0.076 on all splits; the
-                            # scale model (k = 0.937-0.959) is equal overall, worse at 0-10 m
-    offset_px: -0.74
-    offset_box_frac: 0.073
+  calibration:              # Detector-box correction (perception.depth.calibration). It belongs
+                            # to the DETECTOR: refit when the live weights change.
+                            # Live detector yolo11s-mix-best:v0 (M5.9, trained on CARLA frames):
+                            # IDENTITY. Its box bottoms already match the GT contact row; on the
+                            # 600 CARLA-val frames (W&B 7cnlg0dt) raw geometric AbsRel is 0.081,
+                            # bias +0.041, and a refit is ~identity (offset 0.13-0.23 px, box_frac
+                            # -0.009..+0.009) gaining <= 0.002 on every hold-out, while the BDD
+                            # values below make it worse on every hold-out (odd frames 0.074 ->
+                            # 0.090, val blocks 1-3 -> 4-6 0.068 -> 0.078, 4-6 -> 1-3 0.088 ->
+                            # 0.106).
+                            # If the live detector is yolo11s-bdd-best instead, use
+                            # offset_px -0.74, offset_box_frac 0.073 (M5.6 fit, W&B nfekm9vg:
+                            # odd-frame hold-out 0.134 -> 0.112; CARLA-val 0.106 -> 0.092, cf6hbj0d)
+    offset_px: 0.0
+    offset_box_frac: 0.0
     distance_scale: 1.0
 
 fusion:
