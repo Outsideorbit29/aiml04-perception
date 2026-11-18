@@ -4,11 +4,13 @@
 
 A camera-only perception stack built for the Nexvia Technologies AI/ML internship. For each frame
 it detects vehicles, pedestrians, cyclists and traffic lights/signs with a YOLO11s model
-fine-tuned on BDD100K, tracks them with ByteTrack, finds the ego lane (classical OpenCV and YOLOP,
-compared), and estimates each object's distance from flat-ground geometry plus MiDaS-small depth,
-with a per-track Kalman filter for closing speed and time to collision. The same ROS-free
-`perception/` package runs on dataset videos (Kaggle) and live in the CARLA simulator, where ROS2
-nodes feed it camera frames and a rule-based controller brakes for obstacles in the ego lane.
+fine-tuned on BDD100K (and, for the simulator, a further 5 epochs on a BDD + CARLA mix), tracks
+them with ByteTrack, finds the ego lane (classical OpenCV and YOLOP, compared), and estimates each
+object's distance from flat-ground geometry plus MiDaS-small depth, with a per-track Kalman filter
+for closing speed and time to collision. The same ROS-free `perception/` package runs on dataset
+videos (Kaggle) and live in the CARLA simulator, where ROS2 nodes feed it camera frames and a
+rule-based controller slows down and brakes for obstacles in the ego lane. In CARLA the car
+stopped without a collision in all four test scenarios.
 Models are exported to ONNX and run as TensorRT FP16 engines. Training, evaluation and benchmarks
 run on Kaggle and are logged to Weights & Biases; the laptop only runs CARLA and ROS2.
 
@@ -16,7 +18,9 @@ run on Kaggle and are logged to Weights & Biases; the laptop only runs CARLA and
 
 > **TODO (M7.4):** demo GIF here (`media/demo.gif`, 10–15 s from the `stopped_car` run).
 >
-> **TODO (M7.4):** link to the 3–4 min demo video (YouTube unlisted or Drive).
+> **TODO (M7.4):** link to the 3–4 min demo video (YouTube unlisted or Drive). The four scenarios
+> are recorded (Session B, 2026-11-19) and will be re-recorded in a final session; shot list in
+> [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 >
 > **TODO (M7.8, stretch):** live deployment URL (Hugging Face Space running the offline pipeline),
 > or the demo video link if the Space is not built.
@@ -30,31 +34,49 @@ Every number below is copied from [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) or
 | Area | Metric | Result | Baseline / comparison | Data | W&B |
 |---|---|---|---|---|---|
 | Detection | mAP@0.5 / mAP@0.5:0.95 | **0.553** / 0.309 (YOLO11s fine-tuned, 50 epochs) | COCO zero-shot 0.361 / 0.210 (7 shared classes only); fine-tuned on the same 7 classes 0.560 / 0.321 | BDD100K val, 10k images, 640 px | [6euheeu2](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/6euheeu2), eval [8tzih6my](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/8tzih6my) |
-| Detection, sim | mAP@0.5 / mAP@0.5:0.95 | 0.530 / 0.308 | COCO zero-shot 0.485 / 0.286 | 3,000 recorded CARLA Town01 frames, 6 weathers | [ytp5wgb0](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/ytp5wgb0) |
+| Detection, sim (BDD model) | mAP@0.5 / mAP@0.5:0.95 | 0.530 / 0.308 | COCO zero-shot 0.485 / 0.286 | 3,000 recorded CARLA Town01 frames, 6 weathers | [ytp5wgb0](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/ytp5wgb0) |
+| Detection, BDD + CARLA mix (live in CARLA) | mAP@0.5 / mAP@0.5:0.95 | CARLA-val **0.819** / 0.566; BDD val 0.539 / 0.301 | Base BDD model: CARLA-val 0.624 / 0.378; BDD val 0.553 / 0.309 | 5 more epochs on 20,853 BDD + 6,936 CARLA-train entries; scored on 600 held-out CARLA frames and BDD val 10k | [i6dnlk0c](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/i6dnlk0c) |
 | Tracking | MOTA / IDF1 / ID switches | **52.5 / 67.4 / 176** (ByteTrack, buffer 60, 2 consecutive frames) | ByteTrack default 52.3 / 65.7 / 310. Vehicles 63.7 / 75.7, pedestrians 38.5 / 54.9 | KITTI tracking, 8 sequences, 2,358 frames | [qvrkp7t1](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/qvrkp7t1) |
 | Lanes | Lane-line F1 | **YOLOP 0.515** | Classical (HLS + Sobel, sliding window) 0.231. Ego-lane IoU is a tie: 0.415 vs 0.423 | BDD100K val, 500 images | [bf4xp164](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/bf4xp164) |
 | Distance, real | AbsRel (all / 30–60 m), coverage | Fused geometric + MiDaS-small **0.170** / 0.221, coverage 1.00 | Geometric only 0.168 / 0.234, coverage 0.96 | KITTI, 1000 frames vs LiDAR, GT boxes | [amgl803i](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/amgl803i) |
-| Distance, sim | AbsRel, detected boxes on held-out frames | **0.112** (live config: geometric-first + box-bottom calibration) | 0.140 with the earlier fusion, uncalibrated | CARLA, 1,389 objects on odd frames (calibration fitted on even frames) | [20l3ugzs](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/20l3ugzs), [nfekm9vg](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/nfekm9vg) |
+| Distance, sim (live config) | AbsRel all (0–10 / 10–30 / 30–60 m), bias, detected boxes | Mix detector, geometric, **no calibration: 0.081** (0.035 / 0.064 / 0.110), bias +0.041 | BDD detector on the same frames: 0.110 uncalibrated, 0.099 with its box-bottom calibration | 600 held-out CARLA-val frames | [7cnlg0dt](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/7cnlg0dt), [cf6hbj0d](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/cf6hbj0d) |
 | TensorRT | Model p50 latency, T4, batch 1 | YOLO11s **3.66 ms**, MiDaS-small **2.58 ms**, YOLOP **6.70 ms** (FP16) | PyTorch FP32 9.93 / 10.95 / 22.78 ms, i.e. 2.72x / 4.25x / 3.40x faster | Kaggle T4, 1000 timed iterations | [218me22j](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/218me22j) |
 | TensorRT accuracy cost | TRT FP16 vs PyTorch FP32 | YOLO mAP@0.5 −0.0001; MiDaS output AbsRel 0.0096; YOLOP lane-mask IoU 0.9928 | – | 500 BDD val images (YOLO), 100 frames (MiDaS, YOLOP) | [218me22j](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/218me22j) |
-| Live loop (laptop) | Mean pipeline time with CARLA on the same GPU | **40–45 ms** per frame over 100-frame windows (~22–25 FPS); 4.9 sim steps/s in synchronous mode | Offline TensorRT on 100 recorded CARLA frames without CARLA: 66.8 FPS stage time, 33.8 FPS wall | RTX 3060 Laptop 6 GB, TensorRT FP16 engines | – (local run; [benchmarks.md](docs/benchmarks.md)) |
-| Closed loop | `stopped_car` scenario | **Stopped 6.9 m short, no collision** (ACC/GAP slow-downs, then AEB at 8.0 m) | Earlier fusion: 6.5 m gap | CARLA Town01, ClearNoon | – (local run; EXPERIMENTS.md "Closed loop in CARLA") |
+| Live loop (laptop) | Mean perception stage time with CARLA on the same GPU | **35.0–44.0 ms** per 100-frame window across the four Session B runs; 4.9 sim steps/s closed-loop rate (2026-11-18 run, synchronous mode) | Offline TensorRT on 100 recorded CARLA frames without CARLA: 66.8 FPS stage time, 33.8 FPS wall | RTX 3060 Laptop 6 GB, TensorRT FP16 engines | – (local run; [benchmarks.md](docs/benchmarks.md)) |
+| Closed loop | 4 scripted scenarios | **4 of 4 stopped, no collision**; AEB needed only for the pedestrian | See the table below | CARLA Town01, Session B, 2026-11-19 | – (local runs; EXPERIMENTS.md "Closed loop in CARLA") |
+
+**Closed loop in CARLA (Session B, 2026-11-19).** Mix detector as a TensorRT FP16 engine, identity
+distance calibration, hysteresis control, minimum gap 10 m. One run per scenario.
+
+| Scenario | Weather | Outcome | Min gap (m) | AEB? | Mean pipeline time (ms, per 100-frame window) |
+|---|---|---|---|---|---|
+| `stopped_car` (stopped Audi A2 at 60 m) | ClearNoon | Stopped, no collision; ACC and GAP slow-downs only | 10.1 | No | 44.0 / 38.5 / 38.7 |
+| `pedestrian_crossing` (walker crosses from a 4 m kerb offset) | ClearNoon | AEB at TTC 1.5 s from 8.1 m/s, then HOLD, no collision | 9.6 | Yes | 40.1 |
+| `cut_in` (car cuts in at 18 m, then brakes at 3 m/s²) | ClearNoon | ACC → AUTOPILOT → GAP, no collision | 10.2 | No | 40.3 / 38.1 |
+| `night_rain` (stopped Audi A2 at 60 m) | HardRainNight | ACC stop, no collision. The lead read ~13 % long at night (17.6 m shown vs 15.5 m true); the expected roll-up to the 10 m gap was cut off by the scenario's 2 s stop detection | 15.5 | No | 35.0 |
 
 How to read these numbers:
 - The zero-shot baseline is scored on the 7 classes COCO shares with BDD; compare it with the
   fine-tuned 0.560 on those classes. Fine-tuning gains +0.20 mAP@0.5 on BDD but only +0.045 on
-  CARLA frames, so most of the BDD gain does not transfer to rendered images.
+  CARLA frames (likely less: COCO 'person' hits on CARLA riders count against the zero-shot
+  model), so most of the BDD gain does not transfer to rendered images.
+- The mix fine-tune's CARLA gain (+0.195 mAP@0.5) is in-domain: CARLA-val is held-out route
+  blocks of the same town and recording session as CARLA-train, so it is an upper bound for other
+  towns. Part of it is box style (CARLA boxes are projected 3D corners). It costs −0.014 mAP@0.5
+  on BDD val. `yolo11s-bdd-best` stays the real-data model; the mix model runs only in CARLA.
+- Distance calibration is detector-specific. The box-bottom calibration fitted for the BDD
+  detector (M5.6) over-corrects the mix detector, so the live CARLA stack uses no calibration.
 - The tracker settings were chosen and scored on the same 8 KITTI sequences (in-sample).
 - Lane F1 counts measured boundaries only. YOLOP returns no line on 129 of 500 images (worn
   markings, snow, dense traffic), which is why the ego-lane IoU is a tie.
 - KITTI distance is scored on ground-truth boxes, so it measures distance only. KITTI camera
   height and pitch are exact, which favours the geometric method.
-- The live loop number is perception stage time averaged over 100 frames. The one-frame overlay
-  readings in `docs/benchmarks.md` are not averages and are not quoted here. p95 latency in the
-  live loop is not logged yet (**TBD**).
-- Only the `stopped_car` scenario has been run in closed loop so far. `pedestrian_crossing`,
-  `cut_in` and `night_rain` are scripted in `sim/scenarios/` but have no results yet (**TBD**,
-  owner `sim-ros-integrator`, PLAN.md M5.5/M5.8).
+- The live loop number is perception stage time averaged over 100-frame windows, not the
+  closed-loop rate (4.9 sim steps/s). The one-frame overlay readings in `docs/benchmarks.md` are
+  not averages and are not quoted here. p95 latency in the live loop is not logged yet (**TBD**,
+  owner `sim-ros-integrator`).
+- Each closed-loop scenario was run once (Session B). The demo recordings will be re-made in a
+  final session (PLAN.md M5.8).
 
 Full tables, per-class AP, per-condition lane results, distance bins and caveats are in
 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), [docs/benchmarks.md](docs/benchmarks.md),
@@ -85,7 +107,7 @@ flowchart LR
         BRIDGE["carla_bridge_node<br/>ticks the world,<br/>applies control"]
         subgraph PN["perception_node (TensorRT FP16 engines)"]
             direction TB
-            DET["Detector<br/>YOLO11s-BDD"]
+            DET["Detector<br/>YOLO11s BDD+CARLA mix"]
             TRK["Tracker<br/>ByteTrack"]
             LANE["LaneDetector<br/>YOLOP, every 2nd frame"]
             DEPTH["DepthEstimator<br/>MiDaS-small, every 2nd frame"]
@@ -134,7 +156,7 @@ The laptop load is kept low on purpose: anything that can run online runs online
 |---|---|
 | Kaggle notebooks (T4) | Dataset prep and EDA, YOLO training, every dataset evaluation, ONNX export, T4 TensorRT benchmark, offline pipeline videos, sim eval on recorded CARLA frames |
 | GitHub Actions | `ruff check .` and `pytest -q` on every push (Python 3.10, CPU) |
-| Weights & Biases | Metrics of every run; model artifacts (`yolo11s-bdd-best`, `*-onnx`) |
+| Weights & Biases | Metrics of every run; model artifacts (`yolo11s-bdd-best`, `yolo11s-mix-best`, `*-onnx`) |
 | Laptop, Windows 11 | CARLA 0.9.15 server (sessions of 30 minutes or less), `kaggle` and `wandb` CLIs |
 | Laptop, WSL2 Ubuntu 22.04 | ROS2 Humble nodes, live inference on TensorRT, one-time local engine build, demo recording |
 
@@ -188,7 +210,7 @@ python -m perception.pipeline --source <clip.mp4 or image dir> --out out.mp4 \
 ```powershell
 # Windows PowerShell, repo root, wandb logged in: download the ONNX artifacts into models/
 $p = "anish-grd2004-vellore-institute-of-technology/aiml04-perception"
-foreach ($a in "yolo11s-bdd-onnx:v0","midas-small-onnx:v0","yolop-onnx:v0") { python -m wandb artifact get "$p/$a" --root models }
+foreach ($a in "yolo11s-mix-onnx:v0","yolo11s-bdd-onnx:v0","midas-small-onnx:v0","yolop-onnx:v0") { python -m wandb artifact get "$p/$a" --root models }
 ```
 ```bash
 # WSL2, with CARLA stopped (building while CARLA runs is ~4x slower and runs the GPU hot)
@@ -282,14 +304,17 @@ owner: main session).
 
 ## Limitations
 
-- **Closed loop is tested on one scenario.** Only `stopped_car` has run (stopped 6.9 m short).
-  Pedestrian crossing, cut-in and night/rain are scripted but not yet run.
-- **Sim-to-real gap.** On CARLA frames, motorcycle AP50 is 0.104 (BDD 0.383) and car AP50 drops to
-  0.52 at night and 0.41 in heavy rain (BDD night costs only ~0.03 mAP@0.5). A BDD + CARLA
-  fine-tune (M5.9) is in progress; no result yet.
-- **Distance reads slightly long on detected boxes in CARLA.** After calibration the held-out bias
-  is +0.046 overall; between 0 and 10 m it is +0.25, from cars alongside the ego whose nearest
-  point no box bottom shows. On unseen route segments expect a few percent long.
+- **Closed loop is tested once per scenario, in one town.** All four Session B runs stopped
+  without a collision (Town01). At night in heavy rain the lead read ~13 % long (17.6 m shown vs
+  15.5 m true). No other towns or repeated runs.
+- **Sim-to-real gap.** With the BDD model on CARLA frames, motorcycle AP50 is 0.104 (BDD 0.383)
+  and car AP50 drops to 0.52 at night and 0.41 in heavy rain (BDD night costs only ~0.03 mAP@0.5).
+  The BDD + CARLA mix fine-tune closes most of this on held-out Town01 blocks (car AP50 heavy rain
+  0.450 → 0.932), but it is not tested on other towns, and person AP50 did not improve (0.551 →
+  0.556 on only 15 val boxes).
+- **Distance reads slightly long on detected boxes in CARLA.** The mix detector without
+  calibration has bias +0.041 overall and +0.061 at 30–60 m. Calibration is tied to the detector:
+  it must be refit (`sim/eval_frames.py --split val`) whenever the live weights change.
 - **Long-range false leads.** On KITTI sequence 0001, 47 of 111 lead frames were objects at least
   2.2 m to the side at more than ~24 m, where the lane mask decides. The controller's lead
   persistence rule filters one-frame cases; tightening the long-range corridor is still open.
@@ -304,8 +329,8 @@ owner: main session).
 
 ## Next steps
 
-- Run and record the remaining scenarios (M5.5, M5.8) and edit the demo video (M7.4).
-- Finish the BDD + CARLA fine-tune (M5.9) and re-run the sim eval.
+- Re-record the four scenarios in a final session (M5.8) and edit the demo video (M7.4).
+- Test the mix detector on a second town and repeat each scenario several times.
 - Tighten the ego corridor beyond ~24 m and log p95 latency in the live loop.
 - Stretch goals not done: DeepSORT comparison (M2.7), YOLO-seg lane model (M3.5), INT8 (M6.6),
   Hugging Face Space (M7.8).

@@ -315,7 +315,7 @@ Files with a top-level `base:` key are overrides merged onto the named file.
 | `lanes_eval.yaml` | `scripts/eval_lanes.py` | Classical vs YOLOP comparison on BDD val |
 | `camera.yaml` | `load_camera` | Intrinsics, height, pitch and noise for `kitti`, `carla`, `bdd` |
 | `depth.yaml` | `DepthEstimator`, `DistanceFusion` | MiDaS model and backend, box sampling, geometry limits and calibration, anchors, alignment, fusion mode and ego-lane corridor, Kalman/TTC gates |
-| `depth_carla.yaml` | live CARLA pipeline (override of `depth.yaml`) | `geometric_first` fusion and the CARLA detector-box calibration |
+| `depth_carla.yaml` | live CARLA pipeline (override of `depth.yaml`) | `geometric_first` fusion and the CARLA detector-box calibration (identity for the live mix detector; the M5.6 BDD-detector values are kept in a comment) |
 | `depth_eval.yaml` | `scripts/eval_depth.py` | Distance eval vs KITTI LiDAR: bins, models, leave-one-out |
 | `pipeline.yaml` | `load_pipeline_config` | Which stage configs to combine, camera, per-stage overrides, source fps, output and overlay settings |
 | `pipeline_carla.yaml` | perception_node (override of `pipeline.yaml`) | CARLA lanes/depth configs, TensorRT engines in `models/`, MiDaS every 2nd frame, 20 fps |

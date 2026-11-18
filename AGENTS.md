@@ -36,8 +36,10 @@ kaggle kernels output <user>/aiml04-train-yolo -p runs/train_yolo   # only when 
 python scripts/train_yolo.py --config configs/yolo_bdd.yaml
 python -m perception.pipeline --source /kaggle/input/<clip.mp4 or image dir> --out /kaggle/working/out.mp4 \
     --json frames.jsonl --summary summary.json --snapshots snaps --backend torch --camera kitti \
-    --detector-weights <best.pt> --yolop-weights <yolop-640-640.onnx>   # --backend torch until the M6 ONNX export
-python deploy/export.py --config configs/bench.yaml               # ONNX + parity, W&B artifacts
+    --detector-weights <best.pt> --yolop-weights <yolop-640-640.onnx>   # torch on Kaggle; onnx/tensorrt also work
+python deploy/export.py --config configs/bench.yaml [--smoke] [--models ...]   # ONNX + parity, W&B artifacts
+python -m scripts.train_mix --config configs/yolo_mix.yaml       # M5.9 BDD + CARLA fine-tune
+python -m sim.eval_frames --config configs/carla_eval.yaml [--split val --weights-artifact <a> --tag <t>]  # sim eval
 python deploy/build_local_engine.py --onnx /kaggle/temp/m6_models/*.onnx --fp16   # T4 engines
 python deploy/benchmark.py --config configs/bench.yaml           # writes docs/benchmarks.md content
 
@@ -45,13 +47,16 @@ python deploy/benchmark.py --config configs/bench.yaml           # writes docs/b
 pytest -q
 
 # 💻 CARLA server (Windows, short sessions)
-CarlaUE4.exe -quality-level=Low -RenderOffScreen -fps=20
+D:\CARLA_0.9.15\CarlaUE4.exe -quality-level=Low -RenderOffScreen -fps=20
 
-# 💻 WSL2
+# 💻 WSL2 Ubuntu 22.04 (mirrored networking, so CARLA is at localhost; see docs/SETUP.md)
 pip install "tensorrt-cu12>=10,<11" "cuda-python>=12,<13" # once; no torch (as on Kaggle)
-python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16      # one time, ~5 min
-cd ros2_ws && colcon build --symlink-install && source install/setup.bash
-ros2 launch perception_ros stack.launch.py carla_host:=<windows-host-ip>
+python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16      # one time, with CARLA stopped
+bash /mnt/d/Project_ai/ros2_ws/build_wsl.sh                            # builds into ~/aiml04_ws
+source /opt/ros/humble/setup.bash && source ~/aiml04_ws/install/setup.bash
+export AIML04_REPO_ROOT=/mnt/d/Project_ai RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ROS_LOCALHOST_ONLY=1
+ros2 launch perception_ros stack.launch.py carla_host:=localhost town:=Town01 load_town:=true \
+    scenario:=stopped_car          # stopped_car | pedestrian_crossing | cut_in | night_rain
 ```
 Keep this section current when commands change.
 

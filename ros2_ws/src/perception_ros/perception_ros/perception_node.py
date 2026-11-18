@@ -2,7 +2,7 @@
 
 A thin wrapper: converts the Image to numpy, calls ``Pipeline.process`` (detector, ByteTrack,
 lanes, MiDaS, DistanceFusion, all from perception/) and publishes the result. Models run on ONNX
-Runtime (``perception.backend`` in configs/carla.yaml; TensorRT after M6.4), never PyTorch.
+Runtime (``perception.backend`` in configs/carla.yaml; TensorRT engines by default since M6.4), never PyTorch.
 
 Topics: in ``/carla/ego/rgb``; out ``/perception/objects`` (TrackedObjectArray),
 ``/perception/lanes`` (LaneBoundaries), ``/perception/debug_image`` (bgr8, annotated). Output
