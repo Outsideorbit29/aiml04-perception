@@ -11,7 +11,8 @@ camera: carla
 overrides:
   detector:
     backend: tensorrt                    # M6.4 laptop engine; `onnx` + .onnx works on any GPU
-    weights: models/yolo11s-bdd.engine   # built from the M6.1 export (640x640, FP16)
+    weights: models/yolo11s-mix.engine   # M5.9 BDD+CARLA fine-tune (W&B yolo11s-mix-onnx:v0), FP16;
+                                         # models/yolo11s-bdd.engine is the BDD-only fallback
     device: null
   depth:
     estimator:
