@@ -56,6 +56,8 @@ KITTI videos are qualitative only (MOT metrics below, M2.6). Fragmentation is vi
 - **Caveats:** KITTI camera height/pitch are known exactly, which flatters the geometric method; CARLA and BDD values in `configs/camera.yaml` are placeholders until M5. Kalman/TTC is unit-tested only (KITTI object frames are not sequences); it gets evaluated on CARLA recordings in M5. TTC is reported only after a track is 0.75 s old and closing faster than 2 sigma of its speed estimate; simulated stationary cars at 10–20 m give no false TTC, rare ones remain at 30–40 m. Full table: `docs/figures/depth_comparison.md`.
 
 ## Offline pipeline (M4.6)
+
+**M7.1 fresh-clone recheck (2026-11-19).** `kaggle/run_pipeline` smoke (KITTI 0001, 50 frames, torch backend) on a fresh clone of main 81a650e, after the 11-18/19 fusion, calibration and control changes: ran clean, pipeline 10.9 FPS stage time / 2.9 FPS wall on a T4, 21 lead frames, MiDaS aligned on 48 of 50 frames. W&B [h31f403p](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/h31f403p). Smoke check only, not a new result.
 | Date | Source | Commit | Pipeline FPS (stages) | End-to-end FPS | Mean ms detect / track / lanes / depth / fusion | Lead frames | AEB-trigger lead frames | W&B |
 |---|---|---|---|---|---|---|---|---|
 | 2026-11-13 | KITTI tracking 0001, 447 frames, T4 | 0f7889d (v2) | 11.0 | 4.4 | 15.3 / 3.4 / 27.5 / 40.7 / 3.7 | 274 | not counted | [pmhbd5ti](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/pmhbd5ti) |

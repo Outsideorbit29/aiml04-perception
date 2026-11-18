@@ -114,7 +114,7 @@ Code is written and unit-tested without the simulator. The laptop runs CARLA onl
 - Exit: `docs/benchmarks.md` has the T4 table plus the laptop end-to-end numbers.
 
 ## M7 – Deliverables (Nov 20–22) ☁ [docs-presenter, qa-reviewer]
-- [ ] M7.1 `qa-reviewer` full pass: CI green, lint clean, and a fresh clone works in a Kaggle notebook
+- [x] M7.1 `qa-reviewer` full pass: CI green, lint clean, and a fresh clone works in a Kaggle notebook
 - [ ] M7.2 README: overview, results table, setup, usage, demo GIF
 - [ ] M7.3 Architecture diagram (Mermaid + PNG in `docs/diagrams/`) plus data/API docs for the messages and Python interfaces
 - [ ] M7.4 Demo video, 3–4 min, edited from the session recordings: scenarios with overlay, ending on the benchmark table
