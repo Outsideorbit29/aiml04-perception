@@ -101,6 +101,26 @@ recorded CARLA frames: **66.8 FPS stage time, 33.8 FPS wall** (incl. decode/draw
 time 40–45 ms over 100-frame windows (~22–25 FPS) with CARLA rendering on the same GPU; the
 synchronous loop ran 4.9 sim steps/s. Quote this, not the one-frame readings. p95 is not logged yet.
 
+**Live 100-frame mean pipeline times, all closed-loop sessions** (perception stage time only,
+`perception_node` logs one mean per 100 frames; CARLA renders on the same GPU; TensorRT FP16
+engines; MiDaS every 2nd frame). The first window of a run includes engine warm-up.
+
+| Session (date) | Detector engine | Scenario | 100-frame means (ms) | ≈ FPS |
+|---|---|---|---|---|
+| A2 (2026-11-18) | yolo11s-bdd | stopped_car | 44.6, 40.2 | 22–25 |
+| B (2026-11-19) | yolo11s-mix | stopped_car | 44.0, 38.5, 38.7 | 23–26 |
+| B | yolo11s-mix | pedestrian_crossing | 40.1 | 25 |
+| B | yolo11s-mix | cut_in | 40.3, 38.1 | 25–26 |
+| B | yolo11s-mix | night_rain | 35.0 | 29 |
+| C (2026-11-19) | yolo11s-mix | stopped_car | 49.2, 40.8, 40.5, 41.1, 40.6 | 20–25 |
+| C | yolo11s-mix | cut_in | 44.4, 38.2 | 23–26 |
+| C | yolo11s-mix | pedestrian_crossing | 46.7, 39.4 | 21–25 |
+| C | yolo11s-mix | night_rain | 43.0, 43.1, 41.6 | 23–24 |
+
+Across the 21 windows: **35.0–49.2 ms, median 40.6 ms (~25 FPS)**. These are means over windows,
+not per-frame percentiles, and they exclude ROS transport and the synchronous CARLA tick, so
+they are not the closed-loop rate. p95 per frame is still not logged.
+
 | Date | Backend | Pipeline FPS | GPU / driver / CUDA / TensorRT | Notes |
 |---|---|---|---|---|
 | 2026-11-18 | ONNX Runtime 1.22 | 7.6 (131 ms/frame) | RTX 3060 Laptop / 621.24 / – / – | Live `stopped_car` run with CARLA rendering. ORT's CUDA provider could not load (no cuBLAS/cuDNN in WSL), so detector and MiDaS ran on the CPU: detect alone 130 ms. Overlay reading mid-run. |
