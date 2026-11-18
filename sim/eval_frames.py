@@ -24,6 +24,14 @@ The upload may keep the subfolders as .zip files; everything is staged flat to `
    ``fused`` uses leave-one-out alignment (as M4.4); ``fused_live`` is the live call (anchors'
    MiDaS fitted with themselves). Also the camera height implied by the GT (checks the
    flat-ground model: configs/camera.yaml carla height_m / pitch).
+   ``fused`` / ``fused_live`` use the configured ``fusion.mode``; ``fused_weighted`` and
+   ``fused_geofirst`` are both modes on the same (leave-one-out) estimates. ``geometric`` on
+   detections applies ``geometry.calibration``; ``geometric_raw`` does not. GT boxes are never
+   calibrated (the calibration models detector boxes).
+2b. Detector-box calibration study (``calibration``): each model (distance scale, constant row
+   offset, row offset + box-height term) is fitted on one split of the matched detections and
+   scored on the other: even/odd frame position (the split the shipped config values come from)
+   and the two halves of the recording (different route segments and weathers), both ways.
 3. MiDaS vs GT depth on the depth PNGs, with a per-frame least-squares affine fit in inverse
    depth (oracle alignment, the usual relative-depth eval): AbsRel, RMSE, delta < 1.25.
 
@@ -54,7 +62,9 @@ from perception.detection.processing import box_iou
 from perception.types import Detection
 
 PARTS = {"images": (".jpg",), "labels": (".txt",), "gt": (".json",), "depth": (".png",)}
-METHODS = ("geometric", "midas_small", "fused", "fused_live")
+METHODS = ("geometric", "geometric_raw", "midas_small", "fused_weighted", "fused_geofirst",
+           "fused", "fused_live")
+CAL_MODELS = ("scale", "offset", "offset_box")
 COLOR_GT = (0, 200, 0)  # BGR
 COLOR_MATCH = (255, 160, 0)
 COLOR_MISS = (0, 0, 255)
@@ -214,6 +224,89 @@ def mean_rows(rows: Sequence[dict[str, float]], keys: Sequence[str]) -> dict[str
     for k in keys:
         vals = [r[k] for r in rows if r.get(k) is not None]
         out[k] = float(np.mean(vals)) if vals else None
+    return out
+
+
+def split_masks(pos: np.ndarray, n: int) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Fit / hold-out masks over records by frame position ``pos`` (0..n-1 in the evaluated
+    list): ``even_odd`` (fit even, score odd), ``halves_ab`` (fit first half, score second) and
+    ``halves_ba`` (the reverse). The halves are different route segments and weathers."""
+    pos = np.asarray(pos, int)
+    even, first = pos % 2 == 0, pos < n / 2
+    return {"even_odd": (even, ~even), "halves_ab": (first, ~first), "halves_ba": (~first, first)}
+
+
+def fit_calibration(
+    model: str, recs: Sequence[dict[str, Any]], cam: Any, fit_range: Sequence[float],
+    huber_k: float, iters: int,
+) -> dict[str, float]:
+    """Fit one calibration ``model`` (CAL_MODELS) on matched-detection records (``y1``, ``y2``,
+    ``geometric_raw``, ``gt``) with GT in ``fit_range``. Returns ``geometry.calibration`` values
+    (pixel offsets at ``cam``'s size)."""
+    from perception.depth.calibration import fit_distance_scale, fit_row_offset
+
+    if model not in CAL_MODELS:
+        raise ValueError(f"unknown calibration model {model!r}")
+    rs = [r for r in recs if r.get("geometric_raw") is not None
+          and fit_range[0] <= r["gt"] <= fit_range[1]]
+    if not rs:
+        raise ValueError("no records in the calibration fit range")
+    if model == "scale":
+        k = fit_distance_scale([r["geometric_raw"] for r in rs], [r["gt"] for r in rs])
+        return {"offset_px": 0.0, "offset_box_frac": 0.0, "distance_scale": k}
+    y1 = np.array([r["y1"] for r in rs], float)
+    y2 = np.array([r["y2"] for r in rs], float)
+    target = np.array([cam.row_of_distance(r["gt"]) for r in rs], float)
+    a, b = fit_row_offset(y2, y2 - y1, target, model == "offset_box", huber_k, iters)
+    return {"offset_px": a, "offset_box_frac": b, "distance_scale": 1.0}
+
+
+def apply_calibration(
+    recs: Sequence[dict[str, Any]], cal: dict[str, float], cam: Any, fusion: Any
+) -> list[float | None]:
+    """Calibrated geometric distance of each record's detection box (same validity rules as
+    ``DistanceFusion.geometric``; None where the raw geometric is None)."""
+    from perception.depth.calibration import BottomCalibration, box_geometric_distance
+
+    c = BottomCalibration.from_dict(cal)
+    out: list[float | None] = []
+    for r in recs:
+        est = None
+        if r.get("geometric_raw") is not None:
+            est = box_geometric_distance(cam, r["y1"], r["y2"], c, fusion.min_angle,
+                                         fusion.max_geo, fusion.bottom_margin)
+        out.append(est[0] if est else None)
+    return out
+
+
+def calibration_study(
+    recs: Sequence[dict[str, Any]], n_frames: int, cam: Any, fusion: Any,
+    ccfg: dict[str, Any], bins: list[list[float]],
+) -> dict[str, Any]:
+    """Every split x model: fitted values, then raw vs calibrated geometric on the fit split
+    (in-sample, for reference only) and on the hold-out split."""
+    from scripts.eval_depth import summarize
+
+    pos = np.array([r["pos"] for r in recs], int)
+    out: dict[str, Any] = {}
+    for split, (fit_m, hold_m) in split_masks(pos, n_frames).items():
+        fit_r = [r for r, f in zip(recs, fit_m, strict=True) if f]
+        hold_r = [r for r, h in zip(recs, hold_m, strict=True) if h]
+        out[split] = {"n_fit": len(fit_r), "n_holdout": len(hold_r), "models": {}}
+        for model in ccfg["models"]:
+            try:
+                cal = fit_calibration(model, fit_r, cam, ccfg["fit_range_m"],
+                                      float(ccfg["huber_k"]), int(ccfg["irls_iters"]))
+            except ValueError as exc:
+                out[split]["models"][model] = {"error": str(exc)}
+                continue
+            entry: dict[str, Any] = {"values": cal}
+            for name, rs in (("fit", fit_r), ("holdout", hold_r)):
+                cz = apply_calibration(rs, cal, cam, fusion)
+                scored = [{"gt": r["gt"], "geometric_raw": r["geometric_raw"],
+                           "geometric_cal": z} for r, z in zip(rs, cz, strict=True)]
+                entry[name] = summarize(scored, ("geometric_raw", "geometric_cal"), "gt", bins)
+            out[split]["models"][model] = entry
     return out
 
 
@@ -392,7 +485,7 @@ def markdown(results: dict[str, Any]) -> str:
         lines += [f"| {w} | {v['images']} | {_f(v['map50'])} | {_f(v['map50_95'])} |"
                   for w, v in r["per_weather"].items()]
         lines.append("")
-    for src in ("det", "gt"):
+    for src in ("det", "det_holdout", "gt"):
         dist = results.get("distance", {}).get(src)
         if not dist:
             continue
@@ -411,6 +504,28 @@ def markdown(results: dict[str, Any]) -> str:
             lines.append(f"| {w} | {a['fused']['n']} | {_f(a['fused']['absrel'])} | "
                          f"{_f(a['fused']['bias'])} | {_f(a['geometric']['absrel'])} | "
                          f"{_f(a['fused']['coverage'], 2)} |")
+        lines.append("")
+    cal = results.get("calibration")
+    if cal:
+        lines += ["## Detector-box calibration of the geometric distance (fit -> hold-out)", "",
+                  "| split | model | offset_px, box_frac, scale | hold-out n | raw AbsRel | "
+                  "cal AbsRel | raw bias | cal bias | cal AbsRel by bin | fit-split cal AbsRel |",
+                  "|---|---|---|---|---|---|---|---|---|---|"]
+        for split, sd in cal.items():
+            for model, e in sd["models"].items():
+                if "error" in e:
+                    lines.append(f"| {split} | {model} | {e['error']} |" + " |" * 7)
+                    continue
+                v, h = e["values"], e["holdout"]
+                ha = h["all"]["methods"]
+                by_bin = " / ".join(_f(h[b]["methods"]["geometric_cal"]["absrel"])
+                                    for b in h if b != "all")
+                lines.append(
+                    f"| {split} | {model} | {v['offset_px']:.2f}, {v['offset_box_frac']:.4f}, "
+                    f"{v['distance_scale']:.4f} | {ha['geometric_cal']['n']} | "
+                    f"{_f(ha['geometric_raw']['absrel'])} | {_f(ha['geometric_cal']['absrel'])} | "
+                    f"{_f(ha['geometric_raw']['bias'])} | {_f(ha['geometric_cal']['bias'])} | "
+                    f"{by_bin} | {_f(e['fit']['all']['methods']['geometric_cal']['absrel'])} |")
         lines.append("")
     mg = results.get("midas_gt")
     if mg:
@@ -449,7 +564,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     from perception.depth import DepthEstimator, load_camera
     from perception.detection import Detector
     from perception.detection.detector import load_names
-    from perception.fusion import DistanceFusion
+    from perception.fusion import DistanceFusion, fuse_by_mode, inverse
     from perception.pipeline import load_pipeline_config, stage_configs
     from scripts.eval_detection import fetch_weights
     from scripts.eval_lanes import git_sha, gpu_name
@@ -518,10 +633,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         if not np.allclose(cfg_k, (cam.fx, cam.fy, cam.cx, cam.cy), atol=0.5):
             print(f"WARNING: meta intrinsics {intr} differ from camera.yaml {cfg_k}", flush=True)
     fusion = DistanceFusion(sc["depth"], cam)
+    # GT boxes: same settings without the detector-box calibration (it models detector boxes).
+    gt_depth = {**sc["depth"], "geometry": {**sc["depth"]["geometry"], "calibration": {}}}
+    fusion_gt = DistanceFusion(gt_depth, cam)
     results["setup"] = {"camera": repr(cam), "detector": {k: sc["detector"].get(k) for k in (
         "backend", "imgsz", "conf", "iou", "agnostic_nms")},
         "depth": {"model": est.name, "input_hw": est.mcfg["input_hw"],
-                  "backend": type(est.backend).__name__}}
+                  "backend": type(est.backend).__name__},
+        "fusion_mode": fusion.mode, "calibration": vars(fusion.calibration)}
     dcfg, mcfg = cfg["distance"], cfg["midas_gt"]
     det_conf, iou_thr = float(dcfg["det_conf"]), float(dcfg["iou_match"])
     loo = bool(dcfg["leave_one_out"])
@@ -537,20 +656,31 @@ def main(argv: Sequence[str] | None = None) -> None:
     bins = dcfg["bins"]
     from scripts.eval_depth import bin_label
 
-    def measure(dets: list[Detection], hw: tuple[int, int], inv: np.ndarray) -> tuple[list, list]:
-        m_loo, _ = fusion.measure(dets, hw, inv, leave_one_out=loo)
-        m_live, _ = fusion.measure(dets, hw, inv)
+    def measure(fu: Any, dets: list[Detection], hw: tuple[int, int], inv: np.ndarray
+                ) -> tuple[list, list]:
+        m_loo, _ = fu.measure(dets, hw, inv, leave_one_out=loo)
+        m_live, _ = fu.measure(dets, hw, inv)
         return m_loo, m_live
 
-    def rec(stem: str, o: dict, ms: Any, ml: Any, extra: dict) -> dict:
+    def zof(est: Any) -> float | None:
+        return est[0] if est else None
+
+    def rec(fu: Any, stem: str, o: dict, ms: Any, ml: Any, hw: tuple[int, int],
+            extra: dict) -> dict:
+        ig, im = inverse(ms.geometric), inverse(ms.midas)
+        raw = fu.geometric(ms.det, cam.scaled_to(hw), calibrated=False)
+        y1, y2 = float(ms.det.bbox_xyxy[1]), float(ms.det.bbox_xyxy[3])
         return {
             "frame": stem, "weather": weathers[stem], "cls": o["cls_name"], "id": o["id"],
             "gt": float(o["distance_m"]), "visible_frac": o.get("visible_frac"),
-            "geometric": ms.geometric[0] if ms.geometric else None,
-            "midas_small": ms.midas[0] if ms.midas else None,
-            "fused": ms.fused[0] if ms.fused else None,
-            "fused_live": ml.fused[0] if ml.fused else None,
-            "anchor": bool(ms.anchor), "align_mode": ms.align_mode, **extra,
+            "geometric": zof(ms.geometric), "geometric_raw": zof(raw),
+            "midas_small": zof(ms.midas),
+            "fused_weighted": zof(fuse_by_mode(ig, im, "inverse_depth_weighted",
+                                               fu.correlation)),
+            "fused_geofirst": zof(fuse_by_mode(ig, im, "geometric_first", fu.correlation)),
+            "fused": zof(ms.fused), "fused_live": zof(ml.fused),
+            "anchor": bool(ms.anchor), "align_mode": ms.align_mode, "y1": y1, "y2": y2,
+            **extra,
         }
 
     t0 = time.time()
@@ -567,13 +697,13 @@ def main(argv: Sequence[str] | None = None) -> None:
             timing["detect_ms"].append(1e3 * (t2 - t1))
             timing["depth_ms"].append(1e3 * (t3 - t2))
         # detection boxes, matched to GT
-        d_loo, d_live = measure(dets, hw, inv)
+        d_loo, d_live = measure(fusion, dets, hw, inv)
         gboxes = np.array([o["bbox_xyxy"] for o in objs], np.float32).reshape(-1, 4)
         pairs = match_pairs(gboxes, np.array([d.bbox_xyxy for d in dets]).reshape(-1, 4),
                             np.array([d.score for d in dets]), iou_thr)
         for g, pi, iou in pairs:
-            recs["det"].append(rec(p.stem, objs[g], d_loo[pi], d_live[pi], {
-                "iou": iou, "score": dets[pi].score, "det_cls": dets[pi].cls_name}))
+            recs["det"].append(rec(fusion, p.stem, objs[g], d_loo[pi], d_live[pi], hw, {
+                "iou": iou, "score": dets[pi].score, "det_cls": dets[pi].cls_name, "pos": k}))
         matched = {g for g, _, _ in pairs}
         for gi, o in enumerate(objs):
             b = bin_label(float(o["distance_m"]), bins)
@@ -581,9 +711,9 @@ def main(argv: Sequence[str] | None = None) -> None:
                 det_hits[key][0] += gi in matched
                 det_hits[key][1] += 1
         # GT boxes as detections
-        g_loo, g_live = measure(gt_detections(objs, name_to_id), hw, inv)
+        g_loo, g_live = measure(fusion_gt, gt_detections(objs, name_to_id), hw, inv)
         for o, ms, ml in zip(objs, g_loo, g_live, strict=True):
-            recs["gt"].append(rec(p.stem, o, ms, ml, {}))
+            recs["gt"].append(rec(fusion_gt, p.stem, o, ms, ml, hw, {"pos": k}))
             v = float(o["bbox_xyxy"][3])
             z = float(o["distance_m"])
             hc = dcfg["height_check"]
@@ -609,6 +739,14 @@ def main(argv: Sequence[str] | None = None) -> None:
             print(f"distance: {k + 1}/{len(paths)} frames ({time.time() - t0:.0f} s)", flush=True)
 
     results["distance"] = {src: summarize_distance(rs, bins) for src, rs in recs.items()}
+    # Detections on the hold-out split of the shipped calibration (odd frame positions), so the
+    # calibrated numbers are also reported on frames the calibration was not fitted on.
+    ccfg = cfg["calibration"]
+    hold = split_masks(np.array([r["pos"] for r in recs["det"]], int), len(paths))[
+        ccfg["config_split"]][1]
+    results["distance"]["det_holdout"] = summarize_distance(
+        [r for r, h in zip(recs["det"], hold, strict=True) if h], bins)
+    results["calibration"] = calibration_study(recs["det"], len(paths), cam, fusion, ccfg, bins)
     results["distance"]["det_recall"] = {
         b: {"matched": m, "gt": n, "recall": m / n if n else None} for b, (m, n) in det_hits.items()
     }
@@ -651,12 +789,22 @@ def main(argv: Sequence[str] | None = None) -> None:
             summary[f"det_{tag}/map50_95"] = r["all"]["map50_95"]
             for wname, v in r["per_weather"].items():
                 summary[f"det_{tag}_weather/{wname}/map50"] = v["map50"]
-    for src in ("det", "gt"):
+    for src in ("det", "det_holdout", "gt"):
         for b, e in results["distance"][src]["overall"].items():
             for m in METHODS:
                 st = e["methods"][m]
                 for key in ("absrel", "rmse", "bias", "coverage"):
                     summary[f"dist_{src}/{m}/{b}/{key}"] = st[key]
+    for split, sd in results["calibration"].items():
+        for model, e in sd["models"].items():
+            if "error" in e:
+                continue
+            summary.update(flat(e["values"], f"calib/{split}/{model}/"))
+            for b, st in e["holdout"].items():
+                for m in ("geometric_raw", "geometric_cal"):
+                    for key in ("absrel", "bias"):
+                        summary[f"calib/{split}/{model}/holdout/{b}/{m}/{key}"] = (
+                            st["methods"][m][key])
     summary.update(flat(results["midas_gt"]["all"], "midas_gt/"))
     summary.update(flat(results["distance"]["implied_camera_height_m"], "camera_height/"))
     run.summary.update(summary)

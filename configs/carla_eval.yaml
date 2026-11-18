@@ -43,6 +43,16 @@ distance:
     min_m: 5.0                     # only untruncated boxes in this GT range
     max_m: 40.0
 
+calibration:                       # detector-box calibration study (eval_frames step 2b)
+  models: [scale, offset, offset_box]  # distance x k | row + a | row + a + b * box_h
+  fit_range_m: [5.0, 60.0]         # GT range of the fit rows: below 5 m the GT (nearest 3D-box
+                                   # vertex) is mostly cars alongside the ego that no box bottom
+                                   # can represent
+  huber_k: 1.5                     # IRLS Huber threshold (robust sigma units) of the row fit
+  irls_iters: 10
+  config_split: even_odd           # the values in configs/depth_carla.yaml are fitted on even
+                                   # frame positions; distance/det_holdout scores the odd ones
+
 midas_gt:                          # MiDaS vs the GT depth PNGs (uint16 cm)
   min_m: 1.0                       # valid GT pixels (sky is ~1000 m, clipped at 655 m)
   max_m: 80.0
