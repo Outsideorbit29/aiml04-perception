@@ -141,6 +141,7 @@ def test_fill_image_roundtrip_bgr_and_depth():
     img = np.arange(4 * 6 * 3, dtype=np.uint8).reshape(4, 6, 3)
     msg = cv.fill_image(SimpleNamespace(), img, "bgr8")
     assert (msg.height, msg.width, msg.step, msg.is_bigendian) == (4, 6, 18, 0)
+    assert type(msg.data).__name__ == "array"  # rclpy fast path for uint8[]
     np.testing.assert_array_equal(cv.image_to_bgr(msg), img)
     depth = np.linspace(0.5, 80.0, 24, dtype=np.float32).reshape(4, 6)
     dm = cv.fill_image(SimpleNamespace(), depth, "32FC1")

@@ -7,6 +7,7 @@ Image encodings handled: bgr8, rgb8, bgra8, rgba8, mono8 (to BGR) and 32FC1 (dep
 from __future__ import annotations
 
 import math
+from array import array
 from typing import Any
 
 import numpy as np
@@ -76,7 +77,9 @@ def fill_image(msg: Any, arr: np.ndarray, encoding: str) -> Any:
     msg.height, msg.width = int(h), int(w)
     msg.encoding = encoding
     msg.is_bigendian = 0
-    msg.data = a.tobytes()
+    # array('B') takes rclpy's fast path for uint8[] (a memcpy); bytes or lists are validated
+    # element by element (~1M elements per 800x450 frame).
+    msg.data = array("B", a.tobytes())
     return msg
 
 

@@ -23,10 +23,17 @@ if ! dpkg -s ros2-apt-source >/dev/null 2>&1; then
 fi
 
 apt-get update -q
-apt-get install -y -q ros-humble-ros-base ros-humble-cv-bridge \
+apt-get install -y -q ros-humble-ros-base ros-humble-cv-bridge ros-humble-rmw-cyclonedds-cpp \
   python3-colcon-common-extensions python3-pip python3-numpy
 
 grep -q "/opt/ros/humble/setup.bash" ~/.bashrc || echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+# With .wslconfig networkingMode=mirrored, `lo` is not multicast-capable and the default Fast DDS
+# never discovers peers (nodes run but no message arrives; checked 2026-11-18). Cyclone DDS on
+# loopback works. stack.launch.py sets the same defaults for its nodes.
+grep -q "RMW_IMPLEMENTATION" ~/.bashrc || cat >> ~/.bashrc <<'EOF'
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export ROS_LOCALHOST_ONLY=1
+EOF
 
 # CARLA client + light Python deps. numpy stays at Ubuntu's 1.x because cv_bridge is built
 # against it; opencv is pinned to a release that still supports numpy 1.x.

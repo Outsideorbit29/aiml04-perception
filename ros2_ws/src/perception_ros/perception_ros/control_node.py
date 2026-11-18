@@ -37,6 +37,10 @@ class ControlNode(Node):
         self.pub = self.create_publisher(EgoControl, "/carla/ego/control", 10)
         self.create_subscription(TrackedObjectArray, "/perception/objects", self._on_objects, 10)
         self.create_subscription(Odometry, "/carla/ego/odom", self._on_odom, 10)
+        self.get_logger().info(
+            f"ready: lead persistence {self.cfg['lead_persist_frames']} frames, AEB ttc < "
+            f"{self.cfg['aeb_ttc_s']} s or d < {self.cfg['aeb_distance_m']} m"
+        )
 
     def _on_odom(self, msg: Odometry) -> None:
         self.speed = float(msg.twist.twist.linear.x)

@@ -48,7 +48,14 @@ def _setup(context, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - launch A
         "record_bag", "repo_root",
     )}
     root = lc["repo_root"] or str(repo_root())
-    env = {ENV: root, "PYTHONPATH": root + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    env = {
+        ENV: root,
+        "PYTHONPATH": os.pathsep.join(p for p in (root, os.environ.get("PYTHONPATH")) if p),
+        # WSL2 mirrored networking: Fast DDS finds no peers on the non-multicast `lo`, Cyclone
+        # DDS on loopback works (docs/SETUP.md 6). An RMW set in the shell wins.
+        "RMW_IMPLEMENTATION": os.environ.get("RMW_IMPLEMENTATION", "rmw_cyclonedds_cpp"),
+        "ROS_LOCALHOST_ONLY": os.environ.get("ROS_LOCALHOST_ONLY", "1"),
+    }
     config = lc["config"]
     cfg_path = config if os.path.isabs(config) else os.path.join(root, config)
     with open(cfg_path, encoding="utf-8") as f:
@@ -86,7 +93,7 @@ def _setup(context, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - launch A
         bag = os.path.join(root, "runs", "bags", f"{scenario or 'stack'}_{stamp}")
         actions.append(ExecuteProcess(
             cmd=["ros2", "bag", "record", "-o", bag, *cfg["recorder"]["bag_topics"]],
-            output="screen",
+            additional_env=env, output="screen",
         ))
     if scenario:
         proc = ExecuteProcess(

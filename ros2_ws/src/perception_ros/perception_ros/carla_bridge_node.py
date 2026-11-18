@@ -116,14 +116,18 @@ class CarlaBridge(Node):
         tm.ignore_lights_percentage(ego, float(t["ignore_lights_pct"]))
         tm.ignore_signs_percentage(ego, float(t["ignore_signs_pct"]))
         tm.auto_lane_change(ego, bool(t["auto_lane_change"]))
-        tm.set_desired_speed(ego, float(t["desired_speed_kmh"]))
+        self._try_tm("set_desired_speed", ego, float(t["desired_speed_kmh"]))
         if t.get("route"):
-            try:
-                tm.set_route(ego, list(t["route"]))
-            except Exception as e:  # noqa: BLE001 - optional TM feature
-                self.get_logger().warn(f"set_route failed: {e}")
+            self._try_tm("set_route", ego, list(t["route"]))
         if t.get("update_vehicle_lights"):
-            tm.update_vehicle_lights(ego, True)
+            self._try_tm("update_vehicle_lights", ego, True)
+
+    def _try_tm(self, name: str, *args: Any) -> None:
+        """Optional Traffic Manager feature: log instead of failing the whole bridge."""
+        try:
+            getattr(self.tm, name)(*args)
+        except Exception as e:  # noqa: BLE001
+            self.get_logger().warn(f"traffic manager {name} failed: {e}")
 
     def teardown(self) -> None:
         log = self.get_logger()
