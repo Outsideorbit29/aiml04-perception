@@ -59,7 +59,8 @@ cuda-python 12.9.10, ultralytics 8.4.215, timm 0.6.13.
 - **Accuracy cost of FP16 is negligible:** YOLO mAP@0.5 −0.0001, MiDaS 1 % relative, YOLOP
   lane mask IoU 0.993. The large YOLO box max-diff (10 px) comes from low-score anchors that
   NMS discards, as the unchanged mAP shows.
-- **ONNX Runtime FP32 matches PyTorch exactly** (mAP identical, max diff 1e-3 px). It is only
+- **ONNX Runtime FP32 matches PyTorch to 4 decimals** in mAP and lane IoU (max abs diff: boxes
+  1.2e-3 px, MiDaS 7.4e-3, YOLOP lane mask differs by 1 pixel). It is only
   1.1–1.2x faster for MiDaS and YOLOP and 8 % slower for YOLO at model level. Its YOLO module
   time is still 1 ms lower than PyTorch's; the cause was not profiled.
 - **Module time is now CPU-bound for the TensorRT rows.**
@@ -87,10 +88,16 @@ T4 engine builds: YOLO 283 s, MiDaS 140 s, YOLOP 217 s (FP16, 1 GiB workspace); 
 
 ## Laptop end-to-end (RTX 3060 Laptop 6 GB, CARLA loop) — M6.4 / M6.5
 
-To be measured in the planned CARLA session (same session as the sim-ros-integrator
-recording): end-to-end pipeline FPS with ONNX Runtime vs TensorRT engines built locally by
-`python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16` (WSL2). Record GPU, driver,
-CUDA and TensorRT versions with the row.
+Measured 2026-11-18 with engines built locally by
+`python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16` (WSL2).
+
+**How to read these rows.** The live numbers are *one-frame overlay readings* of perception
+**stage time only** (`1000 / total_ms` for that frame), not averages; MiDaS runs every 2nd
+frame, so a single reading may exclude it; and the closed loop itself is capped at CARLA's
+20 Hz. The ONNX Runtime row ran on the **CPU** (its CUDA provider could not load in WSL), so it
+is not an ORT-on-GPU baseline. The averaged number to quote is the offline TensorRT run on 100
+recorded CARLA frames: **66.8 FPS stage time, 33.8 FPS wall** (incl. decode/draw/encode).
+Next session: log `total_ms` per frame and report mean and p95.
 
 | Date | Backend | Pipeline FPS | GPU / driver / CUDA / TensorRT | Notes |
 |---|---|---|---|---|

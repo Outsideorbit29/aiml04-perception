@@ -34,7 +34,15 @@ laptop: check the W&B dashboard  ◄─  metrics + best.pt/ONNX artifacts  ◄�
 ```
 Each folder under `kaggle/` holds `kernel-metadata.json` (GPU on, internet on, datasets attached)
 and a short notebook that clones the repo and calls one script. Download outputs with
-`kaggle kernels output <user>/<kernel> -p runs/` only when you need them locally (the ONNX files for M6.4).
+`kaggle kernels output <user>/<kernel> -p runs/` only when you need them locally.
+
+The ONNX models for the laptop (M6.4) are W&B artifacts, not job outputs. On a fresh laptop
+(Windows, repo root, `wandb` logged in):
+```powershell
+$p = "anish-grd2004-vellore-institute-of-technology/aiml04-perception"
+foreach ($a in "yolo11s-bdd-onnx:v0","midas-small-onnx:v0","yolop-onnx:v0") { python -m wandb artifact get "$p/$a" --root models }
+```
+Then build the engines once in WSL: `python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16`.
 
 Kaggle limits: about 30 GPU-hours per week and up to 12 h per session (check your account's
 current quota). Training saves a checkpoint every epoch and resumes from the last W&B artifact.

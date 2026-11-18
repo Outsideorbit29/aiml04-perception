@@ -105,9 +105,9 @@ Code is written and unit-tested without the simulator. The laptop runs CARLA onl
 - Exit: in every scenario the ego car stops before colliding. Screen-record each.
 
 ## M6 – ONNX / TensorRT optimization (Nov 18–20) [edge-optimizer]
-- [ ] M6.1 ☁ Export YOLO, MiDaS-small and YOLOP to ONNX on Kaggle and verify output parity (max abs diff). The ONNX files are saved as W&B artifacts.
-- [ ] M6.2 ☁ Build TensorRT FP16 engines on the Kaggle T4
-- [ ] M6.3 ☁ `benchmark.py` on the T4: PyTorch vs ONNX Runtime vs TensorRT, p50/p95, FPS, VRAM, accuracy delta. This is the official before/after table.
+- [x] M6.1 ☁ Export YOLO, MiDaS-small and YOLOP to ONNX on Kaggle and verify output parity (max abs diff). The ONNX files are saved as W&B artifacts.
+- [x] M6.2 ☁ Build TensorRT FP16 engines on the Kaggle T4
+- [x] M6.3 ☁ `benchmark.py` on the T4: PyTorch vs ONNX Runtime vs TensorRT, p50/p95, FPS, VRAM, accuracy delta. This is the official before/after table.
 - [x] M6.4 💻 Build the local TensorRT engines from the ONNX files (~5 min, one time), because engines only run on the GPU model they were built for
 - [x] M6.5 💻 Measure end-to-end pipeline FPS during a CARLA session, before and after switching to TRT. TRT also lowers laptop load during the demo.
 - [ ] M6.6 **(S)** INT8 calibration on Kaggle
