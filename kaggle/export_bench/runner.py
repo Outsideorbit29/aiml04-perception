@@ -20,7 +20,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "m6-onnx-trt"  # branch, tag or commit SHA to run; set back to "main" before merging
-MODE = "smoke"  # smoke | full
+MODE = "full"  # smoke | full
 EXTRA = ["--smoke"] if MODE == "smoke" else []
 MODELS_DIR = "/kaggle/temp/m6_models"  # configs/bench.yaml models_dir
 OUT_DIR = "/kaggle/working/m6_bench"  # configs/bench.yaml out_dir
