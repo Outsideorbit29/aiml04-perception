@@ -143,4 +143,5 @@ dataset:                       # sim/record_dataset.py (M5.6 Session A)
   min_box_px: 6                # smaller projected boxes are dropped
   min_visible_frac: 0.25       # depth-test: fraction of box sample points not occluded
   depth_tolerance_m: 2.0       # occlusion test tolerance against the depth GT
+  depth_every_n_saved: 10      # GT depth PNG for every 10th saved frame (MiDaS check, ~300)
   jpg_quality: 92
