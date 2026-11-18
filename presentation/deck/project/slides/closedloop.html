@@ -1,0 +1,21 @@
+<section id="closedloop">
+<p class="eyebrow">Closed loop in CARLA</p>
+<h2>4 of 4 scenarios stopped, no collision</h2>
+<div class="split">
+<table class="data in" style="font-size:28px">
+<tr><th style="width:40%">Scenario</th><th class="num" style="width:22%">Stop gap</th><th style="width:38%">How it stopped</th></tr>
+<tr><td>Stopped car</td><td class="num">11.8 m</td><td>ACC, smooth</td></tr>
+<tr><td>Cut-in at 18 m</td><td class="num">10.0 m</td><td>Gap control, smooth</td></tr>
+<tr><td>Pedestrian crossing</td><td class="num">9.6 m</td><td>AEB at TTC 1.5 s</td></tr>
+<tr><td>Night + heavy rain</td><td class="num">11.3 m</td><td>ACC, smooth</td></tr>
+</table>
+<div class="grid4 in2">
+<div><img src="/_blob/1241e1f57b95e3bcb8419decf1c67c48" alt="Stopped car scenario: ACC mode, lead car about 16 m ahead in the green ego lane"></div>
+<div><img src="/_blob/a3ab62f4902a77ec71f21d13ae5e6f9d" alt="Cut-in scenario: the lead box on the car that cut in"></div>
+<div><img src="/_blob/2ed949303f4f322d5ab06c7111afd79f" alt="Pedestrian crossing: red AEB bar, pedestrian 12.3 m ahead with TTC 1.4 s"></div>
+<div><img src="/_blob/32da42c0e9d1764f25f8c9cd6c53fa82" alt="Night and heavy rain: car stopped behind the lead, ACC mode, 0 km/h"></div>
+</div>
+</div>
+<p class="small in3" style="margin-top:40px">Final recording, 19 Nov 2026, Town01. Live perception 38–49 ms per frame (100-frame means); the synchronous loop runs slower than real time.</p>
+<aside>Time: 1:30 including a clip from the demo video (media/aiml04_demo.mp4). In the stopped-car scenario the car slows down with adaptive cruise control and stops 11.8 m short, without emergency braking. The cut-in car comes in at 18 m and brakes; gap control stops us 10.0 m behind it. For the pedestrian, who appears suddenly, emergency braking fires at a time to collision of 1.5 seconds from about 29 km/h and the car stops 9.6 m short; after the walker clears, it pulls away slowly. At night in heavy rain the car stops smoothly 11.3 m short; the distance reads about 20 % long at night. Each scenario was recorded once in one town, which I come back to under limitations.</aside>
+</section>

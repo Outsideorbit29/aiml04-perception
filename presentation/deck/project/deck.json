@@ -1,0 +1,22 @@
+{
+  "v": 5,
+  "createdOnFiles": {"v": 1, "at": "2026-11-19T02:30:00+05:30"},
+  "lists": "css",
+  "format": {"v": 1, "shared": ["project/deck.css"]},
+  "title": "AIML-04 Perception Stack",
+  "cover": "cover",
+  "order": ["cover", "constraints", "architecture", "data", "detection", "tracking", "lanes", "distance", "optimization", "closedloop", "challenges", "results", "limits", "questions"],
+  "sections": {
+    "s1": {"description": "The brief, the constraints and the architecture of the stack.", "start": "cover"},
+    "s2": {"description": "Each perception module: data, detection, tracking, lanes and distance.", "start": "data"},
+    "s3": {"description": "Making it fast and closing the loop in CARLA.", "start": "optimization"},
+    "s4": {"description": "What went wrong, the results and what comes next.", "start": "challenges"}
+  },
+  "faces": {
+    "inter": {"family": "Inter", "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"},
+    "jetbrains-mono": {"family": "JetBrains Mono", "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"}
+  },
+  "designSystems": [
+    {"title": "Dark Mode UI", "namespace": "darkmode", "artifact": "https://claude.ai/artifact/WFSjKsWdjRpktpQmcGftdq", "version": null, "copiedAt": "2026-11-19T02:30:00+05:30"}
+  ]
+}

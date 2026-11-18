@@ -1,0 +1,21 @@
+<section id="lanes" class="alt">
+<p class="eyebrow">Lanes</p>
+<h2>Learned lanes find the right lines far more often</h2>
+<div class="split">
+<div>
+<div class="row" style="margin-bottom:40px">
+<div class="card in" style="flex:1"><p class="big green" style="font-size:88px">0.515</p><p class="big-label">F1, YOLOP</p></div>
+<div class="card in2" style="flex:1"><p class="big" style="color:#9da7b3;font-size:88px">0.231</p><p class="big-label">F1, classical</p></div>
+</div>
+<ul class="pts in3">
+<li>500 BDD val images; ego-lane IoU a tie (~0.42)</li>
+<li>YOLOP misses all lines on 129 of 500</li>
+<li>YOLOP live; classical is the CPU fallback</li>
+</ul>
+</div>
+<div>
+<img class="shot" src="/_blob/d663fe33f3d81f40905e2f8f59c3a4d6" alt="Grid of BDD frames where lane detection fails: worn markings, snow and dense traffic" style="width:780px;height:560px">
+</div>
+</div>
+<aside>Time: 0:45. The brief asked for a classical lane detector compared with a segmentation model. Both produce the same output: measured left and right boundaries and an ego-lane mask (W&amp;B bf4xp164). On 500 BDD val images YOLOP finds the right lines far more often: F1 0.515 against 0.231, precision 0.60 against 0.24. The classical method is fooled by car edges, hood reflections and road text. The ego-lane IoU is a tie at about 0.42, because YOLOP returns no line at all on 129 of 500 images; when it predicts, its IoU is higher, 0.52 against 0.45. Night costs YOLOP little. Snow is its worst condition and curves are weak for both, on only 20 images.</aside>
+</section>

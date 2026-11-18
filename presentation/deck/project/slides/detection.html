@@ -1,0 +1,22 @@
+<section id="detection" class="alt">
+<p class="eyebrow">Detection</p>
+<h2>Fine-tuning helped on BDD, barely in CARLA, until CARLA joined the mix</h2>
+<div class="three">
+<div class="card in">
+<p class="big">0.553</p>
+<p class="big-label">mAP@0.5 on 10k BDD val</p>
+<p class="big-sub">YOLO11s, 50 epochs at 640 px, one 4.6 h T4 session. Shared 7 classes: 0.560 vs COCO zero-shot 0.361</p>
+</div>
+<div class="card in2">
+<p class="big" style="color:#9da7b3">0.530</p>
+<p class="big-label">Same model on 3,000 CARLA frames</p>
+<p class="big-sub">COCO zero-shot scored 0.485 there: at most +0.045 carried over to rendered images</p>
+</div>
+<div class="card in3">
+<p class="big green">0.819</p>
+<p class="big-label">BDD + CARLA mix, CARLA-val</p>
+<p class="big-sub">5 more epochs with 25 % CARLA frames: 0.624 → 0.819 on 600 held-out frames; BDD val 0.553 → 0.539</p>
+</div>
+</div>
+<aside>Time: 0:50. I fine-tuned YOLO11s from COCO weights. On the 10k BDD val images it reaches 0.553 mAP at 0.5 (W&amp;B eval 8tzih6my). Compared fairly on the seven classes COCO shares with BDD, that is 0.560 against 0.361 zero-shot. The surprise came in CARLA. On 3,000 recorded frames the BDD model scored 0.530 and plain COCO 0.485, so most of the BDD gain did not transfer to rendered images; that +0.045 is probably an upper bound, because COCO calls CARLA riders “person” and those count as false positives. So I fine-tuned five more epochs on a mix with 25 % CARLA frames (W&amp;B i6dnlk0c). On 600 held-out CARLA frames mAP went from 0.624 to 0.819; on BDD it dropped 0.014. Caveat: the held-out frames come from the same town and session, so this is an in-domain gain.</aside>
+</section>

@@ -1,0 +1,20 @@
+<section id="constraints">
+<p class="eyebrow">Constraints</p>
+<h2>Anything that can run online runs online</h2>
+<div class="two">
+<div class="card in">
+<p class="card-title">Laptop · RTX 3060 Laptop, 6 GB VRAM</p>
+<p class="card-line">CARLA rendering and the models share one GPU</p>
+<p class="card-line">Runs only CARLA + ROS2, in sessions of 30 min or less</p>
+<p class="card-line">One-time TensorRT engine build; no PyTorch, no datasets</p>
+</div>
+<div class="card in2">
+<p class="card-title">Cloud · Kaggle T4, GitHub Actions, W&amp;B</p>
+<p class="card-line">Kaggle: data prep, training, every eval, ONNX export, benchmarks</p>
+<p class="card-line">GitHub Actions: lint and tests on every push</p>
+<p class="card-line">W&amp;B: every metric, plus weights and ONNX files</p>
+</div>
+</div>
+<div class="callout in3"><p>Budget: about <span class="key">30 Kaggle GPU-hours a week</span>, and one deadline shared with a second internship project.</p></div>
+<aside>Time: 0:40. The constraints shaped most of the design. The laptop has a 6 GB GPU and CARLA rendering takes a large part of it, so: no PyTorch in the live loop, small “s” models, and TensorRT FP16 engines. The second constraint was laptop load. Training, every dataset evaluation, the ONNX export and the T4 benchmark ran as Kaggle jobs launched from the laptop; tests ran in GitHub Actions; every run is logged to W&amp;B. The laptop never held the datasets. It only ran CARLA and ROS2 in short sessions, and built the TensorRT engines once, because engines only run on the GPU they were built on. Kaggle gives about 30 GPU-hours a week, so long runs had to fit one session or resume from W&amp;B.</aside>
+</section>

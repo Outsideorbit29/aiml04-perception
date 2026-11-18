@@ -1,0 +1,19 @@
+<section id="data">
+<p class="eyebrow">Data</p>
+<h2>Heavily skewed classes, kept all nine</h2>
+<div class="split">
+<div>
+<ul class="pts">
+<li>BDD100K: 20,000-image train subset (stratified by time of day and weather) + full 10,000 val</li>
+<li>Car is 55 % of boxes; motorcycle 239× rarer, rider 148×</li>
+<li>Repeat-factor sampling: motorcycle ×1.75, rider ×1.36, bicycle ×1.24</li>
+<li>KITTI: LiDAR distance ground truth + 8 tracking sequences; CARLA: 3,000 recorded frames</li>
+</ul>
+</div>
+<div>
+<img class="shot" src="/_blob/f642d60d2132ba77058cb11f1b13f03d" alt="Bar chart of BDD100K boxes per class on a log scale for the full train set, the 20k subset and val; car is highest, motorcycle and rider lowest" style="width:800px;height:360px">
+<p class="cap">Boxes per class, log scale (docs/figures/eda_class_counts.png)</p>
+</div>
+</div>
+<aside>Time: 0:40. BDD100K was the main dataset. The full train split is 69,863 images with about 1.27 million boxes. To fit the GPU budget I took a 20,000-image subset, stratified by time of day and weather, and kept the full 10,000-image val split. About 40 % of images are at night and 55 % of boxes are small. The class balance is very skewed: cars are 55 % of all boxes. I kept all nine classes, because rider versus person matters for driving, and used repeat-factor sampling so images with rare classes appear more often. That added only 853 entries per epoch. KITTI gave LiDAR ground truth for distance and tracking sequences for MOT. Later I recorded 3,000 CARLA frames with ground truth on the laptop and uploaded them to Kaggle.</aside>
+</section>

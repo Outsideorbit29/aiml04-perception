@@ -1,0 +1,13 @@
+<section id="tracking">
+<p class="eyebrow">Tracking</p>
+<h2>ByteTrack, tuned to stop one-frame ghost tracks</h2>
+<table class="data in">
+<tr><th style="width:40%">8 KITTI sequences, 2,358 frames</th><th class="num" style="width:20%">MOTA</th><th class="num" style="width:20%">IDF1</th><th class="num" style="width:20%">ID switches</th></tr>
+<tr><td>Default ByteTrack</td><td class="num">52.3</td><td class="num">65.7</td><td class="num">310</td></tr>
+<tr><td>Tuned: 2 consecutive frames, buffer 60</td><td class="num">52.5</td><td class="num">67.4</td><td class="num">176</td></tr>
+<tr><td>  Vehicles</td><td class="num">63.7</td><td class="num">75.7</td><td class="num">–</td></tr>
+<tr><td>  Pedestrians</td><td class="num">38.5</td><td class="num">54.9</td><td class="num">–</td></tr>
+</table>
+<div class="callout in2"><p><span class="key">Cost of the fix:</span> recall 67.7 → 64.6, and a new id appears 2 frames (100 ms at 20 Hz) after the first detection. Detection + tracking: 52 FPS on a T4.</p></div>
+<aside>Time: 0:40. BDD’s tracking split is not on Kaggle, so I evaluated on eight KITTI tracking sequences (W&amp;B qvrkp7t1). The default ByteTrack produced many one-frame ghost tracks. Requiring two consecutive matched frames before a track gets an id cut ID switches from 310 to 176 and raised IDF1 from 65.7 to 67.4; MOTA barely moved. The trade-off is slightly lower recall and a 2-frame delay before a new object gets an id — 100 ms at CARLA’s 20 Hz, fine for braking at urban speeds. Pedestrians are much weaker than vehicles; part of that is a label mismatch, since KITTI cyclist boxes include the bike and BDD rider boxes do not. The settings were chosen on the same sequences, so these numbers are in-sample.</aside>
+</section>

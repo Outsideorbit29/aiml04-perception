@@ -1,0 +1,12 @@
+<section id="distance">
+<p class="eyebrow">Distance</p>
+<h2>Geometry first, MiDaS only to fill the gaps</h2>
+<table class="data in" style="font-size:28px">
+<tr><th style="width:44%">AbsRel, lower is better</th><th class="num" style="width:20%">Geometric</th><th class="num" style="width:36%">With MiDaS</th></tr>
+<tr><td>KITTI vs LiDAR, 1,000 frames</td><td class="num">0.168</td><td class="num">0.170, coverage 1.00</td></tr>
+<tr><td>CARLA, ground-truth boxes</td><td class="num">0.040</td><td class="num">0.087 → 0.057 geo-first</td></tr>
+<tr><td>CARLA-val, live mix detector</td><td class="num">0.081</td><td class="num">–</td></tr>
+</table>
+<div class="callout in2"><p><span class="key">Lesson:</span> a box-bottom calibration belongs to one detector. The fix fitted for the BDD detector over-corrected the mix detector on every hold-out, so the live stack uses none.</p></div>
+<aside>Time: 0:55. MiDaS gives relative depth only, so the metric scale comes from geometry: the box bottom touches the road, and with a known camera height and pitch that row gives the distance. MiDaS is aligned to those anchors every frame and fills the gaps, and a Kalman filter per track gives closing speed and time to collision. On KITTI (W&amp;B amgl803i) fusion adds coverage with the same overall error; one bug I found there was that averaging in metres pulled fused distances short, so fusion is done in inverse depth. CARLA reversed the picture (W&amp;B nfekm9vg): the flat-ground model is near exact, 0.040, and MiDaS made it worse, so CARLA uses geometric-first. Detected boxes read about 10 % long, so I fitted a box-bottom calibration for the BDD detector. When I switched to the mix detector, that calibration over-corrected it on all three hold-outs. The mix detector needs none: 0.081 AbsRel on 600 held-out frames (W&amp;B 7cnlg0dt).</aside>
+</section>

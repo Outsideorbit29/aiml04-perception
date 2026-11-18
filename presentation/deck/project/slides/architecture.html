@@ -1,0 +1,25 @@
+<section id="architecture" class="alt">
+<p class="eyebrow">Architecture</p>
+<h2>Four ROS2 nodes around one ROS-free pipeline</h2>
+<div class="flow in">
+<div class="node"><p class="n-title">CARLA 0.9.15</p><p class="n-sub">Windows · Town01 · sync mode, 0.05 s step</p></div>
+<x-connector head="end"></x-connector>
+<div class="node"><p class="n-title">carla_bridge_node</p><p class="n-sub">camera 800×450 + odometry out, control in</p></div>
+<x-connector head="end"></x-connector>
+<div class="node hot"><p class="n-title">perception_node</p><p class="n-sub">TensorRT FP16 engines</p></div>
+<x-connector head="end"></x-connector>
+<div class="node"><p class="n-title">control_node</p><p class="n-sub">AUTOPILOT · ACC · GAP · AEB · HOLD</p></div>
+</div>
+<div class="stages in2">
+<div class="stage"><p>YOLO11s detect</p></div>
+<div class="stage"><p>ByteTrack</p></div>
+<div class="stage"><p>YOLOP lanes</p></div>
+<div class="stage"><p>MiDaS-small (every 2nd frame)</p></div>
+<div class="stage"><p>Distance fusion + Kalman → TTC</p></div>
+</div>
+<ul class="pts in3" style="margin-top:48px">
+<li>The bridge ticks CARLA only after control for the last frame arrives, so slow perception never desyncs the sim</li>
+<li>A lead must stay in the ego lane for 3 frames under one track id before the controller reacts</li>
+</ul>
+<aside>Time: 1:00. CARLA runs on Windows. ROS2 Humble runs in WSL2 with four nodes. The bridge is the only node that talks to CARLA: it publishes the camera image and odometry and applies the control. The perception node wraps one Python pipeline that has no ROS code in it: YOLO detection, ByteTrack, YOLOP lanes, MiDaS depth every second frame, and distance fusion with a per-track Kalman filter that gives closing speed and time to collision. The control node picks the mode: autopilot, adaptive cruise, gap keeping, emergency braking, or hold. A fourth node records the video. CARLA runs in synchronous mode, so slow perception never desyncs the simulation; the cost is that the loop runs slower than real time. On the cloud side, Kaggle jobs clone the repo at a commit and push metrics, weights and ONNX files to W&amp;B.</aside>
+</section>

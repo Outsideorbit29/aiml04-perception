@@ -1,0 +1,15 @@
+<section id="results">
+<p class="eyebrow">Results</p>
+<h2>Every number has a W&amp;B run behind it</h2>
+<table class="data in" style="font-size:28px">
+<tr><th style="width:22%">Area</th><th style="width:46%">Result</th><th style="width:32%">Data</th></tr>
+<tr><td>Detection</td><td>mAP@0.5 <span class="hl">0.553</span> (zero-shot 0.361, 7 classes)</td><td>BDD val, 10k</td></tr>
+<tr><td>Detection in CARLA</td><td><span class="hl">0.819</span> mix vs 0.624 BDD-only</td><td>600 held-out CARLA frames</td></tr>
+<tr><td>Tracking</td><td>MOTA 52.5, IDF1 67.4, 176 ID switches</td><td>KITTI, 8 sequences</td></tr>
+<tr><td>Lanes</td><td>F1 <span class="hl">0.515</span> YOLOP vs 0.231 classical</td><td>BDD val, 500</td></tr>
+<tr><td>Distance</td><td>AbsRel 0.170 (KITTI) · <span class="hl">0.081</span> (CARLA)</td><td>KITTI LiDAR; CARLA-val</td></tr>
+<tr><td>TensorRT</td><td>2.72× / 4.25× / 3.40× vs PyTorch</td><td>T4, batch 1</td></tr>
+<tr><td>Closed loop</td><td><span class="hl">4 of 4</span> scenarios stopped, no collision</td><td>CARLA Town01</td></tr>
+</table>
+<aside>Time: 0:35. One slide with everything. Detection beats the zero-shot baseline on BDD, and the mix fine-tune fixes most of the sim-to-real gap in CARLA at a small BDD cost. Tracking is solid for vehicles and weaker for pedestrians. Learned lanes beat classical lanes clearly on line detection, but miss lines more often in bad conditions. Distance is about 17 % relative error against LiDAR on KITTI, and about 8 % in CARLA with the mix detector. TensorRT makes all three models two to four times faster at almost no accuracy cost, and the closed loop stops in all four scenarios. Every number has a W&amp;B run behind it, listed in docs/EXPERIMENTS.md.</aside>
+</section>

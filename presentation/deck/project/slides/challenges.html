@@ -1,0 +1,14 @@
+<section id="challenges" class="alt">
+<p class="eyebrow">Challenges</p>
+<h2>What went wrong, and the fix</h2>
+<table class="data in" style="font-size:26px">
+<tr><th style="width:52%">Problem</th><th style="width:48%">Fix</th></tr>
+<tr><td>GPU ONNX Runtime failed in WSL2: CPU, 130 ms</td><td>TensorRT engines built on the laptop</td></tr>
+<tr><td>Kaggle mounted inputs read at 0.6–0.7 MB/s</td><td>Copy data to local disk first</td></tr>
+<tr><td>MiDaS made CARLA distances worse</td><td>Geometric-first fusion in CARLA</td></tr>
+<tr><td>Calibration fitted for one detector broke the next</td><td>Refit per detector; live uses none</td></tr>
+<tr><td>Controller flipped modes, ended in AEB</td><td>Hysteresis, dwell, rate-limited brake</td></tr>
+<tr><td>CARLA stalled when laptop RAM ran out</td><td>Fresh CARLA per scenario</td></tr>
+</table>
+<aside>Time: 0:55. First, the runtime: ONNX Runtime’s GPU provider would not load in WSL2, so the first live run had the detector on the CPU at 130 ms; I went straight to TensorRT engines built on the laptop. Second, Kaggle: reading the mounted dataset ran at 0.6 to 0.7 MB/s, so jobs copy data to local disk first, and a MiDaS torch.hub dependency waited for a trust prompt a batch job can’t answer. [Fill in: Kaggle queue waits you hit.] Third, assumptions the data broke: MiDaS helped on KITTI but made CARLA distances worse (0.040 to 0.087 on ground-truth boxes), and the box-bottom calibration was only right for the detector it was fitted on. Fourth, control: the first runs switched between slow-down modes and ended in emergency braking; hysteresis, a minimum dwell, a rate-limited brake and a 10 m minimum gap fixed that. Last, the laptop itself: with 16 GB of RAM, CARLA stopped answering when memory ran out, so each scenario now gets a fresh CARLA and WSL is shut down between runs.</aside>
+</section>

@@ -1,0 +1,15 @@
+<section id="optimization" class="alt">
+<p class="eyebrow">Optimization</p>
+<h2>TensorRT FP16: 2.7–4.3× faster than PyTorch</h2>
+<table class="data in">
+<tr><th style="width:32%">Tesla T4, batch 1, p50</th><th class="num" style="width:17%">PyTorch FP32</th><th class="num" style="width:17%">ONNX Runtime</th><th class="num" style="width:17%">TensorRT FP16</th><th class="num" style="width:17%">Speed-up</th></tr>
+<tr><td>YOLO11s 640</td><td class="num">9.93 ms</td><td class="num">10.79 ms</td><td class="num">3.66 ms</td><td class="num">2.72×</td></tr>
+<tr><td>MiDaS-small 256×448</td><td class="num">10.95 ms</td><td class="num">9.04 ms</td><td class="num">2.58 ms</td><td class="num">4.25×</td></tr>
+<tr><td>YOLOP 640</td><td class="num">22.78 ms</td><td class="num">20.22 ms</td><td class="num">6.70 ms</td><td class="num">3.40×</td></tr>
+</table>
+<div class="two in2" style="margin-top:48px">
+<p class="muted">Accuracy cost of FP16: YOLO mAP@0.5 −0.0001, YOLOP lane-mask IoU 0.9928 vs PyTorch</p>
+<p class="muted">Least memory too: 173–189 MB per model (PyTorch 249–291, ONNX Runtime 383–639)</p>
+</div>
+<aside>Time: 0:45. All three models were exported to ONNX on Kaggle and checked for parity against PyTorch, then built into TensorRT FP16 engines. The benchmark is 200 warm-up and 1,000 timed iterations, batch 1, on a T4 (W&amp;B 218me22j). TensorRT is 2.7 to 4.3 times faster than PyTorch at model level, uses the least memory, and the accuracy cost is negligible. ONNX Runtime alone is close to PyTorch, and slightly slower for YOLO. With TensorRT the bottleneck moves to the CPU: for YOLO, letterbox, decode and NMS take about 6 of the 9.6 ms module time, so further speed-ups should come from preprocessing, not the model. On the laptop, with CARLA rendering on the same GPU, the live perception stage averaged about 38 to 49 ms per frame over 100-frame windows.</aside>
+</section>

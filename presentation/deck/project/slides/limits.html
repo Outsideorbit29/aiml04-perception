@@ -1,0 +1,21 @@
+<section id="limits" class="alt">
+<p class="eyebrow">Limitations and next steps</p>
+<h2>What I would not claim yet</h2>
+<div class="two">
+<div class="card in">
+<p class="card-title">Limitations</p>
+<p class="card-line">One recorded run per scenario, in one town</p>
+<p class="card-line">At night the lead reads ~20 % long (13.6 m shown, 11.3 m true)</p>
+<p class="card-line">CARLA gain is in-domain: same town and session as training</p>
+<p class="card-line">Pedestrian AP in CARLA did not improve (15 val boxes)</p>
+</div>
+<div class="card in2">
+<p class="card-title">Next steps</p>
+<p class="card-line">Repeat runs and a second town</p>
+<p class="card-line">Tighten the ego corridor beyond ~24 m (kerbside false leads on KITTI)</p>
+<p class="card-line">Log p95 latency live; move preprocessing to the GPU</p>
+<p class="card-line">Stretch goals not done: DeepSORT, YOLO-seg lanes, INT8, hosted demo</p>
+</div>
+</div>
+<aside>Time: 0:35. Each scenario was recorded once in one town, so the next step is repeated runs and a second town for the mix detector, whose CARLA gain is in-domain. At night in rain the distance reads long — 13.6 m shown against 11.3 m true — and pedestrians in CARLA did not improve with the mix fine-tune, though there were only 15 pedestrian boxes in the held-out set. On KITTI many long-range lead frames were cars at the kerb that the lane mask let in, so the corridor needs tightening beyond about 24 m. I log the mean live pipeline time but not p95, and the TensorRT module time is now limited by CPU preprocessing. DeepSORT, a YOLO-seg lane model, INT8 and a hosted demo were stretch goals I did not do.</aside>
+</section>
