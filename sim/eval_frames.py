@@ -2,6 +2,8 @@
 
     python -m sim.eval_frames --config configs/carla_eval.yaml            # all 3000 frames
     python -m sim.eval_frames --config configs/carla_eval.yaml --smoke    # every 30th frame
+    python -m sim.eval_frames --config configs/carla_eval.yaml --split val \
+        --weights-artifact yolo11s-mix-best:v0 --tag mix-val   # M5.9 CARLA-val frames only
 
 ROS-free and CARLA-free: it reads the files written by sim/record_dataset.py (Kaggle dataset
 ``anish2906/aiml04-carla-frames``): images/<town>_<idx>.jpg, labels/*.txt (YOLO, BDD ids),
@@ -63,7 +65,7 @@ from perception.types import Detection
 
 PARTS = {"images": (".jpg",), "labels": (".txt",), "gt": (".json",), "depth": (".png",)}
 METHODS = ("geometric", "geometric_raw", "midas_small", "fused_weighted", "fused_geofirst",
-           "fused", "fused_live")
+           "fused_geofirst_raw", "fused", "fused_live")
 CAL_MODELS = ("scale", "offset", "offset_box")
 COLOR_GT = (0, 200, 0)  # BGR
 COLOR_MATCH = (255, 160, 0)
@@ -227,6 +229,19 @@ def mean_rows(rows: Sequence[dict[str, float]], keys: Sequence[str]) -> dict[str
     return out
 
 
+def select_split(paths: Sequence[Path], meta: dict[str, Any], scfg: dict[str, Any],
+                 role: str) -> list[Path]:
+    """Frames whose M5.9 leakage-free split role (scripts/train_mix.py ``block_split`` with the
+    ``split`` section ``scfg`` of configs/yolo_mix.yaml) is ``role`` (train | val | guard)."""
+    from scripts.train_mix import block_split, frame_index, weather_segments
+
+    n = max(frame_index(p.stem) for p in paths) + 1
+    segs = weather_segments(meta.get("weathers") or [], n)
+    roles = block_split(segs, n, int(scfg["block_len"]), int(scfg["val_block"]),
+                        int(scfg["guard"]))
+    return [p for p in paths if roles[frame_index(p.stem)] == role]
+
+
 def split_masks(pos: np.ndarray, n: int) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Fit / hold-out masks over records by frame position ``pos`` (0..n-1 in the evaluated
     list): ``even_odd`` (fit even, score odd), ``halves_ab`` (fit first half, score second) and
@@ -281,10 +296,11 @@ def apply_calibration(
 
 def calibration_study(
     recs: Sequence[dict[str, Any]], n_frames: int, cam: Any, fusion: Any,
-    ccfg: dict[str, Any], bins: list[list[float]],
+    ccfg: dict[str, Any], bins: list[list[float]], current: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Every split x model: fitted values, then raw vs calibrated geometric on the fit split
-    (in-sample, for reference only) and on the hold-out split."""
+    (in-sample, for reference only) and on the hold-out split. ``current`` (the configured
+    ``geometry.calibration``) is scored on the same splits as model ``current`` (not refitted)."""
     from scripts.eval_depth import summarize
 
     pos = np.array([r["pos"] for r in recs], int)
@@ -293,10 +309,11 @@ def calibration_study(
         fit_r = [r for r, f in zip(recs, fit_m, strict=True) if f]
         hold_r = [r for r, h in zip(recs, hold_m, strict=True) if h]
         out[split] = {"n_fit": len(fit_r), "n_holdout": len(hold_r), "models": {}}
-        for model in ccfg["models"]:
+        for model in [*ccfg["models"], *(["current"] if current is not None else [])]:
             try:
-                cal = fit_calibration(model, fit_r, cam, ccfg["fit_range_m"],
-                                      float(ccfg["huber_k"]), int(ccfg["irls_iters"]))
+                cal = dict(current) if model == "current" else fit_calibration(
+                    model, fit_r, cam, ccfg["fit_range_m"], float(ccfg["huber_k"]),
+                    int(ccfg["irls_iters"]))
             except ValueError as exc:
                 out[split]["models"][model] = {"error": str(exc)}
                 continue
@@ -552,9 +569,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--config", type=Path, default=Path("configs/carla_eval.yaml"))
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--weights-artifact", help="override wandb.weights_artifact")
+    ap.add_argument("--split", help="override frames.split (train | val | guard)")
+    ap.add_argument("--tag", help="suffix of the W&B run name and output folder")
     args = ap.parse_args(list(argv) if argv is not None else None)
     t_start = time.time()
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
+    fcfg = cfg.get("frames") or {}
+    if args.weights_artifact:
+        cfg["wandb"]["weights_artifact"] = args.weights_artifact
+    if args.split:
+        fcfg = {**fcfg, "split": args.split}
+        cfg["frames"] = fcfg
+    if args.tag:
+        cfg["wandb"]["name"] += f"-{args.tag}"
+        cfg["out_dir"] = str(Path(cfg["out_dir"]) / args.tag)
+        cfg["weights_dir"] = str(Path(cfg["weights_dir"]) / args.tag)
     out = Path(cfg["out_dir"]) / ("smoke" if args.smoke else "full")
     cfg["out_dir"] = str(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -582,6 +612,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     name_to_id = {v: k for k, v in names.items()}
 
     paths = sorted((stage / "images").glob("*.jpg"))
+    if fcfg.get("split"):
+        scfg = yaml.safe_load(Path(fcfg["split_config"]).read_text(encoding="utf-8"))["split"]
+        paths = select_split(paths, meta, scfg, fcfg["split"])
+        print(f"frames: split {fcfg['split']} ({fcfg['split_config']}): {len(paths)}", flush=True)
     if args.smoke:
         paths = spread_subset(paths, int(cfg["smoke"]["every_n"]))
     gts = {p.stem: json.loads((stage / "gt" / f"{p.stem}.json").read_text("utf-8"))
@@ -593,7 +627,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             counts[o["cls_name"]] += 1
     results: dict[str, Any] = {
         "mode": "smoke" if args.smoke else "full", "git_sha": git_sha(), "gpu": gpu_name(),
-        "weights": w["weights_artifact"], "layout": layout,
+        "weights": w["weights_artifact"], "layout": layout, "frames_split": fcfg.get("split"),
         "dataset": {"frames": len(paths), "boxes_per_class": dict(counts),
                     "empty_frames": sum(not g["objects"] for g in gts.values()),
                     "frames_per_weather": {x: sum(v == x for v in weathers.values())
@@ -678,6 +712,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "fused_weighted": zof(fuse_by_mode(ig, im, "inverse_depth_weighted",
                                                fu.correlation)),
             "fused_geofirst": zof(fuse_by_mode(ig, im, "geometric_first", fu.correlation)),
+            "fused_geofirst_raw": zof(fuse_by_mode(inverse(raw), im, "geometric_first",
+                                                   fu.correlation)),
             "fused": zof(ms.fused), "fused_live": zof(ml.fused),
             "anchor": bool(ms.anchor), "align_mode": ms.align_mode, "y1": y1, "y2": y2,
             **extra,
@@ -746,7 +782,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         ccfg["config_split"]][1]
     results["distance"]["det_holdout"] = summarize_distance(
         [r for r, h in zip(recs["det"], hold, strict=True) if h], bins)
-    results["calibration"] = calibration_study(recs["det"], len(paths), cam, fusion, ccfg, bins)
+    results["calibration"] = calibration_study(recs["det"], len(paths), cam, fusion, ccfg, bins,
+                                               current=vars(fusion.calibration))
     results["distance"]["det_recall"] = {
         b: {"matched": m, "gt": n, "recall": m / n if n else None} for b, (m, n) in det_hits.items()
     }

@@ -9,6 +9,14 @@ stage_dir: /kaggle/temp/carla_frames   # flat local copy: images/ labels/ gt/ de
 weights_dir: /kaggle/temp/weights
 out_dir: /kaggle/working/m5_sim_eval   # small outputs saved with the job
 
+frames:                            # which recorded frames are evaluated
+  split: null                      # null = all 3000 | val | train | guard: the M5.9 leakage-free
+                                   # split (scripts/train_mix.py block_split). Models trained on
+                                   # CARLA frames (yolo11s-mix-best) are scored on `val` only
+                                   # (`--split val`); positions in the calibration study then run
+                                   # over the 600 val frames (halves = val blocks 1-3 vs 4-6)
+  split_config: configs/yolo_mix.yaml  # its `split` section (block_len, val_block, guard)
+
 data_config: configs/data_bdd.yaml       # BDD class names (labels use BDD ids)
 pipeline_config: configs/pipeline_carla.yaml   # detector / depth / camera settings of the live
 backend: torch                               # stack, with the torch backend on Kaggle (.pt +
