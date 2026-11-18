@@ -33,7 +33,9 @@ grep -q "/opt/ros/humble/setup.bash" ~/.bashrc || echo "source /opt/ros/humble/s
 python3 -m pip install -q --upgrade pip
 python3 -m pip install -q "carla==0.9.15" "numpy<2" "opencv-python-headless<4.11" pyyaml
 
+set +u  # ROS setup scripts read unset variables
 source /opt/ros/humble/setup.bash
+set -u
 echo "ROS_DISTRO=$ROS_DISTRO"
 python3 -c "import carla, cv2, numpy; print('carla client OK, cv2', cv2.__version__, 'numpy', numpy.__version__)"
 echo SETUP_WSL_OK
