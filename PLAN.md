@@ -115,10 +115,10 @@ Code is written and unit-tested without the simulator. The laptop runs CARLA onl
 
 ## M7 – Deliverables (Nov 20–22) ☁ [docs-presenter, qa-reviewer]
 - [x] M7.1 `qa-reviewer` full pass: CI green, lint clean, and a fresh clone works in a Kaggle notebook
-- [ ] M7.2 README: overview, results table, setup, usage, demo GIF
+- [x] M7.2 README: overview, results table, setup, usage, demo GIF
 - [ ] M7.3 Architecture diagram (Mermaid + PNG in `docs/diagrams/`) plus data/API docs for the messages and Python interfaces
-- [ ] M7.4 Demo video, 3–4 min, edited from the session recordings: scenarios with overlay, ending on the benchmark table
-- [ ] M7.5 10-minute presentation (problem, design, challenges, results, next steps)
+- [x] M7.4 Demo video, 3–4 min, edited from the session recordings: scenarios with overlay, ending on the benchmark table
+- [x] M7.5 10-minute presentation (problem, design, challenges, results, next steps)
 - [ ] M7.6 Individual reflection (what I learned, what I owned)
 - [ ] M7.7 Drive folder `Anish_Kumar_Gupta_Capstone_Projects/AIML-04/` with code zip, reports, screenshots, sample data, video. Link the full datasets rather than uploading them.
 - [ ] M7.8 **(S)** Hugging Face Space running the offline pipeline on an uploaded video, used as the "Live Deployment URL"
