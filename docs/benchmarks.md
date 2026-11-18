@@ -97,7 +97,9 @@ frame, so a single reading may exclude it; and the closed loop itself is capped 
 20 Hz. The ONNX Runtime row ran on the **CPU** (its CUDA provider could not load in WSL), so it
 is not an ORT-on-GPU baseline. The averaged number to quote is the offline TensorRT run on 100
 recorded CARLA frames: **66.8 FPS stage time, 33.8 FPS wall** (incl. decode/draw/encode).
-Next session: log `total_ms` per frame and report mean and p95.
+**Averaged live number (2026-11-18, stopped_car with geometric-first fusion):** mean pipeline
+time 40–45 ms over 100-frame windows (~22–25 FPS) with CARLA rendering on the same GPU; the
+synchronous loop ran 4.9 sim steps/s. Quote this, not the one-frame readings. p95 is not logged yet.
 
 | Date | Backend | Pipeline FPS | GPU / driver / CUDA / TensorRT | Notes |
 |---|---|---|---|---|

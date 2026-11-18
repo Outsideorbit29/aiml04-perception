@@ -81,6 +81,9 @@ Full table, method and environment: `docs/benchmarks.md`. T4, batch 1, 200 warm-
 |---|---|---|---|---|---|---|
 | 2026-11-18 | stopped_car (Audi A2 at 60 m), Town01, ONNX Runtime on CPU | ClearNoon | Yes, AEB → HOLD, no collision | 6.6 | ~7.6 (one-frame stage time) | `media/stopped_car_20261118_195651.mp4` (local) |
 | 2026-11-18 | stopped_car (Audi A2 at 60 m), Town01, TensorRT FP16 | ClearNoon | Yes, ACC slow-downs then AEB at 7.9 m, no collision | 6.5 | ~71.6 (one-frame stage time) | `media/stopped_car_20261118_195855.mp4` (local) |
+| 2026-11-18 | stopped_car, Town01, TensorRT FP16, **geometric-first fusion + box-bottom calibration** (merge 0e64470) | ClearNoon | Yes, ACC/GAP slow-downs then AEB at 8.0 m, no collision | **6.9** | 22–25 (mean of 100-frame windows: 44.6 / 40.2 ms) | `media/stopped_car_20261118_231618.mp4` (local) |
+
+Mean pipeline time in the live loop (perception_node's 100-frame average, CARLA rendering on the same GPU, MiDaS every 2nd frame) is 40–45 ms, i.e. ~22–25 FPS — well below the one-frame overlay readings above and the offline 66.8 FPS without CARLA. The bridge ran 4.9 sim steps/s (sync mode waits for control each step). The stop gap grew 6.5 → 6.9 m, matching the calibration's predicted ~+0.5 m.
 
 Session A (M5.6), 2026-11-18: 3,000 Town01 frames in 12.4 min (sync mode, every 5th tick, 40 NPC cars, 30 walkers, 6 weathers × 500), GPU 63–71 °C. Boxes: car 3,031, truck 529, bicycle 321, person 314, bus 78, motorcycle 47; no traffic lights/signs (no CARLA GT for them); 810 frames empty; 300 GT depth PNGs. Uploaded as private Kaggle dataset `anish2906/aiml04-carla-frames` (342 MB).
 
