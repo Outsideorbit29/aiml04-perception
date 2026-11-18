@@ -1,0 +1,58 @@
+# M5.6 sim eval: the perception stack on the recorded CARLA frames (sim/record_dataset.py output,
+# Kaggle dataset anish2906/aiml04-carla-frames). Used by sim/eval_frames.py, run on Kaggle by
+# kaggle/sim_eval/runner.py. Nothing here runs on the laptop.
+
+search: /kaggle/input              # where the dataset is mounted (meta_<town>.json is searched
+search_depth: 6                    # 1..search_depth levels below, shallow globs only)
+stage_dir: /kaggle/temp/carla_frames   # flat local copy: images/ labels/ gt/ depth/ (+ zips
+                                       # extracted here when the upload kept them as .zip)
+weights_dir: /kaggle/temp/weights
+out_dir: /kaggle/working/m5_sim_eval   # small outputs saved with the job
+
+data_config: configs/data_bdd.yaml       # BDD class names (labels use BDD ids)
+pipeline_config: configs/pipeline_carla.yaml   # detector / depth / camera settings of the live
+backend: torch                               # stack, with the torch backend on Kaggle (.pt +
+camera: carla                                # torch.hub MiDaS; the laptop uses TensorRT)
+camera_from_meta: true             # fx/fy/cx/cy from meta_<town>.json (checked vs camera.yaml)
+
+wandb:
+  project: aiml04-perception
+  entity: anish-grd2004-vellore-institute-of-technology
+  group: sim_eval
+  name: sim-eval-carla
+  weights_artifact: yolo11s-bdd-best:latest
+
+detection:                         # Ultralytics model.val(); mAP only over classes with GT
+  imgsz: 640
+  batch: 32
+  per_weather: true
+  zeroshot:                        # COCO yolo11s, labels remapped to COCO ids (as in M2.1)
+    enabled: true
+    model: yolo11s.pt
+    bdd_to_coco: {car: 2, truck: 7, bus: 5, person: 0, rider: 0, bicycle: 1, motorcycle: 3,
+                  traffic light: 9}
+
+distance:
+  det_conf: 0.25                   # = tracker track_activation_threshold: boxes below it never
+                                   # start or update a first-pass track in the live stack
+  iou_match: 0.5                   # class-agnostic GT <-> detection match (distance does not
+                                   # depend on class; car/truck flips are common)
+  bins: [[0, 10], [10, 30], [30, 60]]
+  leave_one_out: true              # anchors' MiDaS from a fit without themselves (as M4.4)
+  height_check:                    # implied camera height from GT: Z_gt * (v_bottom - cy) / fy
+    min_m: 5.0                     # only untruncated boxes in this GT range
+    max_m: 40.0
+
+midas_gt:                          # MiDaS vs the GT depth PNGs (uint16 cm)
+  min_m: 1.0                       # valid GT pixels (sky is ~1000 m, clipped at 655 m)
+  max_m: 80.0
+  stride: 4                        # pixel subsampling for the per-frame affine fit
+  # Oracle alignment: per frame 1/Z = s*m + t least squares on all valid pixels (the standard
+  # MiDaS eval). Measures relative-depth quality, not the live anchor alignment.
+
+snapshots:
+  count: 12                        # evenly spread over the frames (all weathers)
+  jpg_quality: 90
+
+smoke:                             # --smoke: every n-th frame (spans all weathers; every
+  every_n: 30                      # 30th frame also has a depth PNG), all steps run
