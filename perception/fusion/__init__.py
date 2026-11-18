@@ -5,17 +5,21 @@ frame = fusion.update(tracks, lanes, stamp, frame_id, hw, inv_depth)
 """
 
 from perception.fusion.fusion import (
+    FUSION_MODES,
     DistanceFusion,
     EgoCorridor,
     Measurement,
     fuse,
+    fuse_by_mode,
     fuse_inverse,
     in_ego_lane,
+    inverse,
     lateral_offset,
 )
 from perception.fusion.kalman import DistanceKalman, FilterBank, FilterOutput
 
 __all__ = [
+    "FUSION_MODES",
     "DistanceFusion",
     "DistanceKalman",
     "EgoCorridor",
@@ -23,7 +27,9 @@ __all__ = [
     "FilterOutput",
     "Measurement",
     "fuse",
+    "fuse_by_mode",
     "fuse_inverse",
     "in_ego_lane",
+    "inverse",
     "lateral_offset",
 ]

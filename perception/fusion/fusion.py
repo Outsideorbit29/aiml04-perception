@@ -9,12 +9,20 @@ Per object (only classes in ``fusion.object_classes``; traffic lights/signs have
 contact and would otherwise become false lead objects):
 1. Geometric distance from the box bottom row (perception.depth.camera, flat ground). Invalid
    when the box touches the image bottom (contact point not visible), the row is not far enough
-   below the horizon, or the distance exceeds ``geometry.max_distance_m``.
+   below the horizon, or the distance exceeds ``geometry.max_distance_m``. An optional per-camera
+   detector-box calibration ``geometry.calibration`` (perception.depth.calibration; identity by
+   default) corrects the contact row / scale; the truncation check uses the raw box bottom.
 2. MiDaS value in the lower-central part of the box (``sampling``), if a depth map is given.
 3. Per-frame alignment ``1/Z = s*m + t`` on anchors = confident, near objects with a valid
    geometric distance (``anchors``). If no fit is possible, the last fit is reused for up to
    ``fusion.reuse_alignment_frames`` frames; MiDaS never yields a distance without a fit.
-4. Inverse-variance fusion of the geometric and aligned-MiDaS estimates in INVERSE depth
+4. ``fusion.mode`` picks how the two estimates are combined (``fuse_by_mode``):
+   ``geometric_first``: the geometric distance whenever it is valid (item 1), the aligned MiDaS
+   distance only when it is not (truncated box, contact row too close to the horizon, beyond
+   ``max_distance_m``). Used for CARLA, where the flat-ground model is near exact and MiDaS-small
+   is the noisier estimate (M5.6: GT-box AbsRel 0.040 geometric vs 0.087 fused).
+   ``inverse_depth_weighted`` (default, KITTI/BDD):
+   Inverse-variance fusion of the geometric and aligned-MiDaS estimates in INVERSE depth
    (``fuse_inverse``), where both errors are roughly Gaussian with a std that does not depend
    on the distance (CameraModel.inv_depth_std, perception.depth.Alignment.inv_std). Fusing
    distances with stds Z^2 * k evaluated at each estimate's own Z would give the shorter
@@ -59,12 +67,15 @@ from typing import Any
 import numpy as np
 
 from perception.depth.alignment import Alignment, ScaleAligner
+from perception.depth.calibration import BottomCalibration, box_geometric_distance
 from perception.depth.camera import CameraModel
 from perception.depth.estimator import sample_box
 from perception.fusion.kalman import FilterBank
 from perception.types import Detection, LaneResult, ObjectState, PerceptionFrame, Track
 
 Estimate = tuple[float, float]  # (distance m, 1-sigma m)
+FUSION_MODES = ("inverse_depth_weighted", "geometric_first")
+DEFAULT_FUSION_MODE = "inverse_depth_weighted"  # the M4 behaviour (configs/depth.yaml)
 
 
 @dataclass
@@ -123,6 +134,34 @@ def fuse(estimates: list[Estimate | None], correlation: float = 0.0) -> Estimate
     if len(valid) == 1:
         return valid[0]
     return fuse_inverse([(1.0 / z, s / (z * z)) for z, s in valid], correlation)
+
+
+def inverse(est: Estimate | None) -> Estimate | None:
+    """Distance estimate ``(Z, std Z)`` -> inverse-depth estimate ``(1/Z, std Z / Z^2)``."""
+    if est is None or not (math.isfinite(est[0]) and est[0] > 0):
+        return None
+    z, s = est
+    return 1.0 / z, s / (z * z)
+
+
+def fuse_by_mode(
+    inv_geo: Estimate | None,
+    inv_midas: Estimate | None,
+    mode: str = DEFAULT_FUSION_MODE,
+    correlation: float = 0.0,
+) -> Estimate | None:
+    """Combine inverse-depth estimates ``(1/Z, std)`` of geometry and aligned MiDaS into a
+    distance ``(Z, std Z)`` by ``fusion.mode`` (module docstring item 4). ``geometric_first``
+    returns the geometric estimate whenever it is valid and MiDaS only as the fallback;
+    ``inverse_depth_weighted`` is ``fuse_inverse`` of both."""
+    if mode not in FUSION_MODES:
+        raise ValueError(f"fusion.mode {mode!r} not in {FUSION_MODES}")
+    if mode == "geometric_first":
+        geo = fuse_inverse([inv_geo], correlation)
+        if geo is not None:
+            return geo
+        return fuse_inverse([inv_midas], correlation)
+    return fuse_inverse([inv_geo, inv_midas], correlation)
 
 
 @dataclass(frozen=True)
@@ -196,6 +235,7 @@ class DistanceFusion:
         self.min_angle = math.radians(float(g["min_angle_deg"]))
         self.bottom_margin = float(g["bottom_margin_px"])
         self.max_geo = float(g["max_distance_m"])
+        self.calibration = BottomCalibration.from_dict(g.get("calibration"))
         self.sampling = cfg["sampling"]
         a = cfg["anchors"]
         self.anchor_min_score = float(a["min_score"])
@@ -205,6 +245,9 @@ class DistanceFusion:
         self.classes = set(f["object_classes"])
         self.reuse_frames = int(f["reuse_alignment_frames"])
         self.correlation = float(f["correlation"])
+        self.mode = str(f.get("mode", DEFAULT_FUSION_MODE))
+        if self.mode not in FUSION_MODES:
+            raise ValueError(f"fusion.mode {self.mode!r} not in {FUSION_MODES}")
         self.corridor = EgoCorridor.from_dict(f["ego_lane"])
         if not 0.0 <= self.correlation <= 1.0:
             raise ValueError(f"fusion.correlation {self.correlation} not in [0, 1]")
@@ -230,14 +273,22 @@ class DistanceFusion:
         return det.cls_name in self.classes
 
     # ------------------------------------------------------------------ single frame
-    def geometric(self, det: Detection, cam: CameraModel) -> Estimate | None:
+    def geometric(
+        self, det: Detection, cam: CameraModel, calibrated: bool = True
+    ) -> Estimate | None:
+        """Flat-ground distance of the box bottom (``cam`` already scaled to the frame).
+        ``calibrated=False`` skips ``geometry.calibration`` (evaluation of the raw geometry)."""
         _, y2 = det.bottom_center
-        if y2 > cam.height - 1 - self.bottom_margin:
-            return None  # box cut by the image bottom: the ground contact is not visible
-        est = cam.ground_distance(y2, self.min_angle)
-        if est is None or est[0] > self.max_geo:
-            return None
-        return est
+        return box_geometric_distance(
+            cam,
+            float(det.bbox_xyxy[1]),
+            y2,
+            self.calibration if calibrated else None,
+            self.min_angle,
+            self.max_geo,
+            self.bottom_margin,  # box cut by the image bottom: the ground contact is not visible
+            row_scale=cam.height / self.camera.height,
+        )
 
     def is_anchor(self, det: Detection, geo: Estimate | None, m: float) -> bool:
         x1, y1, x2, y2 = (float(v) for v in det.bbox_xyxy)
@@ -308,7 +359,7 @@ class DistanceFusion:
                     geo[i],
                     float(m[i]),
                     midas,
-                    fuse_inverse([inv_geo, inv_midas], self.correlation),
+                    fuse_by_mode(inv_geo, inv_midas, self.mode, self.correlation),
                     bool(anchor[i]),
                     a.mode if midas is not None else None,
                     a.n_anchors if midas is not None else 0,

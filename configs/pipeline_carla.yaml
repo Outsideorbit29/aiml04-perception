@@ -5,6 +5,7 @@
 base: configs/pipeline.yaml
 
 lanes_config: configs/lanes_carla.yaml   # ROI / warp for the 800x450, 90 deg ego camera
+depth_config: configs/depth_carla.yaml   # geometric-first fusion + detector-box calibration
 camera: carla
 
 overrides:
