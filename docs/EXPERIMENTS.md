@@ -79,6 +79,10 @@ Full table, method and environment: `docs/benchmarks.md`. T4, batch 1, 200 warm-
 ## Closed loop in CARLA (M5)
 | Date | Scenario | Weather | Stopped safely? | Min gap (m) | Pipeline FPS | Video |
 |---|---|---|---|---|---|---|
+| 2026-11-18 | stopped_car (Audi A2 at 60 m), Town01, ONNX Runtime on CPU | ClearNoon | Yes, AEB → HOLD, no collision | 6.6 | 7.6 | `media/stopped_car_20261118_195651.mp4` (local) |
+| 2026-11-18 | stopped_car (Audi A2 at 60 m), Town01, TensorRT FP16 | ClearNoon | Yes, ACC slow-downs then AEB at 7.9 m, no collision | 6.5 | 71.6 | `media/stopped_car_20261118_195855.mp4` (local) |
+
+Session A (M5.6), 2026-11-18: 3,000 Town01 frames in 12.4 min (sync mode, every 5th tick, 40 NPC cars, 30 walkers, 6 weathers × 500), GPU 63–71 °C. Boxes: car 3,031, truck 529, bicycle 321, person 314, bus 78, motorcycle 47; no traffic lights/signs (no CARLA GT for them); 810 frames empty; 300 GT depth PNGs. Uploaded as private Kaggle dataset `anish2906/aiml04-carla-frames` (342 MB). Sim eval on Kaggle still to run.
 
 ## Data (M1)
 Full numbers: `docs/figures/eda_summary.md`; plots: `docs/figures/eda_*.png`.

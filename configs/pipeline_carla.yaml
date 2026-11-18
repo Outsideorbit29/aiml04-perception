@@ -9,12 +9,12 @@ camera: carla
 
 overrides:
   detector:
-    backend: onnx
-    weights: models/yolo11s-bdd.onnx     # M6.1 export of yolo11s-bdd-best (640x640, opset 17)
+    backend: tensorrt                    # M6.4 laptop engine; `onnx` + .onnx works on any GPU
+    weights: models/yolo11s-bdd.engine   # built from the M6.1 export (640x640, FP16)
     device: null
   depth:
     estimator:
-      backend: onnx                      # models/midas_small.onnx (configs/depth.yaml)
+      backend: tensorrt                  # models/midas_small.engine (next to the .onnx)
       every_n_frames: 2                  # 10 Hz MiDaS; geometric + Kalman carry the rest
                                          # (ARCHITECTURE.md 6: VRAM / latency budget)
 

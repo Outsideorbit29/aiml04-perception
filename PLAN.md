@@ -54,8 +54,8 @@ Online:
 - [x] M0.6 Scaffold the package layout from ARCHITECTURE.md section 5, plus `perception/types.py` with tests and the `kaggle/_template` runner
 
 On the laptop (one short session):
-- [ ] M0.7 Download the base CARLA 0.9.15 package only (skip AdditionalMaps, ~8 GB saved), run `CarlaUE4.exe -quality-level=Low -RenderOffScreen` for 2 minutes and check VRAM and temperature
-- [ ] M0.8 WSL2 Ubuntu 22.04 + ROS2 Humble (ros-base, not desktop) + `pip install carla==0.9.15`, then run `sim/smoke_test.py` to spawn a car and save one frame
+- [x] M0.7 Download the base CARLA 0.9.15 package only (skip AdditionalMaps, ~8 GB saved), run `CarlaUE4.exe -quality-level=Low -RenderOffScreen` for 2 minutes and check VRAM and temperature
+- [x] M0.8 WSL2 Ubuntu 22.04 + ROS2 Humble (ros-base, not desktop) + `pip install carla==0.9.15`, then run `sim/smoke_test.py` to spawn a car and save one frame
 - Exit: `docs/SETUP.md` steps verified end to end.
 
 ## M1 – Data (Nov 10–11) ☁ [data-engineer]
@@ -93,13 +93,13 @@ On the laptop (one short session):
 
 ## M5 – CARLA + ROS2 closed loop (Nov 16–19) 💻 [sim-ros-integrator]
 Code is written and unit-tested without the simulator. The laptop runs CARLA only in short, planned sessions.
-- [ ] M5.1 `perception_msgs` package (TrackedObject, TrackedObjectArray, LaneBoundaries, EgoControl)
-- [ ] M5.2 `carla_bridge_node`: synchronous mode, spawn ego + RGB + depth cameras, publish topics, apply control
-- [ ] M5.3 `perception_node` wrapping `perception.pipeline` on ONNX Runtime/TensorRT (no PyTorch on the laptop)
-- [ ] M5.4 `control_node` with AEB/ACC rules (thresholds in `configs/carla.yaml`); a lead must persist for several frames before AEB/ACC acts (M4.6 found one-frame false leads)
+- [x] M5.1 `perception_msgs` package (TrackedObject, TrackedObjectArray, LaneBoundaries, EgoControl)
+- [x] M5.2 `carla_bridge_node`: synchronous mode, spawn ego + RGB + depth cameras, publish topics, apply control
+- [x] M5.3 `perception_node` wrapping `perception.pipeline` on ONNX Runtime/TensorRT (no PyTorch on the laptop)
+- [x] M5.4 `control_node` with AEB/ACC rules (thresholds in `configs/carla.yaml`); a lead must persist for several frames before AEB/ACC acts (M4.6 found one-frame false leads)
 - [ ] M5.5 Scenarios: stopped car, pedestrian crossing, cut-in, night/rain (Town01/Town02, the lightest maps)
-- [ ] M5.6 **Session A (~20 min):** record ~3k CARLA frames with GT, upload them as Kaggle dataset `aiml04-carla-frames`, and run the sim eval (mAP, distance error) on Kaggle
-- [ ] M5.7 `stack.launch.py` and rosbag + MP4 recording
+- [ ] M5.6 (frames recorded + uploaded 2026-11-18; Kaggle sim eval pending) **Session A (~20 min):** record ~3k CARLA frames with GT, upload them as Kaggle dataset `aiml04-carla-frames`, and run the sim eval (mAP, distance error) on Kaggle
+- [x] M5.7 `stack.launch.py` and rosbag + MP4 recording
 - [ ] M5.8 **Sessions B–D (~30 min each):** debug the loop, then record each scenario for the demo
 - [ ] M5.9 **(S)** Fine-tune YOLO for 5 epochs on a BDD + CARLA mix, on Kaggle
 - Exit: in every scenario the ego car stops before colliding. Screen-record each.
@@ -108,8 +108,8 @@ Code is written and unit-tested without the simulator. The laptop runs CARLA onl
 - [ ] M6.1 ☁ Export YOLO, MiDaS-small and YOLOP to ONNX on Kaggle and verify output parity (max abs diff). The ONNX files are saved as W&B artifacts.
 - [ ] M6.2 ☁ Build TensorRT FP16 engines on the Kaggle T4
 - [ ] M6.3 ☁ `benchmark.py` on the T4: PyTorch vs ONNX Runtime vs TensorRT, p50/p95, FPS, VRAM, accuracy delta. This is the official before/after table.
-- [ ] M6.4 💻 Build the local TensorRT engines from the ONNX files (~5 min, one time), because engines only run on the GPU model they were built for
-- [ ] M6.5 💻 Measure end-to-end pipeline FPS during a CARLA session, before and after switching to TRT. TRT also lowers laptop load during the demo.
+- [x] M6.4 💻 Build the local TensorRT engines from the ONNX files (~5 min, one time), because engines only run on the GPU model they were built for
+- [x] M6.5 💻 Measure end-to-end pipeline FPS during a CARLA session, before and after switching to TRT. TRT also lowers laptop load during the demo.
 - [ ] M6.6 **(S)** INT8 calibration on Kaggle
 - Exit: `docs/benchmarks.md` has the T4 table plus the laptop end-to-end numbers.
 

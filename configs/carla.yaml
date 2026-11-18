@@ -68,7 +68,7 @@ bridge:                        # carla_bridge_node
 
 perception:                    # perception_node
   pipeline_config: configs/pipeline_carla.yaml
-  backend: onnx                # onnx | tensorrt (M6). No PyTorch on the laptop.
+  backend: tensorrt            # onnx | tensorrt. M6.4 laptop engines in models/. No PyTorch.
   camera: carla                # configs/camera.yaml entry
   fps: 20.0                    # = 1 / fixed_delta_seconds (Kalman/TTC time base, tracker rate)
   detector_weights: null       # null = pipeline_carla.yaml (models/yolo11s-bdd.onnx)

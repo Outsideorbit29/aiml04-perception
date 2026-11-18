@@ -214,13 +214,16 @@ def test_cut_in_profile():
 
 
 # ---------------------------------------------------------------------------- live pipeline
-def test_pipeline_carla_config_is_onnx_and_carla():
+def test_pipeline_carla_config_is_tensorrt_and_carla():
+    # M6.4: the live loop runs the laptop TensorRT engines; never PyTorch.
     p = CFG["perception"]
     cfg = load_pipeline_config(p["pipeline_config"])
     sc = stage_configs(cfg, backend=p["backend"], camera_name=p["camera"], fps=p["fps"])
-    assert sc["detector"]["backend"] == "onnx"
-    assert str(sc["detector"]["weights"]).endswith(".onnx")
-    assert sc["depth"]["estimator"]["backend"] == "onnx"
+    assert p["backend"] == "tensorrt"
+    assert sc["detector"]["backend"] == "tensorrt"
+    assert str(sc["detector"]["weights"]).endswith(".engine")
+    assert sc["depth"]["estimator"]["backend"] == "tensorrt"
+    assert str(sc["lanes"]["yolop"]["weights"]).endswith(".engine")
     assert sc["camera_name"] == "carla"
     assert sc["tracker"]["frame_rate"] == 20
     assert sc["lanes"]["method"] == "yolop"

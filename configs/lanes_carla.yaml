@@ -23,3 +23,6 @@ fitting:
 single_side_fallback: true
 fallback_lane_width_frac: 0.50
 fallback_conf_mult: 0.5
+
+yolop:
+  weights: models/yolop-640-640.engine   # M6.4 laptop TensorRT engine (use the .onnx on other GPUs)

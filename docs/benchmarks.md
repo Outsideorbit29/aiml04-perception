@@ -85,7 +85,7 @@ cuda-python 12.9.10, ultralytics 8.4.215, timm 0.6.13.
 T4 engine builds: YOLO 283 s, MiDaS 140 s, YOLOP 217 s (FP16, 1 GiB workspace); engines are
 19–33 MB and are not stored (hardware-specific).
 
-## Laptop end-to-end (RTX 3060 Laptop 6 GB, CARLA loop) — pending M6.4 / M6.5
+## Laptop end-to-end (RTX 3060 Laptop 6 GB, CARLA loop) — M6.4 / M6.5
 
 To be measured in the planned CARLA session (same session as the sim-ros-integrator
 recording): end-to-end pipeline FPS with ONNX Runtime vs TensorRT engines built locally by
@@ -94,5 +94,5 @@ CUDA and TensorRT versions with the row.
 
 | Date | Backend | Pipeline FPS | GPU / driver / CUDA / TensorRT | Notes |
 |---|---|---|---|---|
-| – | ONNX Runtime | – | – | not measured yet |
-| – | TensorRT FP16 | – | – | not measured yet |
+| 2026-11-18 | ONNX Runtime 1.22 | 7.6 (131 ms/frame) | RTX 3060 Laptop / 621.24 / – / – | Live `stopped_car` run with CARLA rendering. ORT's CUDA provider could not load (no cuBLAS/cuDNN in WSL), so detector and MiDaS ran on the CPU: detect alone 130 ms. Overlay reading mid-run. |
+| 2026-11-18 | TensorRT FP16 (local engines) | 71.6 (14 ms/frame) | RTX 3060 Laptop / 621.24 / CUDA 12 (pip) / 10.16.1.11 | Same scenario, all three models on engines built by `deploy/build_local_engine.py` (MiDaS 721 s while CARLA was running, YOLO/YOLOP ~3 min each without it). Overlay reading near the stop. Offline on 100 recorded CARLA frames without CARLA: 66.8 FPS stages, 33.8 FPS incl. decode/draw/encode. |

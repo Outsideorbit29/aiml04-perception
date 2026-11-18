@@ -85,7 +85,14 @@ def file_sha256(path: str | Path) -> str:
 
 
 def make_session(weights: str | Path, providers: list[str]) -> Any:
-    """onnxruntime InferenceSession; onnxruntime is imported here so tests can avoid it."""
+    """onnxruntime InferenceSession, or a TensorRT session for a ``.engine`` file (M6.4).
+
+    Both are imported here so tests can avoid them.
+    """
+    if str(weights).endswith(".engine"):
+        from perception.detection.runtime import TrtSession
+
+        return TrtSession(weights)
     import onnxruntime as ort
 
     available = set(ort.get_available_providers())
