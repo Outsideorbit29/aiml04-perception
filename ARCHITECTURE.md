@@ -41,14 +41,14 @@ GitHub repo ──clone──► Kaggle notebook (GPU) ──metrics/artifacts�
 
 ```
                           ┌──────────────────── Windows 11 host (GPU) ───────────────────┐
-                          │  CARLA 0.9.15 server  (-quality-level=Low, Town03/Town10HD)  │
-                          │      ego vehicle + RGB camera (+ depth camera for GT)        │
+                          │  CARLA 0.9.15 server  (-quality-level=Low, Town01)           │
+                          │  ego + RGB camera (+ GT depth camera, off by default)        │
                           └───────────────┬──────────────────────────────▲───────────────┘
                                           │ TCP 2000-2002 (CARLA client API)
 ┌───────────────────────────── WSL2 Ubuntu 22.04 · ROS2 Humble ────────┼────────────────┐
 │                                                                       │                │
 │  carla_bridge_node ──/carla/ego/rgb (Image)──────────┐                │                │
-│        │          ──/carla/ego/depth_gt (Image)──┐   │      VehicleControl              │
+│        │          ──/carla/ego/depth_gt (off)────┐   │      VehicleControl              │
 │        │          ──/carla/ego/odom (Odometry)─┐ │   ▼                │                │
 │        │                                       │ │ perception_node    │                │
 │        │                                       │ │  ├ Detector (TRT)  │                │
@@ -64,11 +64,17 @@ GitHub repo ──clone──► Kaggle notebook (GPU) ──metrics/artifacts�
 │        │◄──────────── /carla/ego/control (custom EgoControl msg) ─────┘                │
 │        │                                                                               │
 │  recorder_node ── rosbag2 + annotated MP4 for the demo video                           │
-│  eval_node ────── compares predicted distance vs depth_gt, logs to W&B                 │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 
 Offline path (no ROS, no CARLA):  video / image folder ─► perception.pipeline ─► annotated MP4 + JSON
+Sim eval (no ROS, Kaggle):        recorded CARLA frames + GT ─► sim/eval_frames.py ─► mAP, distance error, W&B
 ```
+
+There is no live `eval_node`. Distance and detection accuracy in CARLA are measured offline on
+recorded frames with ground truth (`sim/record_dataset.py` on the laptop, then
+`python -m sim.eval_frames --config configs/carla_eval.yaml` on Kaggle). The live GT depth camera
+(`depth_camera.enabled` in `configs/carla.yaml`) is off by default because it doubles the
+rendering load and nothing live consumes it.
 
 **Why this split.** CARLA's Unreal server needs a local GPU with a display stack, so free cloud
 notebooks can't host it. It runs best natively on Windows.
@@ -179,15 +185,12 @@ Thresholds are in `control` of `configs/carla.yaml`; the logic is `perception/co
 Demo scenarios (scripted in `sim/scenarios/`): a stopped car ahead, a pedestrian crossing, cut-in, night/rain.
 
 ### 3.8 Optimization (`deploy/`)
-- `export.py` (runs on Kaggle) converts PyTorch to ONNX (opset 17, dynamic batch off, 640×640) and then to a TensorRT engine (FP16; INT8 with calibration on 500 BDD images as a stretch goal). It covers YOLO, MiDaS and the lane model.
+- `export.py` (runs on Kaggle; `--config configs/bench.yaml`, `--smoke`, `--models`) exports YOLO and MiDaS-small to ONNX (opset 17, static batch 1) with a parity check, and verifies the YOLOP release ONNX; artifacts go to W&B. `build_local_engine.py` turns the ONNX files into TensorRT FP16 engines (INT8 with calibration is a stretch goal).
 - `benchmark.py` (runs on the Kaggle T4) does 200 warm-up and 1000 timed iterations per backend and reports p50/p95 latency, FPS, peak VRAM and the accuracy delta (mAP or depth AbsRel) against the PyTorch FP32 baseline. Results go to `docs/benchmarks.md` and W&B. This is the official before/after table.
 - `build_local_engine.py` (runs on the laptop, once) builds RTX 3060 engines from the ONNX files, because TensorRT engines only run on the GPU model they were built for. The laptop then measures only end-to-end FPS in CARLA, before and after the switch to TRT.
 
-| Backend | YOLO11s @640 on Kaggle T4 (to be measured) |
-|---|---|
-| PyTorch FP32 | ~20–30 ms |
-| ONNX Runtime CUDA | ~12–18 ms |
-| TensorRT FP16 | ~5–8 ms |
+Measured numbers (T4 model and module latency, VRAM, accuracy delta, and the laptop end-to-end
+rows) are in `docs/benchmarks.md`. The planning estimates that used to be here are removed.
 
 ### 3.9 Experiment tracking
 W&B project `aiml04-perception`, with run groups `detect`, `track`, `lanes`, `depth`, `bench`, `sim-eval`.
@@ -219,15 +222,16 @@ Project_ai/
 ├─ .claude/agents/            # subagent definitions
 ├─ .github/workflows/ci.yml   # pytest + ruff on every push (online)
 ├─ kaggle/                    # one folder per cloud job: kernel-metadata.json + runner notebook
-│  ├─ data_prep/  train_yolo/  eval_track/  eval_lanes/  eval_depth/  export_bench/  sim_eval/
+│  ├─ data_prep/  train_yolo/  train_mix/  eval_track/  eval_mot/  eval_lanes/  eval_depth/
+│  ├─ run_pipeline/  export_bench/  sim_eval/
 ├─ configs/                   # yolo_bdd.yaml, tracker.yaml, lanes.yaml, depth.yaml, depth_carla.yaml, carla.yaml, bench.yaml, camera.yaml
 ├─ perception/                # ROS-free core library
 │  ├─ types.py  pipeline.py
 │  ├─ detection/  tracking/  lanes/  depth/  fusion/
 │  └─ viz.py                  # overlays for debug image / demo video
 ├─ scripts/                   # train_yolo.py, eval_*.py, data/ (download, convert, eda)
-├─ deploy/                    # export.py, benchmark.py, trt_runtime.py
-├─ sim/                       # carla_utils.py, scenarios/, record_dataset.py
+├─ deploy/                    # export.py, build_local_engine.py, trt_build.py, benchmark.py
+├─ sim/                       # carla_utils.py, scenarios/, record_dataset.py, eval_frames.py
 ├─ ros2_ws/src/
 │  ├─ perception_msgs/
 │  └─ perception_ros/         # nodes + launch
