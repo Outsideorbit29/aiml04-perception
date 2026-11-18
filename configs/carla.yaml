@@ -92,6 +92,21 @@ control:                       # control_node -> perception.control.Longitudinal
   gap_time_s: 1.5
   gap_brake_gain: 1.0          # brake = gain * (gap - d) / gap, capped at acc_max_brake
   odom_timeout_s: 1.0          # ego speed older than this counts as 0 (gap rule only)
+  # Hysteresis and dwell against ACC/GAP chatter (M5.4 follow-up; the 2026-11-18 stopped_car
+  # run flipped modes ~10 times in 13 s sim). Entry thresholds stay as above; frames are sim
+  # frames at 20 Hz. None of this delays AEB entry or changes AEB/HOLD.
+  acc_exit_ttc_s: 5.0          # ACC exits only when TTC >= this (or no TTC); acc_ttc_s..this is
+                               # a coast band (override, throttle 0, brake 0 + gap brake)
+  gap_exit_margin_m: 3.0       # GAP/ACC exit needs d >= desired gap + this ...
+  gap_exit_opening_mps: 0.5    # ... or the lead opening the gap faster than this
+  min_engaged_frames: 20       # ACC/GAP last at least this long before AUTOPILOT (1 s)
+  exit_confirm_frames: 10      # exit conditions must hold this many consecutive frames (0.5 s)
+  lead_lost_exit_frames: 10    # in ACC/GAP a lead dropout keeps mode + last brake this long
+  standstill_speed_mps: 0.5    # soft HOLD: below this speed ...
+  standstill_hold_distance_m: 15.0  # ... with the lead closer than this, ACC/GAP do not release
+  standstill_brake: 0.3        # ... and brake at least this (no creep-and-rebrake)
+  brake_rate_up: 0.1           # max ACC/GAP brake increase per frame (2.0/s); AEB is immediate
+  brake_rate_down: 0.05        # max ACC/GAP brake decrease per frame (1.0/s)
 
 recorder:                      # recorder_node
   out_dir: media               # gitignored

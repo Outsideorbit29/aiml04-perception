@@ -18,11 +18,26 @@ Rules (ARCHITECTURE.md 3.7, thresholds in ``control`` of configs/carla.yaml), ev
 3. HOLD: after an AEB the brake stays at ``hold_brake`` while a confirmed lead is closer than
    ``hold_release_distance_m``, and for ``lead_release_frames`` frames after the lead is lost
    (a detection dropout at standstill must not let the car lurch forward).
-4. ACC: ``aeb_ttc_s <= ttc < acc_ttc_s`` -> brake rising linearly from ``acc_min_brake`` (at
-   ``acc_ttc_s``) to ``acc_max_brake`` (at ``aeb_ttc_s``), no throttle.
-5. Gap: closing on a lead inside ``gap_min_m + speed * gap_time_s`` -> brake proportional to
-   the gap deficit (``gap_brake_gain``, capped at ``acc_max_brake``), no throttle.
-6. Otherwise ``AUTOPILOT`` (no override).
+4. ACC: entered when ``ttc < acc_ttc_s``. Brake rises linearly from ``acc_min_brake`` (at
+   ``acc_ttc_s``) to ``acc_max_brake`` (at ``aeb_ttc_s``), no throttle. Inside the hysteresis
+   band (``acc_ttc_s <= ttc < acc_exit_ttc_s``, or no TTC) the car coasts (override, throttle 0,
+   brake 0 unless the gap rule asks for more) instead of handing back to the autopilot.
+5. Gap: entered when closing on a lead inside ``gap_min_m + speed * gap_time_s``. Brake is
+   proportional to the gap deficit (``gap_brake_gain``, capped at ``acc_max_brake``), no
+   throttle. GAP escalates to ACC at once when the ACC entry rule fires; ACC never steps down
+   to GAP (one engaged state, fewer mode flips).
+6. Leaving ACC/GAP (hysteresis + dwell). Back to ``AUTOPILOT`` only when, for
+   ``exit_confirm_frames`` consecutive frames, the TTC is clear (none or
+   ``>= acc_exit_ttc_s``), the gap is clear (``d >= desired gap + gap_exit_margin_m`` or the lead
+   opens faster than ``gap_exit_opening_mps``) and the standstill guard is off, and the mode has
+   lasted ``min_engaged_frames``. A lead dropout keeps the mode and the last brake for
+   ``lead_lost_exit_frames`` frames.
+7. Standstill guard (soft HOLD). In ACC/GAP, below ``standstill_speed_mps`` with the lead closer
+   than ``standstill_hold_distance_m``, the brake is at least ``standstill_brake`` and the mode
+   cannot exit, so the car does not creep forward and re-brake.
+8. The ACC/GAP brake changes by at most ``brake_rate_up`` / ``brake_rate_down`` per frame. AEB
+   (full brake) and HOLD are applied at once; entry into AEB has no dwell or hysteresis.
+9. Otherwise ``AUTOPILOT`` (no override).
 """
 
 from __future__ import annotations
@@ -47,6 +62,17 @@ REQUIRED_KEYS = (
     "gap_min_m",
     "gap_time_s",
     "gap_brake_gain",
+    "acc_exit_ttc_s",
+    "gap_exit_margin_m",
+    "gap_exit_opening_mps",
+    "min_engaged_frames",
+    "exit_confirm_frames",
+    "lead_lost_exit_frames",
+    "standstill_speed_mps",
+    "standstill_hold_distance_m",
+    "standstill_brake",
+    "brake_rate_up",
+    "brake_rate_down",
 )
 
 
@@ -98,12 +124,25 @@ class LongitudinalController:
             raise ValueError("lead_persist_frames must be >= 1")
         if not float(cfg["aeb_ttc_s"]) < float(cfg["acc_ttc_s"]):
             raise ValueError("aeb_ttc_s must be < acc_ttc_s")
+        if float(cfg["acc_exit_ttc_s"]) < float(cfg["acc_ttc_s"]):
+            raise ValueError("acc_exit_ttc_s must be >= acc_ttc_s")
+        if float(cfg["brake_rate_up"]) <= 0 or float(cfg["brake_rate_down"]) <= 0:
+            raise ValueError("brake_rate_up and brake_rate_down must be > 0")
         self.reset()
 
     def reset(self) -> None:
         self._streak: dict[int, int] = {}  # track id -> consecutive in-ego-lane frames
         self._latched = False
         self._frames_without_lead = 0
+        self._mode = "AUTOPILOT"  # engaged state of the ACC/GAP rules (AEB/HOLD use the latch)
+        self._mode_frames = 0  # frames spent in self._mode
+        self._clear_frames = 0  # consecutive frames the ACC/GAP exit condition held
+        self._prev_brake = 0.0  # last published brake (rate limiter)
+
+    @property
+    def mode(self) -> str:
+        """Engaged ACC/GAP state (``AUTOPILOT`` when not engaged or while AEB/HOLD act)."""
+        return self._mode
 
     @property
     def latched(self) -> bool:
@@ -134,30 +173,106 @@ class LongitudinalController:
         if lead is None:
             self._frames_without_lead += 1
             if self._latched and self._frames_without_lead <= int(c["lead_release_frames"]):
-                return self._brake("HOLD", float(c["hold_brake"]), None, "lead lost, holding")
+                return self._fixed("HOLD", float(c["hold_brake"]), None, "lead lost, holding")
             self._latched = False
-            return ControlDecision(False, 0.0, 0.0, "AUTOPILOT", None, "no lead")
+            if self._mode != "AUTOPILOT":
+                self._mode_frames += 1
+                if self._frames_without_lead <= int(c["lead_lost_exit_frames"]):
+                    return self._fixed(self._mode, self._prev_brake, None, "lead lost, keeping")
+            return self._autopilot(None, "no lead")
         self._frames_without_lead = 0
         d = float(lead.distance_m)
         ttc = lead.ttc_s
+        v = max(0.0, float(ego_speed_mps))
         aeb_ttc, acc_ttc = float(c["aeb_ttc_s"]), float(c["acc_ttc_s"])
+        # AEB first, without any dwell or hysteresis
         if (ttc is not None and ttc < aeb_ttc) or d < float(c["aeb_distance_m"]):
             self._latched = True
+            self._set_mode("AUTOPILOT")  # the latch takes over; ACC/GAP restart after release
             why = f"ttc {ttc:.2f}s" if ttc is not None and ttc < aeb_ttc else f"dist {d:.1f}m"
-            return self._brake("AEB", 1.0, lead, why)
+            return self._fixed("AEB", 1.0, lead, why)
         if self._latched:
             if d < float(c["hold_release_distance_m"]):
-                return self._brake("HOLD", float(c["hold_brake"]), lead, f"dist {d:.1f}m")
+                return self._fixed("HOLD", float(c["hold_brake"]), lead, f"dist {d:.1f}m")
             self._latched = False
-        if ttc is not None and ttc < acc_ttc:
+
+        acc_on = ttc is not None and ttc < acc_ttc
+        acc_brake = 0.0
+        if acc_on:
             frac = (acc_ttc - ttc) / (acc_ttc - aeb_ttc)  # 0 at acc_ttc_s, 1 at aeb_ttc_s
             lo, hi = float(c["acc_min_brake"]), float(c["acc_max_brake"])
-            return self._brake("ACC", lo + (hi - lo) * frac, lead, f"ttc {ttc:.2f}s")
-        gap = float(c["gap_min_m"]) + max(0.0, float(ego_speed_mps)) * float(c["gap_time_s"])
-        if d < gap and lead.closing_speed_mps > 0.0:
-            b = min(float(c["acc_max_brake"]), float(c["gap_brake_gain"]) * (gap - d) / gap)
-            return self._brake("GAP", b, lead, f"gap {d:.1f}<{gap:.1f}m")
-        return ControlDecision(False, 0.0, 0.0, "AUTOPILOT", lead, "lead far")
+            acc_brake = lo + (hi - lo) * frac
+        gap = float(c["gap_min_m"]) + v * float(c["gap_time_s"])
+        gap_on = d < gap and lead.closing_speed_mps > 0.0
+        gap_brake = 0.0
+        if gap_on:
+            gap_brake = min(float(c["acc_max_brake"]), float(c["gap_brake_gain"]) * (gap - d) / gap)
+
+        # entries are immediate; GAP -> ACC is an escalation, ACC never steps down to GAP
+        if acc_on and self._mode != "ACC":
+            self._set_mode("ACC")
+        elif gap_on and self._mode == "AUTOPILOT":
+            self._set_mode("GAP")
+        if self._mode == "AUTOPILOT":
+            return self._autopilot(lead, "lead far")
+        self._mode_frames += 1
+
+        standstill = v < float(c["standstill_speed_mps"]) and d < float(
+            c["standstill_hold_distance_m"]
+        )
+        ttc_clear = ttc is None or ttc >= float(c["acc_exit_ttc_s"])
+        gap_clear = d >= gap + float(c["gap_exit_margin_m"]) or lead.closing_speed_mps < -float(
+            c["gap_exit_opening_mps"]
+        )
+        clear = ttc_clear and gap_clear and not standstill
+        self._clear_frames = self._clear_frames + 1 if clear else 0
+        if self._clear_frames >= int(c["exit_confirm_frames"]) and self._mode_frames >= int(
+            c["min_engaged_frames"]
+        ):
+            return self._autopilot(lead, "lead clear")
+
+        target = max(acc_brake, gap_brake)
+        if acc_on:
+            why = f"ttc {ttc:.2f}s"
+        elif gap_on:
+            why = f"gap {d:.1f}<{gap:.1f}m"
+        else:
+            why = f"coast, d {d:.1f}m"
+        if standstill and target < float(c["standstill_brake"]):
+            target = float(c["standstill_brake"])
+            why = f"standstill hold, d {d:.1f}m"
+        return self._ramped(self._mode, target, lead, why)
+
+    def _set_mode(self, mode: str) -> None:
+        if mode != self._mode:
+            self._mode = mode
+            self._mode_frames = 0
+            self._clear_frames = 0
+
+    def _autopilot(self, lead: LeadCandidate | None, reason: str) -> ControlDecision:
+        self._set_mode("AUTOPILOT")
+        self._prev_brake = 0.0
+        return ControlDecision(False, 0.0, 0.0, "AUTOPILOT", lead, reason)
+
+    def _fixed(
+        self, mode: str, brake: float, lead: LeadCandidate | None, reason: str
+    ) -> ControlDecision:
+        """Brake applied as is (AEB, HOLD, the ACC/GAP dropout hold)."""
+        out = self._brake(mode, brake, lead, reason)
+        self._prev_brake = out.brake
+        return out
+
+    def _ramped(
+        self, mode: str, target: float, lead: LeadCandidate | None, reason: str
+    ) -> ControlDecision:
+        """ACC/GAP brake moved towards ``target`` by at most the per-frame rate limits."""
+        prev = self._prev_brake
+        up, down = float(self.cfg["brake_rate_up"]), float(self.cfg["brake_rate_down"])
+        brake = min(target, prev + up) if target >= prev else max(target, prev - down)
+        out = self._brake(mode, brake, lead, reason)
+        out.extra["target_brake"] = float(target)
+        self._prev_brake = out.brake
+        return out
 
     @staticmethod
     def _brake(mode: str, brake: float, lead: LeadCandidate | None, reason: str) -> ControlDecision:
