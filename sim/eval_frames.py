@@ -179,8 +179,11 @@ def depth_map_metrics(
     inv_rel: np.ndarray, gt_m: np.ndarray, min_m: float, max_m: float, stride: int = 1
 ) -> dict[str, float] | None:
     """Oracle-aligned MiDaS vs GT depth on pixels with ``min_m < gt < max_m``: the affine fit
-    in inverse depth uses every ``stride``-th pixel; scores use all valid pixels whose aligned
-    inverse depth is positive. Returns AbsRel, RMSE (m), delta < 1.25, coverage, s, t."""
+    in inverse depth uses every ``stride``-th pixel; scores use all valid pixels, with the
+    prediction capped to ``[min_m, max_m]`` (the usual depth cap: an aligned inverse depth near
+    0 would otherwise give km-scale depths that swamp RMSE). ``coverage`` = fraction of valid
+    pixels whose aligned depth is inside the cap before capping. Returns AbsRel, RMSE (m),
+    delta < 1.25, coverage, s, t."""
     if inv_rel.shape != gt_m.shape:
         raise ValueError(f"depth map {inv_rel.shape} does not match GT {gt_m.shape}")
     valid = (gt_m > min_m) & (gt_m < max_m) & np.isfinite(inv_rel)
@@ -191,16 +194,15 @@ def depth_map_metrics(
         return None
     s, t = fit
     inv = s * inv_rel[valid] + t
-    pos = inv > 1e-6
-    if not pos.any():
-        return None
-    pred, gt = 1.0 / inv[pos], gt_m[valid][pos]
+    inside = (inv >= 1.0 / max_m) & (inv <= 1.0 / min_m)
+    pred = 1.0 / np.clip(inv, 1.0 / max_m, 1.0 / min_m)
+    gt = gt_m[valid]
     ratio = np.maximum(pred / gt, gt / pred)
     return {
         "absrel": float(np.mean(np.abs(pred - gt) / gt)),
         "rmse": float(np.sqrt(np.mean((pred - gt) ** 2))),
         "delta1": float(np.mean(ratio < 1.25)),
-        "coverage": float(pos.mean()),
+        "coverage": float(inside.mean()),
         "s": s,
         "t": t,
     }

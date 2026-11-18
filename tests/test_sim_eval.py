@@ -124,6 +124,11 @@ def test_depth_map_metrics_perfect_and_masked() -> None:
     assert 0.0 < noisy["absrel"] < 1.0
     with pytest.raises(ValueError):
         depth_map_metrics(inv_rel[:5], gt, 1.0, 80.0)
+    # a few pixels aligned to ~0 inverse depth are capped at max_m, not km-scale
+    bad = inv_rel.copy()
+    bad[20, :5] = -0.005 / 0.03 + 1e-9
+    r = depth_map_metrics(bad, gt, 1.0, 80.0, stride=2)
+    assert r["rmse"] < 80.0 and r["coverage"] < 1.0
 
 
 def test_mean_rows() -> None:
