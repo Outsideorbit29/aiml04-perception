@@ -4,9 +4,11 @@ the geometric distance (M5.6 decisions), on synthetic boxes. Pure logic: no mode
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 from perception.depth import BottomCalibration, CameraModel, fit_distance_scale, fit_row_offset
 from perception.depth.calibration import box_geometric_distance
@@ -14,9 +16,16 @@ from perception.depth.estimator import load_depth_config
 from perception.fusion import DistanceFusion, fuse_by_mode, fuse_inverse, inverse
 from perception.pipeline import load_pipeline_config, stage_configs
 from perception.types import Detection
-from sim.eval_frames import apply_calibration, calibration_study, fit_calibration, split_masks
+from sim.eval_frames import (
+    apply_calibration,
+    calibration_study,
+    fit_calibration,
+    select_split,
+    split_masks,
+)
 
-CAM = CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.6, 0.0, 1.5, math.radians(0.3))
+REPO = Path(__file__).resolve().parents[1]
+CAM =CameraModel(800, 450, 400.0, 400.0, 400.0, 225.0, 1.6, 0.0, 1.5, math.radians(0.3))
 HW = (450, 800)
 BINS = [[0, 10], [10, 30], [30, 60]]
 CFG = {
@@ -298,3 +307,37 @@ def test_calibration_study_improves_holdout_on_lifted_boxes():
     assert len(cz) == 5
     with pytest.raises(ValueError):
         fit_calibration("poly", recs, CAM, [5, 60], 1.5, 10)
+
+
+# ------------------------------------------------------------------ M5.9 val frames
+
+
+def test_select_split_keeps_only_the_mix_val_blocks():
+    weathers = ["ClearNoon", "CloudyNoon", "WetNoon", "ClearSunset", "ClearNight", "HardRainNoon"]
+    meta = {"weathers": [{"weather": w, "first_index": 500 * i} for i, w in enumerate(weathers)]}
+    paths = [Path(f"Town01_{i:05d}.jpg") for i in range(3000)]
+    scfg = yaml.safe_load((REPO / "configs/yolo_mix.yaml").read_text(encoding="utf-8"))["split"]
+    val = select_split(paths, meta, scfg, "val")
+    idx = [int(p.stem.split("_")[1]) for p in val]
+    assert idx == [i for b in range(6) for i in range(400 + 500 * b, 500 + 500 * b)]
+    train = {int(p.stem.split("_")[1]) for p in select_split(paths, meta, scfg, "train")}
+    guard = set(range(380, 400)) | set(range(500, 520))
+    assert not train & set(idx) and not train & guard
+    # positions over the val list: the halves are val blocks 1-3 vs 4-6
+    fit, _ = split_masks(np.arange(len(val)), len(val))["halves_ab"]
+    first3 = {i for b in range(3) for i in range(400 + 500 * b, 500 + 500 * b)}
+    assert {idx[i] for i in np.flatnonzero(fit)} == first3
+
+
+def test_calibration_study_scores_current_values_without_refit():
+    recs = synthetic_records(300, a=1.0, b=0.05)
+    fusion = DistanceFusion(with_fusion(), CAM)
+    ccfg = {"models": ["offset_box"], "fit_range_m": [5.0, 60.0], "huber_k": 1.5,
+            "irls_iters": 10}
+    cur = {"offset_px": 1.0, "offset_box_frac": 0.05, "distance_scale": 1.0}
+    study = calibration_study(recs, 300, CAM, fusion, ccfg, BINS, current=cur)
+    for split in study.values():
+        e = split["models"]["current"]
+        assert e["values"] == cur
+        hold = e["holdout"]["all"]["methods"]
+        assert abs(hold["geometric_cal"]["bias"]) < 0.01 < hold["geometric_raw"]["bias"]
