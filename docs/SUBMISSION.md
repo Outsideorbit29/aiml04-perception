@@ -2,20 +2,52 @@
 
 Each portal requirement mapped to the artifact that satisfies it.
 
-Status updated 2026-11-19 (M7.2/M7.3, branch `m7-docs`, not merged yet). `[~]` = partly done.
+Status updated 2026-11-19 (M7.4–M7.6, branch `m7-slides-reflection`, not merged yet). `[~]` = partly done.
 
 | Portal requirement | Artifact | Location | Done | Status / owner |
 |---|---|---|---|---|
-| Working demo | 3–4 min screen recording of the CARLA scenarios with overlay | Drive `AIML-04/demo/` + link in README | [ ] | TODO M7.4 (docs-presenter, after sim-ros-integrator records M5.8). Only `stopped_car` is recorded so far (`media/stopped_car_20261118_231618.mp4`, local). README has marked placeholders for the GIF and video link. |
-| GitHub repo with clean commits, README, setup | Public repo, `README.md`, `docs/SETUP.md` | GitHub | [~] | README written (overview, results table with W&B ids, architecture, cloud workflow, usage, layout, licences, limitations). Demo GIF missing (M7.4). M7.1 fresh-clone check by qa-reviewer still open. No LICENSE file (main session to decide). |
-| Architecture diagram | `docs/diagrams/architecture.mmd` + `pipeline.mmd` (Mermaid, rendered by GitHub in `docs/diagrams/README.md` and README) | repo + Drive | [~] | Mermaid done. PNG export for slides/Drive is TODO (user: export from Mermaid Live Editor in a browser; mermaid-cli needs headless Chromium, too heavy for the laptop). |
-| Data / API documentation | `docs/API.md` (ROS2 topics/messages, Python interfaces, config files); dataset notes in README "Datasets and licences" and `docs/figures/eda_summary.md` | repo | [x] | Done, written from the code. Control thresholds deliberately not copied (being tuned). |
+| Working demo | 3–4 min screen recording of the CARLA scenarios with overlay | Drive `AIML-04/demo/` + link in README | [~] | All four scenarios recorded in Session B (`media/*_20261119_*.mp4`, local) and passed. Shot list, overlay guide and closing table: `docs/DEMO_SCRIPT.md`. TODO: re-record in a final session (sim-ros-integrator, M5.8), then edit and upload (user). README has marked placeholders for the GIF and video link. |
+| GitHub repo with clean commits, README, setup | Public repo, `README.md`, `docs/SETUP.md` | GitHub | [~] | README refreshed with M5.9 and Session B results. Demo GIF missing (M7.4). M7.1 fresh-clone check by qa-reviewer still open. No LICENSE file (**user decision**). |
+| Architecture diagram | `docs/diagrams/architecture.mmd` + `pipeline.mmd` (Mermaid, rendered by GitHub in `docs/diagrams/README.md` and README) | repo + Drive | [~] | Mermaid done (detector node now the mix model). PNG export for slides/Drive is TODO (**user**: Mermaid Live Editor in a browser, save as `docs/diagrams/architecture.png` and `pipeline.png`). |
+| Data / API documentation | `docs/API.md` (ROS2 topics/messages, Python interfaces, config files); dataset notes in README "Datasets and licences" and `docs/figures/eda_summary.md` | repo | [x] | Done. |
 | Test results | `pytest` report + `docs/EXPERIMENTS.md` | repo + Drive `AIML-04/reports/` | [~] | CI green on `main` (GitHub Actions). Exported pytest report for Drive is TODO (qa-reviewer, M7.1: e.g. `pytest -q --junitxml` artifact from CI). |
-| Performance / accuracy numbers | mAP, MOTA/IDF1, lane F1, depth AbsRel, `docs/benchmarks.md` | repo + slides | [~] | In README results table, `docs/EXPERIMENTS.md`, `docs/benchmarks.md`. TBD: closed-loop results for `pedestrian_crossing`, `cut_in`, `night_rain` (sim-ros-integrator, M5.5/M5.8); live-loop p95 latency not logged (sim-ros-integrator / edge-optimizer); M5.9 fine-tune result (running). Slides TODO (M7.5). |
-| 10-min presentation | `AIML-04_presentation.pptx/pdf` | Drive `AIML-04/` | [ ] | TODO M7.5 (docs-presenter): slide markdown in `presentation/`, then PPTX. |
-| Individual reflection | `docs/REFLECTION.md` (1 page) | repo + Drive | [ ] | TODO M7.6: docs-presenter drafts from the decisions log; the intern rewrites it in their own words. |
-| Screenshots | `media/screenshots/` exported | Drive `AIML-04/screenshots/` | [ ] | TODO: user exports frames from the CARLA recordings; KITTI pipeline snapshots exist in the M4.6 Kaggle job output (W&B `e12sh0xi`). |
+| Performance / accuracy numbers | mAP, MOTA/IDF1, lane F1, depth AbsRel, `docs/benchmarks.md`, closed-loop table | repo + slides | [~] | In README, `docs/EXPERIMENTS.md`, `docs/benchmarks.md`, slides 5–12. TBD: live-loop p95 latency not logged (sim-ros-integrator); `docs/benchmarks.md` laptop section still quotes the 2026-11-18 "40–45 ms" and not the Session B 35.0–44.0 ms windows (edge-optimizer). |
+| 10-min presentation | `AIML-04_presentation.pptx/pdf` | Drive `AIML-04/` | [~] | Slide markdown with speaker notes and visuals: `presentation/slides.md` (14 slides, ~10 min). TODO (**user**): pandoc to PPTX, insert visuals (diagram PNG, demo clip), rehearse, export PDF. |
+| Individual reflection | `docs/REFLECTION.md` (1 page) | repo + Drive | [~] | Scaffold: `docs/REFLECTION_DRAFT.md` (marked DRAFT). TODO (**user**): rewrite in own words as `docs/REFLECTION.md`. |
+| Screenshots | `media/screenshots/` exported | Drive `AIML-04/screenshots/` | [ ] | TODO (**user**): export frames from the final CARLA recordings (one per scenario, plus the overlay freeze frame from `docs/DEMO_SCRIPT.md` shot 2); KITTI pipeline snapshots exist in the M4.6 Kaggle job output (W&B `e12sh0xi`). |
 | Datasets | Sample subset + download scripts (not the full dataset) | Drive `AIML-04/data_sample/` | [ ] | TODO M7.7: `tests/fixtures/` (5 BDD images, 3 s KITTI clip) + `scripts/data/` + Kaggle dataset links. Drive upload is the user's action. |
+
+## Drive folder plan (M7.7, upload is the user's action)
+
+```
+Anish_Kumar_Gupta_Capstone_Projects/          (share: Anyone with the link can view)
+├─ AIML-04/
+│  ├─ README.txt                    repo URL, demo link, one-paragraph summary, folder index
+│  ├─ AIML-04_presentation.pdf      exported from presentation/slides.md (+ .pptx)
+│  ├─ AIML-04_reflection.pdf        from docs/REFLECTION.md (the rewritten version)
+│  ├─ code/
+│  │  └─ aiml04-perception_<commit>.zip   `git archive` of the submitted commit (no models, data, media)
+│  ├─ demo/
+│  │  ├─ AIML-04_demo.mp4           edited 3–4 min video (docs/DEMO_SCRIPT.md)
+│  │  └─ raw/                       the four final scenario recordings (optional)
+│  ├─ reports/
+│  │  ├─ EXPERIMENTS.pdf            docs/EXPERIMENTS.md
+│  │  ├─ benchmarks.pdf             docs/benchmarks.md
+│  │  ├─ API.pdf                    docs/API.md
+│  │  ├─ architecture.png, pipeline.png   docs/diagrams exports
+│  │  ├─ lanes_comparison.md, depth_comparison.md, lanes_failures.jpg, eda_*.png   docs/figures
+│  │  └─ pytest_report.xml          CI junit artifact (M7.1)
+│  ├─ screenshots/                  one PNG per scenario + overlay freeze frame + KITTI snapshot
+│  └─ data_sample/
+│     ├─ fixtures/                  copy of tests/fixtures/ (5 BDD images + labels, 3 s KITTI clip)
+│     ├─ scripts_data/              copy of scripts/data/
+│     └─ DATASETS.txt               links: Kaggle awsaf49/bdd100k-dataset, solesensei/solesensei_bdd100k,
+│                                   garymk/kitti-3d-object-detection-dataset, leducnhuan/kitti-tracking;
+│                                   licences (BDD100K non-commercial, KITTI CC BY-NC-SA 3.0); the CARLA
+│                                   frames dataset is private on Kaggle (say so)
+└─ AIML-01/                         second project (separate work)
+```
+Do not upload model weights, full datasets or `kaggle.json`.
 
 ## Portal form
 - GitHub Repository URL: the repo root
