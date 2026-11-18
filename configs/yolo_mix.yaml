@@ -4,8 +4,8 @@
 #   CARLA  private dataset anish2906/aiml04-carla-frames (3,000 Town01 frames, 6 weathers x 500,
 #          labels only for car/truck/bus/person/bicycle/motorcycle), staged by sim/eval_frames.py
 data_config: configs/data_bdd.yaml   # class names (CARLA labels use the same BDD ids)
-search: /kaggle/input/notebooks      # BDD data-prep output (bdd_yolo/data.yaml); not /kaggle/input,
-                                     # so the recursive search does not walk the CARLA frames
+search: /kaggle/input                # BDD data-prep output (bdd_yolo/data.yaml), searched recursively
+                                     # as in M2 (the kernel-output mount path varies between jobs)
 stage_dir: /kaggle/temp/bdd_yolo
 lists_dir: /kaggle/temp/lists_mix
 out_dir: /kaggle/working/m5_9        # small outputs saved with the job
