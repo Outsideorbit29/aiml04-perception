@@ -1,0 +1,77 @@
+# M6 export + benchmark on the Kaggle T4 (kaggle/export_bench). Read by deploy/export.py and
+# deploy/benchmark.py; nothing here runs on the laptop. Model input sizes come from the runtime
+# configs so the exported files are exactly what perception/ runs live:
+#   YOLO   configs/yolo_detector.yaml imgsz 640 -> static 1x3x640x640
+#   MiDaS  configs/depth.yaml models.midas_small.input_hw [256, 448] -> static 1x3x256x448
+#   YOLOP  configs/lanes.yaml yolop (hustvl/YOLOP yolop-640-640.onnx, static 1x3x640x640)
+detector_config: configs/yolo_detector.yaml
+depth_config: configs/depth.yaml
+lanes_config: configs/lanes.yaml
+data_config: configs/data_bdd.yaml      # BDD val (data-prep kernel output) for the accuracy delta
+data_search: /kaggle/input/notebooks    # fallback search for bdd_yolo/data.yaml
+
+models_dir: /kaggle/temp/m6_models      # ONNX + engines (large: not saved as job output)
+weights_dir: /kaggle/temp/weights       # best.pt from W&B
+work_dir: /kaggle/temp/m6_work          # reference outputs, staged val subset
+out_dir: /kaggle/working/m6_bench       # small outputs saved with the job (json, md, log)
+
+files:                                  # file names in models_dir (= names under models/ live)
+  yolo: yolo11s-bdd.onnx                # detector weights models/yolo11s-bdd.pt -> .onnx/.engine
+  midas_small: midas_small.onnx         # depth.yaml models.midas_small.onnx
+  yolop: yolop-640-640.onnx             # lanes.yaml yolop.weights
+
+export:
+  opset: 17
+  yolo_simplify: true                   # Ultralytics export: onnxslim
+  midas_output: inv_depth               # output name of the MiDaS export
+  yolop_hub: hustvl/yolop               # PyTorch YOLOP (End-to-end.pth) = the weights of the
+  yolop_hub_model: yolop                # shipped yolop-640-640.onnx; used as the FP32 reference
+  yolop_pip: [yacs, prefetch_generator] # imports of the YOLOP hubconf
+
+engine:
+  fp16: true
+  workspace_mib: 1024                   # same limit as the laptop build (M6.4)
+
+parity:
+  frames: 20                            # 5 BDD fixture images + 15 frames of the KITTI clip
+  fixture_images: tests/fixtures/images
+  fixture_clip: tests/fixtures/clip_kitti.mp4
+
+bench:
+  models: [yolo, midas_small, yolop]
+  backends: [torch, onnx, tensorrt]     # torch = PyTorch FP32 baseline (reference outputs)
+  warmup: 200
+  iters: 1000
+  worker_timeout_s: 1800
+  bench_frame_index: 0                  # val image used for the timed loops (1280x720 BDD)
+
+accuracy:
+  val_images: 500                       # BDD val subset (every k-th image of the sorted list)
+  yolo:                                 # mAP with the shared letterbox/decode/NMS (Detector)
+    conf: 0.001                         # val-style settings, as Ultralytics model.val()
+    iou: 0.7
+    agnostic_nms: false
+    max_det: 300
+  dense_frames: 100                     # MiDaS AbsRel / YOLOP lane-mask IoU vs PyTorch output
+
+wandb:
+  project: aiml04-perception
+  entity: anish-grd2004-vellore-institute-of-technology
+  group: bench
+  detector_artifact: yolo11s-bdd-best:latest
+  artifact_suffix: ""
+  onnx_artifacts:                       # W&B model artifacts holding the ONNX files
+    yolo: yolo11s-bdd-onnx
+    midas_small: midas-small-onnx
+    yolop: yolop-onnx
+
+smoke:                                  # --smoke: prove the whole job in ~20 min
+  bench:
+    warmup: 10
+    iters: 50
+  accuracy:
+    val_images: 40
+    dense_frames: 10
+  wandb:
+    group: bench-smoke
+    artifact_suffix: -smoke             # smoke ONNX files never become yolo11s-bdd-onnx:latest
