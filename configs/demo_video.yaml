@@ -1,0 +1,60 @@
+# M7.4 demo video (scripts/make_demo_video.py). Numbers come from docs/EXPERIMENTS.md (Session C,
+# 2026-11-19) and docs/benchmarks.md (T4, W&B 218me22j). Clips are local in media/ (gitignored).
+out: media/aiml04_demo.mp4
+gif: media/demo.gif            # short loop for the README
+gif_clip: stopped_car          # which clip the GIF comes from
+gif_seconds: [14.0, 24.0]      # start/end in that clip
+gif_width: 480
+size: [1280, 720]
+fps: 20                        # clips are recorded at 20 fps of sim time
+card_seconds: 5.0
+caption_height: 84
+
+title:
+  - "AIML-04  Autonomous Driving Perception Stack"
+  - "One front camera  ·  YOLO11s + ByteTrack + YOLOP lanes + geometric/MiDaS distance"
+  - "Running live in CARLA 0.9.15 through ROS2 Humble on an RTX 3060 Laptop (TensorRT FP16)"
+
+overlay_card:
+  - "How to read the overlay"
+  - "Box: track id · class · distance ± std · time to collision"
+  - "LEAD (red): the in-lane object the controller reacts to"
+  - "Green area: ego lane from YOLOP  ·  bottom bar: controller mode, brake, speed"
+  - "Recordings play at simulation time (20 fps). Live perception ≈ 38–49 ms per frame."
+
+clips:
+  - name: stopped_car
+    file: media/stopped_car_20261119_013806.mp4
+    card: ["Scenario 1: stopped car ahead", "Clear noon · a parked car 60 m ahead in our lane"]
+    caption: "ACC slows the car smoothly, no emergency braking. Stopped 11.8 m short, no collision."
+  - name: cut_in
+    file: media/cut_in_20261119_014200.mp4
+    card: ["Scenario 2: cut-in", "A car cuts in 18 m ahead at 5 m/s, then brakes at 3 m/s²"]
+    caption: "LEAD switches to the cut-in car; gap control brings us to a stop 10.0 m behind it. No collision."
+  - name: pedestrian_crossing
+    file: media/pedestrian_crossing_20261119_014523.mp4
+    card: ["Scenario 3: pedestrian crossing", "A walker steps into the road from the kerb"]
+    caption: "Emergency braking (AEB) at time-to-collision 1.5 s from 29 km/h, then HOLD. Stopped 9.6 m short."
+  - name: night_rain
+    file: media/night_rain_20261119_020707.mp4
+    card: ["Scenario 4: night + heavy rain", "Parked car 60 m ahead · HardRainNight · headlights on"]
+    caption: "Smooth ACC stop 11.3 m short, no collision. At night the lead reads ~20 % long (13.6 m shown)."
+
+results_card:
+  - "Closed loop in CARLA: 4 / 4 scenarios, 0 collisions"
+  - "Detector fine-tuned on BDD100K + CARLA: CARLA-val mAP@0.5 0.819 (BDD-only 0.624)"
+  - "Distance on CARLA-val: AbsRel 0.081  ·  KITTI (vs LiDAR): 0.170"
+  - "Lanes: YOLOP F1 0.515 vs classical 0.231 on BDD val"
+
+bench_card:
+  title: "TensorRT FP16 on a Tesla T4 (model latency, p50)"
+  header: ["Model", "PyTorch", "ONNX RT", "TensorRT", "Speed-up"]
+  rows:
+    - ["YOLO11s 640", "9.93 ms", "10.79 ms", "3.66 ms", "2.7x"]
+    - ["MiDaS-small 256x448", "10.95 ms", "9.04 ms", "2.58 ms", "4.3x"]
+    - ["YOLOP 640", "22.78 ms", "20.22 ms", "6.70 ms", "3.4x"]
+  footer: "FP16 cost: YOLO mAP@0.5 −0.0001 · YOLOP lane IoU 0.993 vs PyTorch"
+
+end_card:
+  - "github.com/Outsideorbit29/aiml04-perception"
+  - "Nexvia Technologies internship · AIML-04"
