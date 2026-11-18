@@ -1,7 +1,8 @@
 """control_node (M5.4): /perception/objects + /carla/ego/odom -> /carla/ego/control.
 
 A thin wrapper around ``perception.control.LongitudinalController`` (AEB / ACC / gap rules with
-lead persistence; thresholds in ``control`` of configs/carla.yaml). One EgoControl is published
+lead persistence, ACC/GAP hysteresis, dwell, standstill hold and brake rate limit; thresholds in
+``control`` of configs/carla.yaml). One EgoControl is published
 per objects message, with the same header stamp, which is what the bridge waits for before it
 ticks the simulator.
 """
