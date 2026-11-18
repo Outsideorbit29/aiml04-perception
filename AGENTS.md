@@ -55,7 +55,8 @@ python3 deploy/build_local_engine.py --onnx models/*.onnx --fp16      # one time
 bash /mnt/d/Project_ai/ros2_ws/build_wsl.sh                            # builds into ~/aiml04_ws
 source /opt/ros/humble/setup.bash && source ~/aiml04_ws/install/setup.bash
 export AIML04_REPO_ROOT=/mnt/d/Project_ai RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ROS_LOCALHOST_ONLY=1
-ros2 launch perception_ros stack.launch.py carla_host:=localhost town:=Town01 load_town:=true \n    scenario:=stopped_car          # stopped_car | pedestrian_crossing | cut_in | night_rain
+ros2 launch perception_ros stack.launch.py carla_host:=localhost town:=Town01 load_town:=true \
+    scenario:=stopped_car          # stopped_car | pedestrian_crossing | cut_in | night_rain
 ```
 Keep this section current when commands change.
 
