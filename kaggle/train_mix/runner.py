@@ -19,7 +19,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "m5-9-mix-finetune"  # branch, tag or commit SHA to run; set back to "main" before merging
-MODE = "smoke"  # smoke | train | resume
+MODE = "train"  # smoke | train | resume
 EXTRA = [] if MODE == "train" else [f"--{MODE}"]
 JOB_CMD = ["python", "-m", "scripts.train_mix", "--config", "configs/yolo_mix.yaml", *EXTRA]
 JOB_PIP = ["onnxslim"]  # Ultralytics ONNX simplify (deploy/export.py export_yolo)
