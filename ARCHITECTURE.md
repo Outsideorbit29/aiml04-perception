@@ -160,9 +160,21 @@ CARLA runs in **synchronous mode** with a fixed 0.05 s step, so perception laten
 the sim. The bridge ticks the world only after control for the previous frame arrives, or after a
 timeout. A Traffic Manager autopilot drives the ego vehicle laterally. `control_node` overrides
 throttle/brake longitudinally:
-- if a lead object is in the ego lane with TTC < 2.0 s or distance < 8 m: full brake (AEB),
-- if TTC is between 2.0 and 4.0 s: proportional slow-down (ACC-like),
+- a lead is an object in the ego lane for 3 consecutive frames under one track id,
+- if the lead has TTC < 2.0 s or distance < 8 m: full brake (AEB) at once, then the brake stays
+  latched (HOLD) while the lead is within 12 m and for 1 s after it is lost,
+- if TTC is below 4.0 s: ACC, a proportional slow-down; closing inside the time gap
+  (6 m + 1.5 s × speed): GAP, a brake proportional to the gap deficit. GAP escalates to ACC; ACC
+  never steps down to GAP,
+- ACC/GAP have hysteresis and dwell: they return to autopilot only after TTC ≥ 5.0 s (or no TTC)
+  and the gap ≥ desired gap + 3 m (or the lead pulling away) have held for 0.5 s and the mode has
+  lasted 1 s. Between TTC 4.0 and 5.0 s ACC coasts (no throttle). A lead dropout keeps the mode
+  for 0.5 s. At standstill (< 0.5 m/s) with the lead within 15 m, ACC/GAP keep at least brake 0.3
+  and do not release (soft hold, no creep-and-rebrake). The ACC/GAP brake is rate-limited
+  (+2.0/s, −1.0/s); AEB and HOLD are not,
 - otherwise: autopilot throttle.
+
+Thresholds are in `control` of `configs/carla.yaml`; the logic is `perception/control.py`.
 
 Demo scenarios (scripted in `sim/scenarios/`): a stopped car ahead, a pedestrian crossing, cut-in, night/rain.
 
