@@ -499,6 +499,9 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     # 2. Distance with the live stack's detector / MiDaS / fusion settings (torch backend).
     pcfg = load_pipeline_config(cfg["pipeline_config"])
+    # Only detector, MiDaS and fusion are built. The lane detector is never built (lanes play no
+    # part in distance), so lanes_carla.yaml's laptop-only yolop .engine path is never opened.
+    # `backend` (torch) switches detector + depth only; the detector gets the W&B best.pt.
     sc = stage_configs(pcfg, cfg["backend"], cfg["camera"])
     sc["detector"]["weights"] = str(weights)
     detector = Detector(sc["detector"])
