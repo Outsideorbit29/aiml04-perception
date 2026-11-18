@@ -88,7 +88,7 @@ control:                       # control_node -> perception.control.Longitudinal
   acc_max_brake: 0.6           # ... rising to this at aeb_ttc_s
   hold_brake: 1.0              # brake while latched after an AEB
   hold_release_distance_m: 12.0  # the latch releases when the lead is farther than this
-  gap_min_m: 6.0               # time-gap following: desired gap = gap_min_m + v * gap_time_s
+  gap_min_m: 10.0              # > aeb_distance_m so GAP/ACC stop the car before AEB (backup). Time-gap following: desired gap = gap_min_m + v * gap_time_s
   gap_time_s: 1.5
   gap_brake_gain: 1.0          # brake = gain * (gap - d) / gap, capped at acc_max_brake
   odom_timeout_s: 1.0          # ego speed older than this counts as 0 (gap rule only)

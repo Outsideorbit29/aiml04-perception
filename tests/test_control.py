@@ -323,10 +323,19 @@ def _stopped_car_approach(cfg: dict, seed: int) -> tuple[list[str], float, bool]
 def test_closed_loop_stopped_car_has_few_transitions(seed):
     modes, stop_gap, collided = _stopped_car_approach(CFG, seed)
     assert not collided and stop_gap > 0.0
-    latch = next(i for i, m in enumerate(modes) if m in ("AEB", "HOLD"))
-    # AUTOPILOT -> ACC (or -> GAP -> ACC) on the approach, then the AEB/HOLD latch
+    # gap_min_m (10 m) > aeb_distance_m (8 m): ACC/GAP normally stop the car before AEB is
+    # needed; if AEB/HOLD does latch, it must stay latched.
+    latch = next((i for i, m in enumerate(modes) if m in ("AEB", "HOLD")), len(modes) - 1)
     assert transitions(modes[: latch + 1]) <= 3
-    assert set(modes[latch:]) <= {"AEB", "HOLD"}
+    if modes[latch] in ("AEB", "HOLD"):
+        assert set(modes[latch:]) <= {"AEB", "HOLD"}
+    else:
+        assert stop_gap > CFG["aeb_distance_m"] * 0.9  # smooth stop near the gap target
     raw, _, _ = _stopped_car_approach(NO_HYSTERESIS, seed)
-    raw_latch = next(i for i, m in enumerate(raw) if m in ("AEB", "HOLD"))
-    assert transitions(raw[: raw_latch + 1]) > transitions(modes[: latch + 1])
+    assert transitions(raw) > transitions(modes)
+
+
+def test_closed_loop_aeb_backup_with_small_gap():
+    # With the old 6 m gap target (inside the 8 m AEB distance) the approach still ends in AEB.
+    modes, stop_gap, collided = _stopped_car_approach({**CFG, "gap_min_m": 6.0}, 0)
+    assert not collided and stop_gap > 0.0 and "AEB" in modes
