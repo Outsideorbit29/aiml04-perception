@@ -44,6 +44,14 @@ geometry:                   # flat-ground distance validity (perception.fusion.D
   min_angle_deg: 0.5        # ray must point this far below the horizontal (~190 m at 1.65 m)
   bottom_margin_px: 2       # box bottom within this of the image bottom = truncated, no contact
   max_distance_m: 80.0      # beyond this a 1 px row error is > 5 m: geometric is dropped
+  calibration:              # detector-box correction of the contact row / distance
+                            # (perception.depth.calibration): row' = y2 + offset_px (at the
+                            # camera.yaml resolution) + offset_box_frac * box_h; Z' = scale * Z.
+                            # Identity here (KITTI/BDD unchanged); fitted per camera + detector
+                            # on a split of eval frames (configs/depth_carla.yaml)
+    offset_px: 0.0
+    offset_box_frac: 0.0
+    distance_scale: 1.0
 
 anchors:                    # objects whose geometric distance aligns MiDaS each frame
   min_score: 0.5
@@ -66,6 +74,10 @@ alignment:                  # perception.depth.ScaleAligner: 1/Z = s*m + t
                             # geometric inverse-depth std (the aligned std never goes below it)
 
 fusion:
+  mode: inverse_depth_weighted  # inverse_depth_weighted: inverse-variance fusion of geometric and
+                            # aligned MiDaS (M4.4 KITTI: same AbsRel as geometric, coverage
+                            # 1.00 vs 0.96) | geometric_first: geometric whenever valid, MiDaS
+                            # only for truncated / near-horizon / too-far boxes (CARLA, M5.6)
   object_classes: [car, truck, bus, person, rider, bicycle, motorcycle]  # road users only
   reuse_alignment_frames: 5 # reuse the last fit this many frames when anchors give none
   correlation: 0.8          # assumed error correlation of geometric and aligned MiDaS, used only

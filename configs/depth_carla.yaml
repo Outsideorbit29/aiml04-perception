@@ -1,0 +1,26 @@
+# CARLA ego camera + fine-tuned YOLO11s: differences to configs/depth.yaml (M5.6 decisions).
+# Used by configs/pipeline_carla.yaml (live CARLA loop) and so by configs/carla_eval.yaml.
+# Evidence: docs/EXPERIMENTS.md, "Sim eval on the recorded frames (M5.6)".
+base: configs/depth.yaml
+
+geometry:
+  calibration:              # decision 1: detected box bottoms sit higher than the GT contact
+                            # row, so raw geometric distances on detections read long.
+                            # Fitted by sim/eval_frames.py (configs/carla_eval.yaml
+                            # `calibration`) on the fit split, checked on the hold-out split.
+                            # Model offset_box (row + a + b * box_h), fitted on the even frame
+                            # positions of the 3,000 Town01 frames (W&B nfekm9vg, GT 5-60 m).
+                            # Hold-out AbsRel of detected-box geometric distance: odd frames
+                            # 0.134 -> 0.112 (bias +0.104 -> +0.047); route halves A->B 0.148 ->
+                            # 0.121, B->A 0.109 -> 0.092. b = 0.070-0.076 on all splits; the
+                            # scale model (k = 0.937-0.959) is equal overall, worse at 0-10 m
+    offset_px: -0.74
+    offset_box_frac: 0.073
+    distance_scale: 1.0
+
+fusion:
+  mode: geometric_first     # decision 2: in CARLA the flat-ground model is near exact (GT-box
+                            # AbsRel 0.040, implied camera height 1.594 m vs 1.6 m) and fusing
+                            # MiDaS-small doubles the error (0.087). MiDaS (still every 2nd frame,
+                            # pipeline_carla.yaml) only covers boxes without a valid geometric
+                            # distance (truncated at the image bottom, near the horizon, > 80 m)
