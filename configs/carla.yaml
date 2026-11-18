@@ -49,7 +49,9 @@ camera:                        # ego RGB camera; MUST match configs/camera.yaml 
   pitch_deg: 0.0
   sensor_tick: 0.0             # 0 = every sim step
 depth_camera:                  # ground-truth depth, same pose and intrinsics as the RGB camera
-  enabled: true
+  enabled: false               # /carla/ego/depth_gt in the live stack. Off by default: a second
+                               # camera doubles the rendering load and nothing live consumes it
+                               # (sim/record_dataset.py has its own depth camera for the eval)
 
 bridge:                        # carla_bridge_node
   frame_id: ego_camera         # header.frame_id of images
@@ -59,6 +61,8 @@ bridge:                        # carla_bridge_node
   control_timeout_s: 0.5       # wait for /carla/ego/control of the current frame, then tick
   first_control_timeout_s: 120.0   # model loading (ONNX sessions) before the first control
   on_control_timeout: hold_last    # hold_last | autopilot: what to apply when control is late
+  republish_s: 1.0             # before the first control: resend the frame this often (the
+                               # perception_node subscribes only after its models are loaded)
   max_frames: 0                # 0 = run until shutdown
   log_every: 100               # frames between status log lines
 

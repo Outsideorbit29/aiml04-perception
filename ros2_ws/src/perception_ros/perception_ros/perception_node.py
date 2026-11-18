@@ -76,10 +76,15 @@ class PerceptionNode(Node):
         self.create_subscription(Image, "/carla/ego/rgb", self._on_image, qos)
         self.n = 0
         self.t_sum = 0.0
+        self.last_stamp_ns = -1
 
     def _on_image(self, msg: Image) -> None:
+        stamp_ns = stamp_to_ns(msg.header.stamp)
+        if stamp_ns <= self.last_stamp_ns:  # the bridge re-sends a frame until we answer
+            return
+        self.last_stamp_ns = stamp_ns
         img = image_to_bgr(msg)
-        pf = self.pipe.process(img, stamp=stamp_to_ns(msg.header.stamp) * 1e-9, frame_id=self.n)
+        pf = self.pipe.process(img, stamp=stamp_ns * 1e-9, frame_id=self.n)
         d = frame_to_dict(pf, self.pipe.last_stats)
         out = TrackedObjectArray()
         out.header = msg.header

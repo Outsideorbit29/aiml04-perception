@@ -165,14 +165,21 @@ class CarlaBridge(Node):
             depth = self.q_depth.get(frame, float(b["sensor_timeout_s"])) if self.depth_enabled \
                 else None
             stamp_ns = int(round(rgb.timestamp * 1e9))
-            self._publish(rgb, depth, stamp_ns)
+            msgs = self._publish(rgb, depth, stamp_ns)
             timeout = self.waiter.expect(stamp_ns)
-            t_end = time.monotonic() + timeout
+            t_pub = time.monotonic()
+            t_end = t_pub + timeout
             while rclpy.ok() and not self.waiter.got_expected:
-                left = t_end - time.monotonic()
-                if left <= 0:
+                now = time.monotonic()
+                if now >= t_end:
                     break
-                rclpy.spin_once(self, timeout_sec=min(0.02, left))
+                if not self.waiter.seen_any and now - t_pub >= float(b["republish_s"]):
+                    # perception_node may still be loading models and subscribe after the
+                    # first publish (volatile QoS): send this frame again until it answers
+                    for pub, m in msgs:
+                        pub.publish(m)
+                    t_pub = now
+                rclpy.spin_once(self, timeout_sec=min(0.02, t_end - now))
             late = not self.waiter.got_expected
             if late:
                 self.waiter.timed_out()
@@ -187,18 +194,25 @@ class CarlaBridge(Node):
                     f"timeouts {self.waiter.timeouts}, mode {mode}"
                 )
 
-    def _publish(self, rgb: Any, depth: Any, stamp_ns: int) -> None:
-        fid = str(self.bcfg["frame_id"])
+    def _publish(self, rgb: Any, depth: Any, stamp_ns: int) -> list[tuple[Any, Any]]:
+        """Publish odom, depth GT and RGB of one frame (odom first, so control_node has the
+        speed before the objects of this frame arrive). Returns (publisher, msg) pairs."""
         img = Image()
         set_stamp_ns(img.header.stamp, stamp_ns)
-        img.header.frame_id = fid
+        img.header.frame_id = str(self.bcfg["frame_id"])
         fill_image(img, cu.bgra_to_bgr(rgb.raw_data, rgb.height, rgb.width), "bgr8")
-        self.pub_rgb.publish(img)
+        out = [(self.pub_odom, self._odom(img.header.stamp))]
         if depth is not None:
             dm = Image()
             dm.header = img.header
             fill_image(dm, cu.decode_depth(depth.raw_data, depth.height, depth.width), "32FC1")
-            self.pub_depth.publish(dm)
+            out.append((self.pub_depth, dm))
+        out.append((self.pub_rgb, img))
+        for pub, m in out:
+            pub.publish(m)
+        return out
+
+    def _odom(self, stamp: Any) -> Odometry:
         tf = self.ego.get_transform()
         v = self.ego.get_velocity()
         av = self.ego.get_angular_velocity()
@@ -207,7 +221,7 @@ class CarlaBridge(Node):
             tf.rotation.roll, tf.rotation.pitch, tf.rotation.yaw,
         )
         od = Odometry()
-        od.header.stamp = img.header.stamp
+        od.header.stamp = stamp
         od.header.frame_id = str(self.bcfg["odom_frame"])
         od.child_frame_id = str(self.bcfg["base_frame"])
         p = od.pose.pose
@@ -215,7 +229,7 @@ class CarlaBridge(Node):
         p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w = q
         od.twist.twist.linear.x = cu.forward_speed(v.x, v.y, tf.rotation.yaw)
         od.twist.twist.angular.z = -math.radians(av.z)
-        self.pub_odom.publish(od)
+        return od
 
     def _apply(self, msg: EgoControl | None, late: bool) -> None:
         import carla
