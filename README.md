@@ -18,9 +18,10 @@ run on Kaggle and are logged to Weights & Biases; the laptop only runs CARLA and
 
 > **TODO (M7.4):** demo GIF here (`media/demo.gif`, 10–15 s from the `stopped_car` run).
 >
-> **TODO (M7.4):** link to the 3–4 min demo video (YouTube unlisted or Drive). The four scenarios
-> are recorded (Session B, 2026-11-19) and will be re-recorded in a final session; shot list in
-> [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+> **TODO (M7.4):** link to the 3–4 min demo video (YouTube unlisted or Drive). The four final
+> scenario recordings are from Session C (2026-11-19); the video is assembled with
+> `python scripts/make_demo_video.py --config configs/demo_video.yaml` (shot list in
+> [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)).
 >
 > **TODO (M7.8, stretch):** live deployment URL (Hugging Face Space running the offline pipeline),
 > or the demo video link if the Space is not built.
@@ -42,18 +43,20 @@ Every number below is copied from [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) or
 | Distance, sim (live config) | AbsRel all (0–10 / 10–30 / 30–60 m), bias, detected boxes | Mix detector, geometric, **no calibration: 0.081** (0.035 / 0.064 / 0.110), bias +0.041 | BDD detector on the same frames: 0.110 uncalibrated, 0.099 with its box-bottom calibration | 600 held-out CARLA-val frames | [7cnlg0dt](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/7cnlg0dt), [cf6hbj0d](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/cf6hbj0d) |
 | TensorRT | Model p50 latency, T4, batch 1 | YOLO11s **3.66 ms**, MiDaS-small **2.58 ms**, YOLOP **6.70 ms** (FP16) | PyTorch FP32 9.93 / 10.95 / 22.78 ms, i.e. 2.72x / 4.25x / 3.40x faster | Kaggle T4, 1000 timed iterations | [218me22j](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/218me22j) |
 | TensorRT accuracy cost | TRT FP16 vs PyTorch FP32 | YOLO mAP@0.5 −0.0001; MiDaS output AbsRel 0.0096; YOLOP lane-mask IoU 0.9928 | – | 500 BDD val images (YOLO), 100 frames (MiDaS, YOLOP) | [218me22j](https://wandb.ai/anish-grd2004-vellore-institute-of-technology/aiml04-perception/runs/218me22j) |
-| Live loop (laptop) | Mean perception stage time with CARLA on the same GPU | **35.0–44.0 ms** per 100-frame window across the four Session B runs; 4.9 sim steps/s closed-loop rate (2026-11-18 run, synchronous mode) | Offline TensorRT on 100 recorded CARLA frames without CARLA: 66.8 FPS stage time, 33.8 FPS wall | RTX 3060 Laptop 6 GB, TensorRT FP16 engines | – (local run; [benchmarks.md](docs/benchmarks.md)) |
-| Closed loop | 4 scripted scenarios | **4 of 4 stopped, no collision**; AEB needed only for the pedestrian | See the table below | CARLA Town01, Session B, 2026-11-19 | – (local runs; EXPERIMENTS.md "Closed loop in CARLA") |
+| Live loop (laptop) | Mean perception stage time with CARLA on the same GPU | **38.2–49.2 ms** per 100-frame window across the four Session C runs; 4.9 sim steps/s closed-loop rate (2026-11-18 run, synchronous mode) | Offline TensorRT on 100 recorded CARLA frames without CARLA: 66.8 FPS stage time, 33.8 FPS wall | RTX 3060 Laptop 6 GB, TensorRT FP16 engines | – (local run; [benchmarks.md](docs/benchmarks.md)) |
+| Closed loop | 4 scripted scenarios | **4 of 4 stopped, no collision**; AEB needed only for the pedestrian | See the table below | CARLA Town01, Session C, 2026-11-19 | – (local runs; EXPERIMENTS.md "Closed loop in CARLA") |
 
-**Closed loop in CARLA (Session B, 2026-11-19).** Mix detector as a TensorRT FP16 engine, identity
-distance calibration, hysteresis control, minimum gap 10 m. One run per scenario.
+**Closed loop in CARLA (Session C, 2026-11-19, final runs).** Mix detector as a TensorRT FP16
+engine, identity distance calibration, hysteresis control, minimum gap 10 m, follow range 30 m,
+creep to the gap at low speed, 3 s post-stop tail. One run per scenario; an earlier configuration
+(Session B, same day) also stopped in all four without a collision (EXPERIMENTS.md).
 
 | Scenario | Weather | Outcome | Min gap (m) | AEB? | Mean pipeline time (ms, per 100-frame window) |
 |---|---|---|---|---|---|
-| `stopped_car` (stopped Audi A2 at 60 m) | ClearNoon | Stopped, no collision; ACC and GAP slow-downs only | 10.1 | No | 44.0 / 38.5 / 38.7 |
-| `pedestrian_crossing` (walker crosses from a 4 m kerb offset) | ClearNoon | AEB at TTC 1.5 s from 8.1 m/s, then HOLD, no collision | 9.6 | Yes | 40.1 |
-| `cut_in` (car cuts in at 18 m, then brakes at 3 m/s²) | ClearNoon | ACC → AUTOPILOT → GAP, no collision | 10.2 | No | 40.3 / 38.1 |
-| `night_rain` (stopped Audi A2 at 60 m) | HardRainNight | ACC stop, no collision. The lead read ~13 % long at night (17.6 m shown vs 15.5 m true); the expected roll-up to the 10 m gap was cut off by the scenario's 2 s stop detection | 15.5 | No | 35.0 |
+| `stopped_car` (stopped Audi A2 at 60 m) | ClearNoon | AUTOPILOT → ACC → AUTOPILOT → ACC to standstill, soft hold, 0.0 m/s in the tail, no collision | 11.8 | No | 40.5–49.2 |
+| `pedestrian_crossing` (walker crosses from a 4 m kerb offset) | ClearNoon | AEB at TTC 1.49 s from 8.1 m/s, then HOLD, no collision; after the walker cleared, AUTOPILOT pulled away and GAP slowed for the next object (final gap 8.5 m) | 9.6 | Yes | 46.7 / 39.4 |
+| `cut_in` (car cuts in at 18 m, then brakes at 3 m/s²) | ClearNoon | ACC → AUTOPILOT → GAP to standstill, 0.0 m/s in the tail, no collision | 10.0 | No | 44.4 / 38.2 |
+| `night_rain` (stopped Audi A2 at 60 m) | HardRainNight | AUTOPILOT → ACC → AUTOPILOT (lead lost in rain at 0.5 m/s) → GAP → ACC to standstill, no collision. The lead read ~20 % long at night (13.6 m shown vs 11.3 m true) | 11.3 | No | 43.0 / 43.1 / 41.6 |
 
 How to read these numbers:
 - The zero-shot baseline is scored on the 7 classes COCO shares with BDD; compare it with the
@@ -75,8 +78,8 @@ How to read these numbers:
   closed-loop rate (4.9 sim steps/s). The one-frame overlay readings in `docs/benchmarks.md` are
   not averages and are not quoted here. p95 latency in the live loop is not logged yet (**TBD**,
   owner `sim-ros-integrator`).
-- Each closed-loop scenario was run once (Session B). The demo recordings will be re-made in a
-  final session (PLAN.md M5.8).
+- Each closed-loop scenario was run once with the final configuration (Session C); these runs
+  are the demo recordings (PLAN.md M5.8).
 
 Full tables, per-class AP, per-condition lane results, distance bins and caveats are in
 [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), [docs/benchmarks.md](docs/benchmarks.md),
@@ -304,9 +307,10 @@ owner: main session).
 
 ## Limitations
 
-- **Closed loop is tested once per scenario, in one town.** All four Session B runs stopped
-  without a collision (Town01). At night in heavy rain the lead read ~13 % long (17.6 m shown vs
-  15.5 m true). No other towns or repeated runs.
+- **Closed loop is tested once per scenario, in one town.** All four Session C runs (final
+  configuration) stopped without a collision in Town01. At night in heavy rain the lead read
+  ~20 % long (13.6 m shown vs 11.3 m true) and was briefly lost in the rain. No other towns or
+  repeated runs of the final configuration.
 - **Sim-to-real gap.** With the BDD model on CARLA frames, motorcycle AP50 is 0.104 (BDD 0.383)
   and car AP50 drops to 0.52 at night and 0.41 in heavy rain (BDD night costs only ~0.03 mAP@0.5).
   The BDD + CARLA mix fine-tune closes most of this on held-out Town01 blocks (car AP50 heavy rain
@@ -329,7 +333,7 @@ owner: main session).
 
 ## Next steps
 
-- Re-record the four scenarios in a final session (M5.8) and edit the demo video (M7.4).
+- Upload the demo video (M7.4) and link it above.
 - Test the mix detector on a second town and repeat each scenario several times.
 - Tighten the ego corridor beyond ~24 m and log p95 latency in the live loop.
 - Stretch goals not done: DeepSORT comparison (M2.7), YOLO-seg lane model (M3.5), INT8 (M6.6),
