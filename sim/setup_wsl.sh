@@ -23,15 +23,29 @@ if ! dpkg -s ros2-apt-source >/dev/null 2>&1; then
 fi
 
 apt-get update -q
-apt-get install -y -q ros-humble-ros-base ros-humble-cv-bridge \
+apt-get install -y -q ros-humble-ros-base ros-humble-cv-bridge ros-humble-rmw-cyclonedds-cpp \
   python3-colcon-common-extensions python3-pip python3-numpy
 
 grep -q "/opt/ros/humble/setup.bash" ~/.bashrc || echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+# With .wslconfig networkingMode=mirrored, `lo` is not multicast-capable and the default Fast DDS
+# never discovers peers (nodes run but no message arrives; checked 2026-11-18). Cyclone DDS on
+# loopback works. stack.launch.py sets the same defaults for its nodes.
+grep -q "RMW_IMPLEMENTATION" ~/.bashrc || cat >> ~/.bashrc <<'EOF'
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export ROS_LOCALHOST_ONLY=1
+EOF
 
 # CARLA client + light Python deps. numpy stays at Ubuntu's 1.x because cv_bridge is built
 # against it; opencv is pinned to a release that still supports numpy 1.x.
 python3 -m pip install -q --upgrade pip
 python3 -m pip install -q "carla==0.9.15" "numpy<2" "opencv-python-headless<4.11" pyyaml
+
+# Live perception runtime for perception_node (M5.3): ONNX Runtime + ByteTrack (supervision).
+# No PyTorch. Skip with WITH_RUNTIME=0 (e.g. for the M0.8 smoke test only). TensorRT (M6.4)
+# is installed separately by deploy/ instructions.
+if [ "${WITH_RUNTIME:-1}" = "1" ]; then
+  python3 -m pip install -q "numpy<2" "onnxruntime-gpu>=1.19,<1.23" "supervision>=0.22,<0.27"
+fi
 
 set +u  # ROS setup scripts read unset variables
 source /opt/ros/humble/setup.bash

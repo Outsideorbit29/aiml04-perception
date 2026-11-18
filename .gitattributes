@@ -1,2 +1,7 @@
+# Files executed or parsed inside WSL2 (bash, ROS2 rosidl/colcon) must keep LF line endings even
+# on a Windows checkout with core.autocrlf=true.
 *.sh text eol=lf
+*.msg text eol=lf
+ros2_ws/** text=auto eol=lf
+sim/** text=auto eol=lf
 *.py text eol=lf

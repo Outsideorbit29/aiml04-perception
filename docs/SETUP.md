@@ -44,27 +44,48 @@ current quota). Training saves a checkpoint every epoch and resumes from the las
    ```powershell
    D:\CARLA_0.9.15\CarlaUE4.exe -quality-level=Low -RenderOffScreen -fps=20
    ```
-2. **Firewall.** Allow inbound TCP 2000–2002 for `CarlaUE4-Win64-Shipping.exe` on the WSL virtual network.
-3. **WSL2 + ROS2 Humble (ros-base, no GUI tools).**
-   ```powershell
-   wsl --install -d Ubuntu-22.04
-   ```
-   Inside Ubuntu:
-   ```bash
-   # follow docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html for the apt source, then:
-   sudo apt update && sudo apt install -y ros-humble-ros-base python3-colcon-common-extensions ros-humble-cv-bridge
-   echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
-   pip3 install carla==0.9.15 onnxruntime-gpu tensorrt opencv-python-headless numpy
-   export CARLA_HOST=$(ip route | awk '/default/ {print $3}')
-   python3 sim/smoke_test.py --host $CARLA_HOST
-   ```
-   Live inference uses ONNX Runtime or TensorRT only, with no PyTorch on the laptop.
-4. **Limit WSL resources.** Create `C:\Users\<you>\.wslconfig`:
+2. **WSL2 resources and networking.** Create `C:\Users\<you>\.wslconfig`, then run `wsl --shutdown` once:
    ```ini
    [wsl2]
    memory=6GB
    processors=4
+   swap=4GB
+   networkingMode=mirrored
    ```
+   With mirrored networking WSL2 shares the Windows network stack, so the CARLA server is at
+   `localhost:2000` from inside Ubuntu (the default `carla.host` in `configs/carla.yaml`). No
+   firewall rule and no host-IP lookup are needed.
+3. **WSL2 + ROS2 Humble (ros-base, no GUI tools) + CARLA client.** One script installs ROS2
+   Humble `ros-base`, `cv_bridge`, Cyclone DDS, colcon, the `carla==0.9.15` client, OpenCV/numpy 1.x, and the
+   live runtime (`onnxruntime-gpu`, `supervision` for ByteTrack; skip it with `WITH_RUNTIME=0`).
+   No PyTorch. Safe to re-run.
+   ```powershell
+   # Windows (PowerShell)
+   wsl --install -d Ubuntu-22.04
+   wsl -d Ubuntu-22.04 -u root -- bash /mnt/d/Project_ai/sim/setup_wsl.sh
+   ```
+4. **Smoke test (M0.8).** Start CARLA on Windows (step 1), then in WSL2:
+   ```bash
+   # WSL2 Ubuntu 22.04
+   cd /mnt/d/Project_ai
+   python3 sim/smoke_test.py --town Town01 --out runs/smoke/frame.png   # prints SMOKE_OK
+   ```
+   It switches the world to synchronous mode, spawns the ego and an 800x450 camera, saves one
+   frame, then destroys the actors and restores the settings (also on errors and Ctrl+C).
+5. **Build the ROS2 packages (M5).** The build lives in `~/aiml04_ws` (Linux disk) with symlinks
+   back to `ros2_ws/src`, so nothing is written into the repo and Python edits need no rebuild:
+   ```bash
+   # WSL2 Ubuntu 22.04
+   bash /mnt/d/Project_ai/ros2_ws/build_wsl.sh
+   source /opt/ros/humble/setup.bash && source ~/aiml04_ws/install/setup.bash
+   export AIML04_REPO_ROOT=/mnt/d/Project_ai RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ROS_LOCALHOST_ONLY=1
+   ros2 launch perception_ros stack.launch.py carla_host:=localhost town:=Town01 load_town:=true \
+       scenario:=stopped_car          # stopped_car | pedestrian_crossing | cut_in | night_rain
+   ```
+   Live inference uses ONNX Runtime (TensorRT after M6.4) with the M6 ONNX files in `models/`
+   (`yolo11s-bdd.onnx`, `midas_small.onnx`, `yolop-640-640.onnx`; paths in
+   `configs/pipeline_carla.yaml`). Scenario results are appended to
+   `runs/scenarios/results.jsonl`, videos go to `media/`.
 
 ## 5. Keeping the laptop cool during CARLA sessions
 - Plug in, keep the vents clear, and use the vendor app's balanced or quiet mode.
@@ -73,7 +94,10 @@ current quota). Training saves a checkpoint every epoch and resumes from the las
 - Watch temperatures with `nvidia-smi -l 5`. If the GPU stays above about 87 °C, stop and let it cool.
 
 ## 6. Known pitfalls
-- WSL2 to Windows networking: if the CARLA client times out, check the firewall and use the host IP, not `localhost`.
+- WSL2 to Windows networking: with `networkingMode=mirrored` use `localhost`. Without mirrored mode (NAT), use the host IP from `ip route | awk '/default/ {print $3}'` and allow inbound TCP 2000–2002 for `CarlaUE4-Win64-Shipping.exe` in the Windows firewall.
+- ROS2 nodes that run but never receive messages: with mirrored networking `lo` is not multicast-capable and the default Fast DDS finds no peers. Use Cyclone DDS on loopback: `export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ROS_LOCALHOST_ONLY=1` (`sim/setup_wsl.sh` installs it and adds both lines to `~/.bashrc`; `stack.launch.py` sets them for its nodes). Use the same settings in any shell where you run `ros2 topic echo`.
+- Git on Windows converts line endings; `.gitattributes` keeps `*.sh`, `*.msg`, `sim/` and `ros2_ws/` at LF so the scripts run in bash.
+- If a run is killed hard (WSL closed), CARLA can stay in synchronous mode and look frozen: restart `CarlaUE4.exe`. A normal shutdown (Ctrl+C) destroys the actors and restores asynchronous mode.
 - The CARLA 0.9.15 Python API supports Python 3.7–3.10 only (Ubuntu 22.04 ships 3.10).
 - TensorRT engines built on Kaggle's T4 will **not** run on the RTX 3060. Rebuild locally from the ONNX files (M6.4).
 - Kaggle sessions stop after idle time or the time limit. Always resume from the latest W&B checkpoint artifact.
