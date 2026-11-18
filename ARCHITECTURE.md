@@ -164,19 +164,27 @@ throttle/brake longitudinally:
 - if the lead has TTC < 2.0 s or distance < 8 m: full brake (AEB) at once, then the brake stays
   latched (HOLD) while the lead is within 12 m and for 1 s after it is lost,
 - if TTC is below 4.0 s: ACC, a proportional slow-down; closing inside the time gap
-  (6 m + 1.5 s × speed): GAP, a brake proportional to the gap deficit. GAP escalates to ACC; ACC
-  never steps down to GAP,
+  (10 m + 1.5 s × speed; 10 m > the 8 m AEB distance, so ACC/GAP normally stop the car and AEB is
+  the backup): GAP, a brake proportional to the gap deficit. GAP escalates to ACC; ACC never steps
+  down to GAP,
 - ACC/GAP have hysteresis and dwell: they return to autopilot only after TTC ≥ 5.0 s (or no TTC)
   and the gap ≥ desired gap + 3 m (or the lead pulling away) have held for 0.5 s and the mode has
   lasted 1 s. Between TTC 4.0 and 5.0 s ACC coasts (no throttle). A lead dropout keeps the mode
-  for 0.5 s. At standstill (< 0.5 m/s) with the lead within 15 m, ACC/GAP keep at least brake 0.3
-  and do not release (soft hold, no creep-and-rebrake). The ACC/GAP brake is rate-limited
-  (+2.0/s, −1.0/s); AEB and HOLD are not,
+  for 0.5 s. The ACC/GAP brake is rate-limited (+2.0/s, −1.0/s); AEB and HOLD are not,
+- stop-and-go: a lead within 30 m that is stationary or closing keeps ACC/GAP engaged (no
+  hand-back to the autopilot's cruise throttle). When ACC/GAP request no brake, the ego is slower
+  than 2 m/s and the lead is at least 1 m beyond the desired gap, the controller creeps with
+  throttle 0.3 × (1 − v / 2 m/s), so the car closes up to the gap at walking pace and never speeds
+  up past 2 m/s. At standstill (< 0.5 m/s) with the lead within 13 m (10 m gap + 3 m) ACC/GAP
+  keep at least brake 0.3, never throttle and do not release (soft hold); beyond 13 m a stopped car
+  creeps closer instead,
 - otherwise: autopilot throttle.
 
 Thresholds are in `control` of `configs/carla.yaml`; the logic is `perception/control.py`.
 
 Demo scenarios (scripted in `sim/scenarios/`): a stopped car ahead, a pedestrian crossing, cut-in, night/rain.
+An episode counts as stopped after 2 s below 0.2 m/s and then runs a 3 s tail
+(`scenario.post_stop_s`) so the video shows the settled car; a collision in the tail still fails it.
 
 ### 3.8 Optimization (`deploy/`)
 - `export.py` (runs on Kaggle) converts PyTorch to ONNX (opset 17, dynamic batch off, 640×640) and then to a TensorRT engine (FP16; INT8 with calibration on 500 BDD images as a stretch goal). It covers YOLO, MiDaS and the lane model.

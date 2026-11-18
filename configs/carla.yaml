@@ -103,8 +103,16 @@ control:                       # control_node -> perception.control.Longitudinal
   exit_confirm_frames: 10      # exit conditions must hold this many consecutive frames (0.5 s)
   lead_lost_exit_frames: 10    # in ACC/GAP a lead dropout keeps mode + last brake this long
   standstill_speed_mps: 0.5    # soft HOLD: below this speed ...
-  standstill_hold_distance_m: 15.0  # ... with the lead closer than this, ACC/GAP do not release
+  standstill_hold_distance_m: 13.0  # ... with the lead closer than this (= gap_min_m +
+                               # gap_exit_margin_m), ACC/GAP do not release and do not creep
   standstill_brake: 0.3        # ... and brake at least this (no creep-and-rebrake)
+  # Stop-and-go (2026-11-19 Session B: ACC exited to AUTOPILOT with a stationary lead 13-18 m
+  # ahead, then re-engaged or would have rolled up at cruise throttle).
+  follow_range_m: 30.0         # a stationary/closing lead within this keeps ACC/GAP engaged
+                               # (> desired gap at cruise 10 + 8.3 * 1.5 = 22.5 m + margin)
+  approach_speed_mps: 2.0      # engaged and slower than this, lead beyond the gap: creep ...
+  approach_throttle: 0.3       # ... with throttle approach_throttle * (1 - v / approach_speed)
+  approach_margin_m: 1.0       # ... only while d >= desired gap + this (no creep into the gap)
   brake_rate_up: 0.1           # max ACC/GAP brake increase per frame (2.0/s); AEB is immediate
   brake_rate_down: 0.05        # max ACC/GAP brake decrease per frame (1.0/s)
 

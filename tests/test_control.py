@@ -160,8 +160,17 @@ NO_HYSTERESIS = {
     "exit_confirm_frames": 1,
     "lead_lost_exit_frames": 0,
     "standstill_speed_mps": 0.0,
+    "follow_range_m": 0.0,
+    "approach_speed_mps": 0.0,
     "brake_rate_up": 1.0,
     "brake_rate_down": 1.0,
+}
+# The controller as it ran in Session B (2026-11-19): no lead tracking, no approach creep.
+SESSION_B = {
+    **CFG,
+    "follow_range_m": 0.0,
+    "approach_speed_mps": 0.0,
+    "standstill_hold_distance_m": 15.0,
 }
 
 
@@ -251,7 +260,8 @@ def test_acc_exit_needs_clear_frames_and_min_dwell():
 
 
 def test_gap_exit_needs_margin():
-    ctrl = LongitudinalController(CFG)
+    # margin rule in isolation: a lead beyond follow_range_m is not tracked (rule 7)
+    ctrl = LongitudinalController({**CFG, "follow_range_m": 0.0})
     gap = float(CFG["gap_min_m"]) + 8.0 * float(CFG["gap_time_s"])
     assert run(ctrl, [cand(d=gap - 1.0, closing=0.5)], N).mode == "GAP"
     inside = cand(d=gap + float(CFG["gap_exit_margin_m"]) - 0.5, closing=0.0)
@@ -294,26 +304,47 @@ def test_hysteresis_config_validation():
         LongitudinalController({k: v for k, v in CFG.items() if k != "min_engaged_frames"})
 
 
-def _stopped_car_approach(cfg: dict, seed: int) -> tuple[list[str], float, bool]:
-    """Crude point-mass loop: autopilot accelerates to 8.3 m/s, brake 1.0 ~ 9 m/s^2, noisy
-    distance/closing speed, 5 % lead dropouts, TTC only when closing > 0.6 m/s."""
+def _stopped_car_approach(
+    cfg: dict,
+    seed: int,
+    lag_s: float = 0.0,
+    brake_gain: float = 9.0,
+    bias: float = 1.0,
+    lead_x: float = 60.0,
+    v0: float = 0.0,
+    seconds: float = 40.0,
+    log: list | None = None,
+    ctrl: LongitudinalController | None = None,
+) -> tuple[list[str], float, bool]:
+    """Crude point-mass loop: autopilot accelerates to 8.3 m/s, brake 1.0 ~ ``brake_gain``
+    m/s^2, throttle 1.0 ~ 6 m/s^2, noisy distance (x ``bias``) and closing speed, 5 % lead
+    dropouts, TTC only when closing > 0.6 m/s. ``lag_s`` low-pass filters the measured closing
+    speed (the Kalman velocity lags when the ego brakes, so ACC over-brakes, as in Session B).
+    ``log`` collects (mode, v, true gap, throttle, brake) per frame."""
     import random
 
     rng = random.Random(seed)
-    ctrl = LongitudinalController(cfg)
-    x, v, dt, lead_x, modes = 0.0, 0.0, 0.05, 60.0, []
-    for _ in range(int(40 / dt)):
+    ctrl = ctrl or LongitudinalController(cfg)
+    x, v, dt, modes = 0.0, v0, 0.05, []
+    v_meas = v
+    for _ in range(int(seconds / dt)):
         gap = lead_x - x
         if gap <= 0:
             return modes, gap, True
         objs = []
         if rng.random() > 0.05:
-            dm = gap * (1 + rng.gauss(0, 0.04))
-            closing = v + rng.gauss(0, 0.3)
+            dm = gap * bias * (1 + rng.gauss(0, 0.04))
+            v_meas += (v - v_meas) * (min(1.0, dt / lag_s) if lag_s > 0 else 1.0)
+            closing = v_meas + rng.gauss(0, 0.3)
             objs = [cand(d=dm, ttc=dm / closing if closing > 0.6 else None, closing=closing)]
         dec = ctrl.update(objs, v)
         modes.append(dec.mode)
-        a = -(dec.brake * 9.0 + 0.3) if dec.override else (2.0 if v < 8.3 else 0.0)
+        if log is not None:
+            log.append((dec.mode, v, gap, dec.throttle, dec.brake))
+        if dec.override:
+            a = dec.throttle * 6.0 - dec.brake * brake_gain - 0.3
+        else:
+            a = 2.0 if v < 8.3 else 0.0
         v = max(0.0, v + a * dt)
         x += v * dt
     return modes, lead_x - x, False
@@ -339,3 +370,113 @@ def test_closed_loop_aeb_backup_with_small_gap():
     # With the old 6 m gap target (inside the 8 m AEB distance) the approach still ends in AEB.
     modes, stop_gap, collided = _stopped_car_approach({**CFG, "gap_min_m": 6.0}, 0)
     assert not collided and stop_gap > 0.0 and "AEB" in modes
+
+
+# --- stop-and-go: lead tracking, approach creep, standstill (pre-demo fixes) -----------------
+
+V_APP = float(CFG["approach_speed_mps"])
+HOLD_D = float(CFG["standstill_hold_distance_m"])
+
+
+def _engaged(cfg: dict) -> LongitudinalController:
+    ctrl = LongitudinalController(cfg)
+    run(ctrl, [cand(d=25.0, ttc=3.5, closing=7.0)], N + 25)
+    assert ctrl.mode == "ACC"
+    return ctrl
+
+
+def _slowing_behind_stationary_lead():
+    """Session B stopped_car / cut_in: ACC engaged at ~30 m, the ego brakes to a crawl while the
+    stationary lead is still ~16 m away; TTC disappears (closing < 0.6 m/s) and the gap is
+    beyond desired gap + margin, so the old exit rule handed back to the autopilot."""
+    frames = [([cand(d=30.0, ttc=3.8, closing=8.0)], 8.0)] * N
+    d = 30.0
+    for i in range(60):
+        v = 8.0 - 7.8 * i / 59
+        d -= v * 0.05 * 0.6  # not exact kinematics; the distance only has to shrink
+        frames.append(([cand(d=d, ttc=d / v if v > 0.6 else None, closing=v)], v))
+    frames += [([cand(d=d, ttc=None, closing=0.2)], 0.2)] * 60
+    return frames
+
+
+def test_session_b_early_acc_exit_is_reproduced_and_fixed():
+    old = LongitudinalController(SESSION_B)
+    assert "AUTOPILOT" in [old.update(o, v).mode for o, v in _slowing_behind_stationary_lead()]
+    ctrl = LongitudinalController(CFG)
+    out = [ctrl.update(o, v) for o, v in _slowing_behind_stationary_lead()]
+    modes = [o.mode for o in out]
+    first = modes.index("ACC")
+    assert set(modes[first:]) == {"ACC"}  # engaged once, no ACC -> AUTOPILOT -> ACC
+    # slow and far from the lead: a gentle approach, never cruise throttle
+    assert all(o.override and o.throttle <= float(CFG["approach_throttle"]) for o in out[first:])
+    assert out[-1].throttle > 0.0 and out[-1].brake == 0.0 and "approach" in out[-1].reason
+
+
+def test_tracked_lead_releases_when_far_or_opening():
+    far = cand(d=float(CFG["follow_range_m"]) + 5.0, ttc=None, closing=0.0)
+    out = run(_engaged(CFG), [far], int(CFG["exit_confirm_frames"]), speed=6.0)
+    assert out.mode == "AUTOPILOT"
+    opening = cand(d=25.0, ttc=None, closing=-1.0)
+    out = run(_engaged(CFG), [opening], int(CFG["exit_confirm_frames"]), speed=6.0)
+    assert out.mode == "AUTOPILOT"
+
+
+@pytest.mark.parametrize("seed", range(5))
+@pytest.mark.parametrize("bias", [1.0, 1.13])  # 1.13: night_rain reads the lead ~13 % long
+def test_closed_loop_lagging_closing_speed_approaches_monotonically(seed, bias):
+    kw = dict(lag_s=1.5, brake_gain=12.0, bias=bias)
+    old, _, _ = _stopped_car_approach(SESSION_B, seed, **kw)
+    first = next(i for i, m in enumerate(old) if m != "AUTOPILOT")
+    assert "AUTOPILOT" in old[first:]  # reproduces the Session B early exit
+    log: list = []
+    modes, stop_gap, collided = _stopped_car_approach(CFG, seed, log=log, **kw)
+    assert not collided
+    first = next(i for i, m in enumerate(modes) if m != "AUTOPILOT")
+    assert set(modes[first:]) <= {"ACC", "GAP"}  # one engagement, no AEB needed
+    assert transitions(modes[first:]) <= 1  # at most GAP -> ACC
+    # once the ego is below the approach speed it never speeds up past it (no lurch)
+    slow = next(i for i in range(first, len(log)) if log[i][1] < V_APP)
+    assert max(r[1] for r in log[slow:]) <= V_APP + 1e-6
+    # it closes up to the gap and stops between the AEB distance and the hold distance
+    assert log[-1][1] == 0.0 and log[-1][3] == 0.0
+    assert float(CFG["aeb_distance_m"]) <= stop_gap * bias <= HOLD_D
+
+
+def test_standstill_inside_hold_distance_never_throttles():
+    ctrl = _engaged(CFG)
+    gap_min = float(CFG["gap_min_m"])
+    for i in range(200):
+        d = gap_min + (HOLD_D - gap_min) * (i % 20) / 20  # anywhere in [gap_min, hold distance)
+        out = ctrl.update([cand(d=d, ttc=None, closing=0.0)], 0.0)
+        assert out.mode == "ACC" and out.throttle == 0.0
+    assert out.brake >= float(CFG["standstill_brake"])
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_night_rain_standstill_beyond_hold_distance_creeps_up_to_the_gap(seed):
+    """Session B night_rain: ACC stopped the car with the lead read at 17.6 m (15.5 m true);
+    the old rule released to AUTOPILOT, i.e. cruise throttle towards a stationary car."""
+    stopped = [cand(d=17.6, ttc=None, closing=0.0)]
+    assert run(_engaged(SESSION_B), stopped, 30, speed=0.0).mode == "AUTOPILOT"
+    ctrl = _engaged(CFG)
+    out = [ctrl.update(stopped, 0.0) for _ in range(40)]
+    assert all(o.mode == "ACC" and o.override for o in out)
+    assert 0.0 < out[-1].throttle <= float(CFG["approach_throttle"]) and out[-1].brake == 0.0
+    # closed loop from standstill 15.5 m behind the stationary car (read 13 % long)
+    log: list = []
+    modes, stop_gap, collided = _stopped_car_approach(
+        CFG, seed, bias=1.13, lead_x=15.5, v0=0.0, seconds=20.0, log=log, ctrl=_engaged(CFG)
+    )
+    assert not collided and set(modes) <= {"ACC", "GAP"}
+    assert max(r[1] for r in log) <= V_APP + 1e-6  # creep, never cruise
+    assert log[-1][1] == 0.0 and stop_gap < 15.5  # it did close up ...
+    assert stop_gap * 1.13 >= float(CFG["aeb_distance_m"])  # ... and stopped before AEB range
+
+
+def test_approach_config_validation():
+    with pytest.raises(ValueError):
+        LongitudinalController({**CFG, "standstill_hold_distance_m": float(CFG["gap_min_m"]) - 1})
+    with pytest.raises(ValueError):
+        LongitudinalController({**CFG, "approach_throttle": 1.5})
+    with pytest.raises(KeyError):
+        LongitudinalController({k: v for k, v in CFG.items() if k != "follow_range_m"})
