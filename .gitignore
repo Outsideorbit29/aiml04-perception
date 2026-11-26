@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+kaggle.json
+.pytest_cache/
+.ruff_cache/
+
+# data and models stay off git
+data/
+mlruns/
+mlartifacts/
+models/
+*.pkl
+*.pt
+*.ubj
+*.parquet
+media/
+feature_repo/data/
+.claude/worktrees/
+.codex/
