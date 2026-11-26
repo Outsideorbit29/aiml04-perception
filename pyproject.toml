@@ -1,0 +1,23 @@
+[project]
+name = "aiml01-fraud"
+version = "0.1.0"
+description = "Real-time financial fraud detection platform (Nexvia AIML-01)"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = ["fraud*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.black]
+line-length = 100

@@ -16,4 +16,11 @@ worktree at `D:\Project_ai_aiml01`; AIML-04 (`main`) is at `D:\Project_ai`. Dead
 - Never submit on the portal for the user.
 
 ## Progress snapshot
-_Last updated: 2026-11-26_ — F0.1 done (branch + docs). Next: F0.2 package skeleton and CI.
+_Last updated: 2026-11-26_ — F0.1, F0.2, F1.3 done. F1.1/F1.2 code ready (`scripts/prep_data.py`,
+`kaggle/data_prep/`, MODE=smoke). Blocked on: user accepting IEEE-CIS competition rules and
+approving the push of branch `AIML-01`. Next: smoke job, then full, then F2 features.
+
+Useful facts:
+- Local tests: `py -3.14 -m pytest -q` works (pandas, pytest, yaml installed) except the parquet
+  end-to-end test (no pyarrow on the laptop); CI runs everything.
+- Kaggle runner clones `--branch AIML-01`, so the branch must be pushed before `kaggle kernels push`.

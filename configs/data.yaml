@@ -1,0 +1,25 @@
+# F1 data preparation for IEEE-CIS Fraud Detection.
+# data_dir: folder with train_transaction.csv and train_identity.csv. "auto" searches /kaggle/input.
+data_dir: auto
+out_dir: /kaggle/working/f1_data
+
+# TransactionDT is seconds from an unpublished reference time; 2017-12-01 is the
+# commonly used anchor. It only affects calendar features (hour, weekday), not the split order.
+start_date: "2017-12-01"
+
+# Time-ordered split of the labelled train set (the competition test set has no labels).
+split:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+
+target: isFraud
+id_column: TransactionID
+time_column: TransactionDT
+
+# Smoke mode reads only the first rows of each file.
+smoke_rows: 50000
+
+eda:
+  top_n_categories: 15
+  amount_log_bins: 50

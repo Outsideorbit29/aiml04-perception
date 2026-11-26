@@ -1,0 +1,301 @@
+TransactionID,isFraud,TransactionDT,TransactionAmt,ProductCD,card1,card2,card4,card6,addr1,P_emaildomain,C1,D1
+2987000,0,162595,115.49,W,16228,111.0,american express,debit,,yahoo.com,4.0,0.0
+2987001,0,212687,157.57,S,6060,555.0,visa,debit,204.0,outlook.com,3.0,
+2987002,1,275302,235.79,S,17446,111.0,visa,debit,,gmail.com,1.0,0.0
+2987003,1,364647,806.46,C,17823,,american express,debit,325.0,,1.0,14.0
+2987004,0,459853,160.89,S,3725,111.0,american express,credit,,,0.0,
+2987005,0,512461,197.06,W,12216,,discover,credit,299.0,yahoo.com,1.0,14.0
+2987006,0,519331,31.82,W,13516,111.0,american express,credit,299.0,hotmail.com,2.0,
+2987007,0,615504,60.74,S,16817,555.0,american express,debit,204.0,gmail.com,4.0,
+2987008,0,711873,95.87,R,17888,111.0,american express,credit,204.0,anonymous.com,4.0,120.0
+2987009,0,718084,53.64,S,6153,111.0,american express,debit,325.0,,0.0,0.0
+2987010,0,753250,73.82,R,10922,555.0,american express,credit,325.0,hotmail.com,2.0,120.0
+2987011,1,1141645,167.21,C,8463,555.0,visa,credit,299.0,anonymous.com,3.0,
+2987012,0,1216382,127.01,C,10235,,american express,credit,299.0,,1.0,120.0
+2987013,1,1232837,98.65,S,10872,555.0,mastercard,credit,299.0,gmail.com,0.0,120.0
+2987014,0,1374238,38.48,W,11977,111.0,discover,debit,204.0,hotmail.com,3.0,
+2987015,0,1424065,23.85,W,7172,555.0,mastercard,credit,299.0,outlook.com,1.0,
+2987016,0,1434467,22.38,H,5565,,american express,credit,,anonymous.com,0.0,120.0
+2987017,0,1438475,176.35,S,8943,111.0,mastercard,debit,299.0,yahoo.com,1.0,0.0
+2987018,0,1560366,50.17,C,17370,111.0,american express,credit,204.0,anonymous.com,2.0,
+2987019,0,1577299,119.93,H,11427,555.0,discover,debit,204.0,,0.0,
+2987020,1,1685484,29.84,H,14419,555.0,mastercard,debit,299.0,,2.0,
+2987021,0,1757885,7.86,W,1492,111.0,visa,credit,325.0,,3.0,0.0
+2987022,0,1794443,19.12,H,2728,321.0,discover,credit,325.0,gmail.com,2.0,120.0
+2987023,0,1822504,171.85,C,6912,,visa,credit,299.0,anonymous.com,2.0,120.0
+2987024,0,1903978,158.87,R,1091,,mastercard,debit,204.0,,3.0,
+2987025,0,1928528,76.1,R,1003,555.0,mastercard,credit,204.0,,0.0,14.0
+2987026,0,1963133,24.48,W,11210,555.0,mastercard,debit,325.0,anonymous.com,0.0,120.0
+2987027,0,1967150,47.9,C,9396,555.0,american express,debit,,hotmail.com,4.0,0.0
+2987028,0,2067078,40.54,H,9121,,mastercard,debit,325.0,gmail.com,1.0,14.0
+2987029,0,2180684,38.67,H,11579,,mastercard,credit,,yahoo.com,0.0,
+2987030,0,2189397,4.45,W,15303,321.0,mastercard,debit,204.0,outlook.com,2.0,120.0
+2987031,0,2209923,23.15,R,2618,555.0,american express,debit,325.0,outlook.com,2.0,14.0
+2987032,0,2283120,45.15,W,14164,555.0,mastercard,debit,325.0,yahoo.com,2.0,14.0
+2987033,0,2348669,248.74,C,5212,321.0,american express,credit,325.0,anonymous.com,0.0,14.0
+2987034,0,2450426,64.12,S,13179,111.0,discover,credit,299.0,outlook.com,2.0,0.0
+2987035,0,2513290,221.6,H,14989,321.0,mastercard,credit,,gmail.com,2.0,14.0
+2987036,0,2514619,36.83,S,18154,555.0,american express,credit,204.0,yahoo.com,4.0,120.0
+2987037,0,2550944,42.41,W,15620,111.0,discover,debit,,hotmail.com,2.0,
+2987038,0,2614684,1.11,W,12533,321.0,mastercard,debit,,,4.0,0.0
+2987039,0,2627100,86.78,W,7746,,mastercard,credit,299.0,gmail.com,4.0,
+2987040,0,2694974,94.36,C,6249,555.0,mastercard,credit,325.0,gmail.com,1.0,14.0
+2987041,0,2731460,318.54,W,15167,555.0,american express,debit,,yahoo.com,3.0,0.0
+2987042,0,2746125,33.56,R,4100,111.0,american express,debit,299.0,,1.0,
+2987043,0,2753378,59.99,C,5822,321.0,american express,debit,299.0,hotmail.com,1.0,0.0
+2987044,0,2778663,26.96,H,5751,,visa,debit,299.0,yahoo.com,2.0,
+2987045,0,2798315,16.84,W,13286,,visa,debit,,hotmail.com,0.0,14.0
+2987046,0,2805249,26.76,R,18293,,mastercard,debit,325.0,anonymous.com,3.0,14.0
+2987047,0,2814372,38.67,S,10490,111.0,mastercard,credit,204.0,anonymous.com,0.0,14.0
+2987048,0,2854691,211.76,S,16427,111.0,visa,debit,299.0,yahoo.com,2.0,0.0
+2987049,0,2870060,54.72,C,8657,555.0,american express,credit,204.0,gmail.com,1.0,14.0
+2987050,0,2871182,24.77,W,16280,321.0,visa,debit,325.0,outlook.com,1.0,14.0
+2987051,0,3018494,62.92,C,12422,111.0,discover,credit,,,0.0,14.0
+2987052,0,3050884,67.87,S,14809,,discover,debit,,outlook.com,0.0,
+2987053,0,3058546,27.76,C,1232,111.0,discover,credit,325.0,yahoo.com,0.0,0.0
+2987054,0,3094573,171.27,W,16347,,american express,debit,325.0,gmail.com,2.0,0.0
+2987055,0,3103914,8.26,S,3826,111.0,mastercard,debit,204.0,gmail.com,3.0,0.0
+2987056,0,3126544,44.1,H,6980,111.0,mastercard,credit,204.0,outlook.com,0.0,
+2987057,0,3185887,106.17,C,6112,555.0,visa,debit,325.0,anonymous.com,1.0,14.0
+2987058,0,3223936,14.32,H,15630,555.0,mastercard,debit,,anonymous.com,4.0,
+2987059,0,3230518,78.36,R,12841,111.0,mastercard,credit,,outlook.com,1.0,
+2987060,0,3292658,198.92,W,3913,111.0,american express,credit,204.0,anonymous.com,0.0,120.0
+2987061,0,3440713,85.94,C,13288,555.0,visa,credit,325.0,yahoo.com,0.0,14.0
+2987062,0,3545995,10.07,R,5819,555.0,discover,credit,,gmail.com,4.0,
+2987063,0,3599667,26.36,S,12845,111.0,american express,credit,,,4.0,120.0
+2987064,0,3608934,187.22,R,10420,555.0,mastercard,debit,,anonymous.com,4.0,0.0
+2987065,0,3620275,73.58,C,14356,555.0,mastercard,credit,204.0,gmail.com,4.0,
+2987066,0,3650166,54.06,W,16655,111.0,american express,credit,,outlook.com,2.0,120.0
+2987067,0,3699308,84.88,W,2384,111.0,american express,credit,325.0,yahoo.com,0.0,120.0
+2987068,0,3802452,112.29,H,12363,,discover,credit,204.0,,0.0,0.0
+2987069,0,3918505,26.88,H,2842,555.0,american express,debit,,,3.0,
+2987070,0,4041453,40.84,H,17032,111.0,visa,debit,,gmail.com,4.0,0.0
+2987071,0,4070045,62.99,H,15883,,mastercard,credit,325.0,hotmail.com,2.0,0.0
+2987072,0,4103083,31.69,W,17463,,discover,credit,299.0,gmail.com,3.0,0.0
+2987073,0,4202938,47.78,C,7208,,mastercard,credit,,anonymous.com,4.0,
+2987074,0,4268294,199.91,R,11648,555.0,mastercard,credit,325.0,outlook.com,4.0,120.0
+2987075,0,4406677,20.74,C,10889,111.0,visa,debit,299.0,outlook.com,0.0,120.0
+2987076,0,4442241,374.9,H,2205,321.0,visa,credit,325.0,hotmail.com,1.0,0.0
+2987077,0,4449185,357.57,R,9760,555.0,discover,credit,325.0,hotmail.com,0.0,14.0
+2987078,0,4498798,9.84,S,10089,111.0,discover,credit,204.0,anonymous.com,1.0,0.0
+2987079,0,4530641,47.42,R,11903,111.0,visa,credit,,,4.0,
+2987080,0,4546229,76.91,C,5503,,discover,credit,325.0,gmail.com,3.0,
+2987081,0,4660408,25.51,S,2338,111.0,visa,credit,204.0,yahoo.com,1.0,0.0
+2987082,0,4670804,26.02,S,1420,555.0,american express,credit,204.0,gmail.com,4.0,0.0
+2987083,0,4680357,43.06,S,14394,,visa,credit,299.0,hotmail.com,2.0,120.0
+2987084,0,4685354,114.34,R,13371,555.0,american express,credit,204.0,gmail.com,3.0,14.0
+2987085,0,4734945,32.74,H,3147,321.0,visa,debit,299.0,yahoo.com,0.0,
+2987086,0,4754740,339.24,C,16777,555.0,mastercard,credit,299.0,hotmail.com,3.0,120.0
+2987087,0,4810772,72.96,W,12855,,discover,debit,204.0,yahoo.com,1.0,120.0
+2987088,0,4947887,49.28,S,4429,555.0,discover,debit,204.0,hotmail.com,2.0,0.0
+2987089,0,4962362,232.59,H,7997,,visa,credit,,anonymous.com,1.0,0.0
+2987090,0,5024136,102.13,R,17744,111.0,discover,credit,,outlook.com,4.0,
+2987091,0,5034173,78.99,H,9565,555.0,mastercard,credit,325.0,anonymous.com,3.0,
+2987092,1,5035676,78.41,W,1130,321.0,visa,debit,299.0,outlook.com,2.0,14.0
+2987093,0,5092146,334.95,W,12687,,visa,debit,,hotmail.com,2.0,14.0
+2987094,0,5108464,122.96,R,17770,555.0,american express,debit,,anonymous.com,0.0,
+2987095,0,5121125,44.55,C,7455,,discover,credit,325.0,gmail.com,4.0,120.0
+2987096,0,5141138,11.28,C,15704,321.0,mastercard,credit,325.0,,4.0,14.0
+2987097,0,5187180,79.28,C,1801,321.0,mastercard,credit,,hotmail.com,4.0,0.0
+2987098,0,5216939,17.4,C,2212,555.0,visa,credit,325.0,gmail.com,3.0,14.0
+2987099,0,5375067,9.82,R,17777,,discover,debit,,yahoo.com,3.0,0.0
+2987100,0,5401181,41.3,R,6771,,mastercard,debit,325.0,gmail.com,1.0,
+2987101,0,5419206,72.35,H,10094,,discover,credit,299.0,,1.0,0.0
+2987102,0,5531300,196.86,W,5490,,discover,debit,,anonymous.com,1.0,14.0
+2987103,0,5538228,72.42,W,13913,555.0,american express,credit,325.0,anonymous.com,1.0,0.0
+2987104,0,5572265,122.24,C,7595,321.0,american express,credit,325.0,hotmail.com,1.0,0.0
+2987105,0,5628581,16.02,R,10244,111.0,mastercard,credit,299.0,,2.0,
+2987106,0,5661992,53.38,S,17130,,discover,debit,299.0,hotmail.com,0.0,120.0
+2987107,0,5729006,61.82,S,15262,555.0,mastercard,credit,,outlook.com,1.0,14.0
+2987108,1,5770025,258.63,W,17952,111.0,visa,debit,325.0,outlook.com,2.0,120.0
+2987109,0,5893440,61.32,W,10824,321.0,discover,credit,,gmail.com,0.0,0.0
+2987110,0,5900576,122.01,S,1557,111.0,visa,debit,204.0,yahoo.com,4.0,14.0
+2987111,1,6031510,65.95,C,3135,,american express,debit,,hotmail.com,0.0,
+2987112,0,6171800,78.1,S,5948,,discover,debit,325.0,anonymous.com,4.0,120.0
+2987113,1,6177726,165.34,C,12169,,discover,credit,325.0,,1.0,14.0
+2987114,0,6216792,15.65,S,17025,,american express,credit,,,2.0,120.0
+2987115,0,6219778,65.07,R,4005,,american express,credit,204.0,anonymous.com,1.0,120.0
+2987116,0,6224149,39.63,W,2941,321.0,visa,debit,,yahoo.com,4.0,0.0
+2987117,0,6256685,8.13,S,15331,111.0,american express,credit,325.0,gmail.com,4.0,120.0
+2987118,0,6415368,142.37,W,11303,321.0,mastercard,credit,325.0,anonymous.com,2.0,0.0
+2987119,0,6433779,38.02,R,12850,111.0,mastercard,credit,325.0,outlook.com,3.0,
+2987120,0,6493762,23.28,C,6619,111.0,discover,debit,299.0,anonymous.com,1.0,0.0
+2987121,0,6524241,37.44,S,17352,555.0,visa,debit,204.0,outlook.com,4.0,120.0
+2987122,0,6531055,62.69,C,11834,555.0,discover,debit,325.0,,0.0,120.0
+2987123,0,6586764,246.63,R,11946,111.0,american express,credit,325.0,outlook.com,0.0,0.0
+2987124,0,6709316,46.25,W,15516,555.0,american express,credit,325.0,outlook.com,1.0,120.0
+2987125,0,6722767,87.57,R,4917,321.0,visa,debit,299.0,anonymous.com,0.0,120.0
+2987126,0,6917288,215.63,W,13063,321.0,discover,credit,299.0,outlook.com,0.0,120.0
+2987127,0,6939203,93.09,C,10694,111.0,discover,credit,299.0,,4.0,
+2987128,0,7104883,158.95,W,9738,,visa,credit,204.0,anonymous.com,1.0,0.0
+2987129,0,7117284,33.9,S,14428,555.0,visa,credit,204.0,hotmail.com,2.0,120.0
+2987130,0,7234709,118.04,S,5790,111.0,mastercard,credit,204.0,anonymous.com,1.0,120.0
+2987131,0,7284920,51.52,H,13386,321.0,american express,debit,204.0,hotmail.com,2.0,
+2987132,0,7330055,159.88,R,15005,111.0,mastercard,debit,,gmail.com,1.0,
+2987133,0,7345817,20.01,C,6955,321.0,american express,credit,204.0,,1.0,14.0
+2987134,0,7488294,25.04,R,5163,555.0,american express,debit,,anonymous.com,0.0,0.0
+2987135,0,7498303,194.17,W,12403,555.0,visa,credit,204.0,gmail.com,2.0,14.0
+2987136,0,7621327,44.88,R,5327,555.0,discover,credit,204.0,yahoo.com,0.0,120.0
+2987137,0,7652765,38.13,W,17273,111.0,american express,debit,204.0,,0.0,120.0
+2987138,0,7684544,59.0,W,2476,321.0,visa,debit,,outlook.com,1.0,0.0
+2987139,0,7777088,27.4,S,12915,,discover,credit,204.0,yahoo.com,4.0,
+2987140,0,7919991,206.84,R,8817,555.0,mastercard,debit,204.0,hotmail.com,2.0,120.0
+2987141,0,7929002,15.66,R,7391,555.0,american express,debit,204.0,hotmail.com,2.0,14.0
+2987142,0,8051724,46.96,R,10681,321.0,discover,credit,325.0,,0.0,0.0
+2987143,0,8059403,77.24,S,16847,111.0,american express,debit,,outlook.com,0.0,14.0
+2987144,0,8170843,49.18,R,3538,321.0,american express,credit,,yahoo.com,0.0,
+2987145,0,8173832,24.48,S,15400,321.0,american express,debit,325.0,gmail.com,4.0,
+2987146,1,8200307,45.82,C,8269,555.0,discover,debit,299.0,,4.0,0.0
+2987147,0,8302248,83.55,C,15880,555.0,visa,credit,299.0,hotmail.com,2.0,
+2987148,0,8341146,19.48,C,14177,111.0,discover,credit,299.0,gmail.com,3.0,14.0
+2987149,0,8347873,104.19,W,2859,321.0,discover,debit,204.0,anonymous.com,3.0,0.0
+2987150,1,8362559,23.78,W,4838,555.0,american express,credit,204.0,,2.0,120.0
+2987151,0,8420700,31.34,W,6060,555.0,mastercard,debit,325.0,yahoo.com,0.0,120.0
+2987152,0,8434304,56.62,C,2494,321.0,visa,debit,204.0,outlook.com,0.0,0.0
+2987153,0,8597305,15.61,H,14748,,american express,credit,204.0,,1.0,0.0
+2987154,0,8716264,104.8,C,10054,,discover,credit,325.0,outlook.com,1.0,120.0
+2987155,0,8729119,53.6,W,5781,321.0,visa,credit,325.0,yahoo.com,2.0,0.0
+2987156,0,8745415,19.37,R,13912,,discover,credit,204.0,outlook.com,1.0,120.0
+2987157,0,8746305,11.95,R,2282,,discover,debit,,anonymous.com,2.0,14.0
+2987158,0,8760490,11.41,W,1662,555.0,visa,credit,325.0,yahoo.com,2.0,
+2987159,0,8864148,57.46,W,12888,555.0,american express,credit,,hotmail.com,4.0,0.0
+2987160,0,8935890,17.17,S,14098,111.0,american express,debit,299.0,,4.0,
+2987161,0,9019127,13.94,H,14907,555.0,mastercard,debit,,gmail.com,2.0,0.0
+2987162,0,9021905,43.33,H,11239,321.0,discover,credit,325.0,anonymous.com,0.0,14.0
+2987163,0,9062982,532.46,R,12166,,american express,credit,325.0,yahoo.com,1.0,
+2987164,0,9106096,72.06,C,4287,321.0,visa,debit,299.0,yahoo.com,1.0,0.0
+2987165,0,9128216,117.09,R,7000,,visa,debit,325.0,outlook.com,1.0,0.0
+2987166,0,9158193,67.54,H,3418,111.0,mastercard,debit,299.0,yahoo.com,3.0,120.0
+2987167,0,9179199,119.46,C,10740,555.0,visa,debit,204.0,yahoo.com,1.0,
+2987168,0,9184050,14.25,R,12803,555.0,discover,credit,,anonymous.com,2.0,
+2987169,0,9189747,35.5,R,1374,321.0,discover,credit,325.0,hotmail.com,2.0,14.0
+2987170,0,9191475,70.91,H,4003,111.0,mastercard,credit,299.0,gmail.com,4.0,
+2987171,0,9191778,53.63,W,10790,555.0,visa,credit,325.0,,1.0,0.0
+2987172,0,9205756,45.06,H,11016,,american express,debit,204.0,outlook.com,2.0,
+2987173,0,9236887,28.05,S,15908,555.0,visa,debit,204.0,,0.0,
+2987174,0,9261467,42.17,W,13781,321.0,discover,credit,204.0,anonymous.com,1.0,14.0
+2987175,0,9570356,25.17,S,2358,321.0,american express,debit,299.0,anonymous.com,0.0,
+2987176,0,9574969,4.85,H,2659,111.0,mastercard,credit,204.0,,0.0,
+2987177,0,9593625,16.54,H,7669,321.0,discover,debit,325.0,gmail.com,2.0,0.0
+2987178,0,9593939,87.85,C,2274,,visa,credit,204.0,,4.0,0.0
+2987179,0,9611738,259.06,R,3868,,discover,debit,299.0,yahoo.com,1.0,0.0
+2987180,0,9621772,334.82,H,5551,321.0,visa,credit,204.0,outlook.com,1.0,0.0
+2987181,0,9638460,60.14,S,7612,555.0,discover,credit,,outlook.com,1.0,120.0
+2987182,0,9656776,133.4,R,13913,,mastercard,credit,204.0,yahoo.com,2.0,120.0
+2987183,0,9755505,135.37,W,1226,111.0,discover,credit,299.0,hotmail.com,1.0,
+2987184,0,9805481,27.32,R,9982,555.0,visa,credit,299.0,hotmail.com,4.0,
+2987185,0,9878544,9.99,H,15403,,mastercard,debit,325.0,,0.0,14.0
+2987186,0,9882352,56.31,C,14476,555.0,discover,debit,299.0,,0.0,120.0
+2987187,0,9907173,9.37,H,9634,321.0,american express,debit,299.0,hotmail.com,0.0,120.0
+2987188,0,9907356,39.65,H,6664,321.0,mastercard,debit,204.0,gmail.com,4.0,120.0
+2987189,0,10001027,100.3,C,8584,111.0,discover,debit,204.0,,1.0,120.0
+2987190,0,10033239,13.2,C,10816,321.0,mastercard,debit,,outlook.com,2.0,14.0
+2987191,0,10089045,56.39,S,11471,321.0,visa,credit,299.0,anonymous.com,4.0,0.0
+2987192,0,10097296,188.67,H,17571,,discover,credit,325.0,hotmail.com,1.0,
+2987193,0,10112190,78.38,W,15790,,visa,debit,204.0,yahoo.com,1.0,0.0
+2987194,0,10133692,92.05,C,13702,555.0,american express,credit,204.0,outlook.com,0.0,0.0
+2987195,0,10166409,135.2,H,6067,,mastercard,credit,299.0,anonymous.com,4.0,
+2987196,1,10460053,617.77,H,11537,555.0,american express,debit,204.0,outlook.com,1.0,0.0
+2987197,0,10486054,63.52,C,5654,321.0,mastercard,debit,,outlook.com,3.0,0.0
+2987198,0,10524136,186.7,S,9093,111.0,mastercard,credit,299.0,outlook.com,0.0,0.0
+2987199,0,10535832,51.2,H,1861,321.0,visa,debit,325.0,yahoo.com,4.0,14.0
+2987200,0,10580868,31.62,C,5672,111.0,discover,debit,204.0,,0.0,0.0
+2987201,0,10672433,74.8,C,5635,,american express,debit,325.0,yahoo.com,3.0,0.0
+2987202,0,10837054,29.79,C,12260,555.0,discover,debit,204.0,,2.0,120.0
+2987203,0,10879247,30.78,C,2152,321.0,mastercard,debit,325.0,hotmail.com,0.0,
+2987204,0,10899738,29.73,C,5925,555.0,discover,debit,299.0,hotmail.com,3.0,0.0
+2987205,0,10903067,5.5,H,1723,555.0,discover,credit,325.0,hotmail.com,4.0,0.0
+2987206,0,10906102,60.67,H,4362,111.0,mastercard,credit,299.0,anonymous.com,2.0,120.0
+2987207,0,10912994,15.43,R,10617,111.0,mastercard,credit,204.0,,4.0,
+2987208,0,10913937,49.04,R,5560,321.0,visa,debit,299.0,gmail.com,3.0,0.0
+2987209,0,10992800,232.75,W,4198,321.0,american express,debit,299.0,anonymous.com,2.0,14.0
+2987210,0,11131879,32.43,R,13988,,american express,debit,325.0,yahoo.com,0.0,
+2987211,0,11151443,31.75,S,2292,555.0,american express,debit,204.0,anonymous.com,2.0,0.0
+2987212,0,11174876,213.56,H,3286,321.0,visa,debit,325.0,outlook.com,1.0,0.0
+2987213,0,11220354,94.28,S,16950,321.0,mastercard,credit,,,0.0,120.0
+2987214,0,11229613,144.97,R,17845,555.0,american express,credit,204.0,anonymous.com,4.0,14.0
+2987215,0,11233306,38.27,R,3587,,mastercard,credit,,hotmail.com,1.0,
+2987216,0,11373383,115.36,W,15150,555.0,american express,debit,204.0,outlook.com,4.0,14.0
+2987217,0,11379072,27.49,H,2650,555.0,mastercard,credit,204.0,outlook.com,3.0,14.0
+2987218,0,11380444,27.77,S,9006,321.0,american express,credit,325.0,,3.0,120.0
+2987219,0,11393339,99.11,R,17889,111.0,visa,debit,325.0,yahoo.com,0.0,
+2987220,0,11484244,30.01,R,9176,321.0,mastercard,credit,204.0,anonymous.com,0.0,
+2987221,0,11620682,117.58,S,12605,555.0,visa,debit,204.0,,4.0,0.0
+2987222,0,11652395,596.86,C,16864,,discover,debit,325.0,anonymous.com,2.0,
+2987223,0,11722783,10.11,S,13628,111.0,visa,debit,,yahoo.com,0.0,14.0
+2987224,0,11731049,25.73,C,1422,,visa,credit,299.0,outlook.com,0.0,120.0
+2987225,0,11797833,167.36,H,10799,555.0,visa,credit,,hotmail.com,4.0,0.0
+2987226,0,11800123,47.22,H,3104,321.0,american express,credit,,anonymous.com,0.0,14.0
+2987227,0,11868542,174.35,C,2224,555.0,visa,debit,299.0,gmail.com,1.0,0.0
+2987228,0,11878490,19.88,H,15243,111.0,discover,debit,325.0,hotmail.com,0.0,120.0
+2987229,0,11913487,76.05,W,15648,555.0,visa,debit,,gmail.com,2.0,120.0
+2987230,0,12094283,46.97,H,15633,555.0,discover,credit,299.0,outlook.com,2.0,14.0
+2987231,0,12163942,62.83,H,8273,555.0,visa,credit,299.0,outlook.com,2.0,120.0
+2987232,0,12178766,76.03,W,8446,321.0,visa,credit,299.0,outlook.com,3.0,
+2987233,0,12189716,16.12,R,7828,111.0,mastercard,credit,204.0,outlook.com,1.0,0.0
+2987234,0,12208289,18.65,S,15708,,discover,debit,299.0,gmail.com,1.0,0.0
+2987235,0,12214974,221.24,S,3354,555.0,visa,credit,204.0,gmail.com,1.0,
+2987236,0,12241361,73.2,C,16698,555.0,american express,credit,204.0,outlook.com,3.0,120.0
+2987237,0,12301303,60.72,S,2970,,visa,debit,,outlook.com,0.0,0.0
+2987238,0,12340628,52.24,S,6546,,visa,credit,204.0,anonymous.com,2.0,
+2987239,0,12348202,77.99,R,10087,111.0,visa,credit,204.0,anonymous.com,4.0,
+2987240,0,12360777,17.19,W,1156,,visa,credit,,hotmail.com,1.0,120.0
+2987241,0,12468653,20.11,C,10896,321.0,discover,credit,299.0,,4.0,14.0
+2987242,0,12557926,201.24,H,1042,555.0,american express,debit,204.0,hotmail.com,4.0,0.0
+2987243,0,12584311,63.51,H,10025,321.0,visa,debit,299.0,,0.0,14.0
+2987244,0,12733972,127.78,S,4199,,discover,credit,204.0,hotmail.com,3.0,14.0
+2987245,0,12866909,29.79,H,11668,,visa,credit,,hotmail.com,4.0,14.0
+2987246,0,12872277,216.31,H,9852,555.0,visa,credit,,anonymous.com,4.0,120.0
+2987247,0,12882696,77.11,H,16270,111.0,american express,debit,325.0,gmail.com,3.0,
+2987248,0,12901276,88.34,H,10076,555.0,american express,debit,,hotmail.com,4.0,120.0
+2987249,0,12931686,94.51,S,9773,111.0,american express,debit,299.0,hotmail.com,3.0,120.0
+2987250,0,13005357,24.61,S,7442,555.0,visa,credit,325.0,hotmail.com,3.0,14.0
+2987251,0,13042786,8.45,R,7597,555.0,mastercard,debit,,hotmail.com,1.0,
+2987252,0,13045933,18.64,C,11949,555.0,discover,debit,325.0,anonymous.com,2.0,120.0
+2987253,0,13101374,278.81,R,5464,,american express,credit,,anonymous.com,0.0,14.0
+2987254,0,13102548,200.47,S,5024,111.0,visa,debit,,,1.0,
+2987255,0,13104155,38.59,R,6339,555.0,discover,credit,,yahoo.com,3.0,0.0
+2987256,0,13132515,40.38,S,10451,321.0,american express,credit,,outlook.com,2.0,
+2987257,0,13159636,153.95,S,10758,111.0,mastercard,debit,204.0,yahoo.com,4.0,0.0
+2987258,0,13168359,46.14,S,8873,555.0,discover,credit,,gmail.com,2.0,14.0
+2987259,0,13337517,14.89,C,14839,321.0,mastercard,credit,,gmail.com,3.0,120.0
+2987260,0,13382323,193.55,S,3365,,mastercard,credit,204.0,outlook.com,1.0,120.0
+2987261,0,13442124,87.99,S,8675,555.0,american express,credit,,outlook.com,1.0,0.0
+2987262,0,13466415,4.41,R,13168,555.0,visa,credit,,,4.0,0.0
+2987263,0,13506998,39.92,R,1709,,visa,credit,299.0,yahoo.com,2.0,14.0
+2987264,0,13660179,63.03,H,3963,555.0,mastercard,credit,299.0,yahoo.com,0.0,14.0
+2987265,0,13749466,88.34,W,4273,321.0,visa,credit,,outlook.com,0.0,
+2987266,0,13825328,63.57,W,16130,555.0,discover,debit,,hotmail.com,1.0,0.0
+2987267,0,13876317,28.91,R,2577,,mastercard,debit,,yahoo.com,3.0,
+2987268,0,13904194,48.63,H,11351,,american express,credit,299.0,hotmail.com,2.0,14.0
+2987269,1,14033452,146.64,C,6800,321.0,american express,credit,325.0,,3.0,120.0
+2987270,0,14064907,41.76,S,10752,,visa,debit,204.0,gmail.com,1.0,14.0
+2987271,0,14100433,37.64,R,12908,555.0,visa,debit,,yahoo.com,2.0,
+2987272,0,14122031,190.96,W,14864,111.0,american express,debit,,outlook.com,0.0,0.0
+2987273,0,14184053,21.19,S,11278,,visa,credit,,gmail.com,0.0,
+2987274,0,14284973,38.5,R,12308,321.0,discover,credit,299.0,gmail.com,2.0,14.0
+2987275,0,14384304,7.16,W,12521,555.0,discover,credit,325.0,outlook.com,0.0,14.0
+2987276,0,14452487,93.78,R,4901,555.0,visa,credit,,outlook.com,2.0,0.0
+2987277,0,14569938,124.99,R,8909,,mastercard,credit,325.0,yahoo.com,3.0,
+2987278,0,14624789,94.49,W,17396,555.0,discover,credit,299.0,anonymous.com,4.0,
+2987279,0,14672700,136.68,R,2910,111.0,american express,credit,204.0,yahoo.com,3.0,120.0
+2987280,0,14725763,84.83,H,3422,321.0,visa,debit,204.0,outlook.com,1.0,
+2987281,0,14762476,76.9,H,6154,,visa,debit,325.0,anonymous.com,2.0,
+2987282,0,14783423,87.7,C,9980,111.0,visa,debit,204.0,outlook.com,2.0,120.0
+2987283,0,14864601,41.79,S,9890,111.0,american express,debit,204.0,gmail.com,1.0,
+2987284,0,14875893,179.17,S,13250,,discover,debit,204.0,hotmail.com,4.0,14.0
+2987285,0,14991581,38.53,R,9650,111.0,visa,credit,299.0,anonymous.com,3.0,0.0
+2987286,0,15032550,12.65,R,5440,,mastercard,credit,,gmail.com,1.0,0.0
+2987287,0,15200415,127.71,S,5239,321.0,visa,debit,,gmail.com,0.0,120.0
+2987288,0,15257888,347.48,R,12562,321.0,american express,debit,325.0,,2.0,120.0
+2987289,0,15305013,20.9,C,15360,111.0,mastercard,debit,204.0,hotmail.com,3.0,
+2987290,0,15335260,49.32,R,18138,321.0,visa,debit,204.0,,2.0,14.0
+2987291,0,15377521,27.51,H,8539,321.0,american express,debit,,hotmail.com,2.0,
+2987292,0,15379221,37.32,R,14363,321.0,discover,credit,325.0,,2.0,
+2987293,0,15400815,57.17,H,15710,321.0,visa,credit,299.0,gmail.com,1.0,0.0
+2987294,0,15433289,15.77,C,11489,321.0,visa,debit,325.0,outlook.com,0.0,0.0
+2987295,0,15494461,41.36,R,5619,555.0,mastercard,credit,,gmail.com,1.0,0.0
+2987296,0,15514345,12.6,C,3312,321.0,visa,credit,,gmail.com,0.0,14.0
+2987297,0,15551533,30.93,W,17389,111.0,discover,debit,325.0,anonymous.com,3.0,0.0
+2987298,0,15591904,16.68,R,11624,555.0,american express,credit,325.0,hotmail.com,3.0,
+2987299,0,15608340,18.93,C,2946,,american express,debit,325.0,gmail.com,0.0,
