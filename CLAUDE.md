@@ -11,7 +11,7 @@ worktree at `D:\Project_ai_aiml01`; AIML-04 (`main`) is at `D:\Project_ai`. Dead
 - Keep the laptop load low (the user's explicit request): training and evals run on Kaggle,
   tests in GitHub Actions, metrics in MLflow.
 - Every shell command must say where it runs (Windows, WSL, Kaggle, Docker).
-- Kaggle CLI: `C:\Users\anish\AppData\Roaming\Python\Python314\Scripts\kaggle.exe` (not on PATH).
+- Kaggle CLI: `%APPDATA%\Python\Python314\Scripts\kaggle.exe` (not on PATH).
 - Run a smoke-mode Kaggle job before any full run.
 - Never submit on the portal for the user.
 
