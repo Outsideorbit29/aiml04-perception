@@ -58,7 +58,7 @@ _Last updated: 2026-11-19_
 **Schedule:** M2, M3 and M4 done on 2026-11-13, ahead of PLAN.md dates. Open before/in M5: long-range kerbside false leads (47/111 lead frames, lane-depth to tighten the corridor beyond ~24 m) and a multi-frame lead persistence rule in `control_node`. M0.7–M0.8 local CARLA/ROS2 setup needed before M5 (Nov 16).
 
 Useful facts learned so far:
-- The Kaggle CLI is at `C:\Users\anish\AppData\Roaming\Python\Python314\Scripts\kaggle.exe` (not on PATH).
+- The Kaggle CLI is at `%APPDATA%\Python\Python314\Scripts\kaggle.exe` (not on PATH).
 - Fetch only small outputs from a job: `kaggle kernels output <ref> -p <dir> --file-pattern '\.(log|json|csv|yaml)$'`.
 - Kaggle jobs clone the repo shallowly; runners now `git fetch origin REF` + checkout `FETCH_HEAD`, so `REF` may be a branch. Set `REF` back to `main` before merging.
 - Run a `MODE = "smoke"` job first and look at its debug outputs before any full run; implausible numbers (e.g. whole groups at 0.000) have meant eval bugs.
