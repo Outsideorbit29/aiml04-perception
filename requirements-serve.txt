@@ -1,0 +1,11 @@
+# Serving image (services/Dockerfile): scorer, consumer, producer. No torch, no scikit-learn.
+numpy>=1.26,<2.3
+pandas>=2.1,<2.3
+pyarrow>=14
+pyyaml>=6.0
+xgboost-cpu>=2.1
+fastapi>=0.110
+uvicorn>=0.29
+httpx>=0.27
+confluent-kafka>=2.4
+feast[redis]>=0.40,<1

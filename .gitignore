@@ -20,3 +20,6 @@ media/
 feature_repo/data/
 .claude/worktrees/
 .codex/
+
+# F5 serving bundle (downloaded from Kaggle)
+serving_bundle/

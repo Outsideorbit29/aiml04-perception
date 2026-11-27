@@ -1,0 +1,70 @@
+# F5 local serving stack. Needs the serving bundle in ./serving_bundle (scripts/fetch_serving_bundle.sh).
+#   docker compose up -d --build kafka redis scorer consumer      # stack
+#   docker compose run --rm producer --rate 50 --limit 5000        # replay test-period transactions
+#   docker compose down                                            # stop (add -v to drop Kafka data)
+x-app: &app
+  build: {context: ., dockerfile: services/Dockerfile}
+  image: aiml01-services:dev
+  volumes:
+    - ./serving_bundle/models:/app/models:ro
+    - ./serving_bundle/data:/app/data
+  depends_on:
+    redis: {condition: service_started}
+
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+    mem_limit: 900m
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb"]
+    mem_limit: 600m
+
+  scorer:
+    <<: *app
+    command: ["uvicorn", "services.scorer.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["8000:8000"]
+    mem_limit: 700m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  consumer:
+    <<: *app
+    command: ["python", "-m", "services.consumer.main"]
+    mem_limit: 1500m
+    depends_on:
+      kafka: {condition: service_healthy}
+      scorer: {condition: service_healthy}
+      redis: {condition: service_started}
+
+  producer:
+    <<: *app
+    entrypoint: ["python", "-m", "services.producer.main"]
+    environment: {FEAST_APPLY: "0"}
+    mem_limit: 700m
+    profiles: ["replay"]
+    depends_on:
+      kafka: {condition: service_healthy}

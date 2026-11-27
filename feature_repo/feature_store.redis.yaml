@@ -1,0 +1,9 @@
+# Serving variant (docker compose / Minikube): online store in Redis (service name "redis").
+project: aiml01_fraud
+registry: data/registry.db
+provider: local
+offline_store:
+  type: file
+online_store:
+  type: redis
+  connection_string: "redis:6379"

@@ -7,3 +7,5 @@ pyyaml>=6.0
 xgboost-cpu>=2.1  # scorer tests (CPU-only wheel)
 pytest>=8.0
 ruff>=0.6
+fastapi>=0.110  # scorer API tests
+httpx>=0.27

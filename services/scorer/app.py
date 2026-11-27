@@ -27,12 +27,12 @@ STATE: dict[str, Any] = {}
 def build_store(cfg: dict, feat_cfg: dict) -> OnlineStore:
     if os.environ.get("ONLINE_STORE", "feast") == "memory":
         return MemoryStore()
-    os.environ.setdefault("FEAST_FS_YAML_FILE_PATH", cfg["feature_store_yaml"])
     return FeastStore(
         cfg["feature_repo"],
         feature_names(feat_cfg["windows"]),
         push_source="client_features_push",
         view="client_features",
+        fs_yaml=cfg["feature_store_yaml"],
     )
 
 

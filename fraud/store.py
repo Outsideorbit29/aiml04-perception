@@ -34,10 +34,20 @@ class MemoryStore:
 class FeastStore:
     """Feast online store (Redis in the stack); `repo_path` holds feature_store.yaml."""
 
-    def __init__(self, repo_path: str, features: Sequence[str], push_source: str, view: str):
+    def __init__(
+        self,
+        repo_path: str,
+        features: Sequence[str],
+        push_source: str,
+        view: str,
+        fs_yaml: str | None = None,
+    ):
+        from pathlib import Path
+
         from feast import FeatureStore
 
-        self.store = FeatureStore(repo_path=repo_path)
+        yaml_path = Path(repo_path) / fs_yaml if fs_yaml else None
+        self.store = FeatureStore(repo_path=repo_path, fs_yaml_file=yaml_path)
         self.features = list(features)
         self.push_source = push_source
         self.refs = [f"{view}:{n}" for n in [*self.features, "TransactionID"]]
