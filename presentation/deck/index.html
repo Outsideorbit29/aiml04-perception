@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIML-01 Real-Time Financial Fraud Detection Platform</title>
+<!--
+  10-minute deck for AIML-01 (F8.5). Self-contained: no external scripts, fonts or images except
+  the screenshots/figures referenced by relative path from docs/.
+  Navigation: Right/Left arrows, PageDown/PageUp, Space, Home/End, swipe on touch screens.
+  "t" toggles light/dark. Print (Ctrl+P) gives one slide per page (PDF export).
+  Every number comes from docs/EDA.md, FEATURES.md, MODEL.md, GRAPH.md, SERVING.md, DRIFT.md,
+  DEPLOY.md or EXPERIMENTS.md. Speaker notes: SPEAKER_NOTES.md (same folder).
+-->
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f3f5f8;
+  --ink: #14181f;
+  --muted: #586271;
+  --border: #d3d9e1;
+  --primary: #1f6feb;
+  --accent: #1a7f37;
+  --warn: #9a6700;
+  --danger: #cf222e;
+  --bar: #8c96a3;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117; --surface: #161b22; --ink: #e6edf3; --muted: #9da7b3; --border: #30363d;
+    --primary: #58a6ff; --accent: #3fb950; --warn: #d29922; --danger: #ff7b72; --bar: #6e7681;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1117; --surface: #161b22; --ink: #e6edf3; --muted: #9da7b3; --border: #30363d;
+  --primary: #58a6ff; --accent: #3fb950; --warn: #d29922; --danger: #ff7b72; --bar: #6e7681;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: clamp(15px, 0.9vw + 0.55vh, 23px);
+  line-height: 1.4;
+  overflow: hidden;
+}
+code, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, "Courier New", monospace; font-size: 0.9em; }
+
+.slide {
+  position: fixed; inset: 0 0 3.2rem 0;
+  display: none;
+  overflow-y: auto;
+  padding: clamp(1rem, 4vh, 3rem) clamp(1rem, 5vw, 4.5rem);
+}
+.slide.active { display: block; }
+.slide.center.active { display: flex; }
+.slide.center .frame { width: 100%; margin: auto; }
+.frame { max-width: 1280px; margin: 0 auto; }
+.slide { overflow-x: hidden; }
+.cols > *, .cols3 > *, .stats > * { min-width: 0; }
+code { overflow-wrap: anywhere; }
+
+.eyebrow { font-size: 0.75em; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--primary); margin: 0 0 0.3em; }
+h1 { font-size: 2.4em; line-height: 1.1; margin: 0 0 0.4em; letter-spacing: -0.02em; }
+h2 { font-size: 1.75em; line-height: 1.15; margin: 0 0 0.6em; letter-spacing: -0.01em; }
+h3 { font-size: 1.05em; margin: 0 0 0.4em; }
+p { margin: 0 0 0.6em; }
+ul { margin: 0 0 0.6em; padding-left: 1.2em; }
+li { margin: 0 0 0.35em; }
+.muted { color: var(--muted); }
+.small { font-size: 0.78em; color: var(--muted); }
+.src { font-size: 0.68em; color: var(--muted); margin-top: 1em; border-top: 1px solid var(--border); padding-top: 0.4em; }
+strong { font-weight: 650; }
+.hl { color: var(--primary); font-weight: 650; }
+.ok { color: var(--accent); font-weight: 650; }
+.bad { color: var(--danger); font-weight: 650; }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6em; align-items: start; }
+.cols.w60 { grid-template-columns: 3fr 2fr; }
+.cols.w40 { grid-template-columns: 2fr 3fr; }
+.cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.8em 1em; }
+.card h3 { color: var(--primary); }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.8em; margin: 1.2em 0; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.7em 0.9em; }
+.stat .v { font-size: 1.6em; font-weight: 700; color: var(--primary); line-height: 1.1; }
+.stat .l { font-size: 0.75em; color: var(--muted); }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.82em; margin: 0 0 0.6em; }
+th, td { padding: 0.35em 0.5em; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+tr.best td { font-weight: 650; }
+tr.best td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
+
+svg.chart { width: 100%; height: auto; display: block; }
+svg text { fill: var(--ink); font-family: inherit; }
+svg .t-muted { fill: var(--muted); }
+svg .axis { stroke: var(--border); stroke-width: 1; }
+svg .b-muted { fill: var(--bar); }
+svg .b-primary { fill: var(--primary); }
+svg .b-accent { fill: var(--accent); }
+svg .b-danger { fill: var(--danger); }
+svg .l-primary { stroke: var(--primary); stroke-width: 3; fill: none; }
+svg .l-muted { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+svg .l-danger { stroke: var(--danger); stroke-width: 1.5; stroke-dasharray: 6 4; fill: none; }
+svg .l-warn { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 2 4; fill: none; }
+svg .dot { fill: var(--primary); }
+svg .node rect { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+svg .node.key rect { stroke: var(--primary); stroke-width: 2; }
+svg .node.off rect { stroke-dasharray: 5 4; }
+svg .node .title { font-weight: 650; font-size: 15px; }
+svg .node .sub { font-size: 12.5px; fill: var(--muted); }
+svg .edge { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+svg .edge.dash { stroke-dasharray: 6 4; }
+svg .ah { fill: var(--muted); }
+svg .elabel { font-size: 12px; fill: var(--muted); }
+
+figure { margin: 0; }
+figure img { max-width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+figcaption { font-size: 0.72em; color: var(--muted); margin-top: 0.3em; }
+figure.shot.missing img { display: none; }
+figure.shot.missing::before {
+  content: attr(data-placeholder);
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 9em; padding: 1em;
+  border: 2px dashed var(--border); border-radius: 8px;
+  color: var(--muted); font-family: ui-monospace, Consolas, monospace; font-size: 0.8em;
+}
+
+.pipe { display: flex; flex-wrap: wrap; gap: 0.4em; align-items: center; margin: 0.6em 0 1em; font-size: 0.85em; }
+.pipe span { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.2em 0.55em; }
+.pipe i { font-style: normal; color: var(--muted); }
+
+.tag { display: inline-block; font-size: 0.7em; font-weight: 600; padding: 0.1em 0.5em; border-radius: 999px; border: 1px solid currentColor; vertical-align: middle; }
+.tag.todo { color: var(--warn); }
+.tag.done { color: var(--accent); }
+
+nav.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 3.2rem;
+  display: flex; align-items: center; gap: 0.6rem; padding: 0 1rem;
+  border-top: 1px solid var(--border); background: var(--bg); font-size: 15px;
+}
+nav.bar button {
+  font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.25rem 0.75rem; cursor: pointer;
+}
+nav.bar button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+nav.bar .count { color: var(--muted); min-width: 4.5em; text-align: center; font-variant-numeric: tabular-nums; }
+nav.bar .prog { flex: 1; height: 4px; background: var(--surface); border-radius: 2px; overflow: hidden; }
+nav.bar .prog div { height: 100%; width: 0; background: var(--primary); transition: width 0.2s; }
+nav.bar .hint { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 820px) {
+  body { font-size: 15px; }
+  h1 { font-size: 1.9em; }
+  h2 { font-size: 1.4em; }
+  .cols, .cols.w60, .cols.w40, .cols3 { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  table { font-size: 0.78em; display: block; overflow-x: auto; }
+  nav.bar .hint { display: none; }
+}
+@media print {
+  body { overflow: visible; font-size: 15px; }
+  nav.bar { display: none; }
+  .slide { position: static; display: block !important; overflow: visible; page-break-after: always; break-after: page; min-height: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- 1. Title -->
+<section class="slide center" id="s1" aria-label="Title">
+  <div class="frame">
+    <p class="eyebrow">Nexvia Technologies internship · AI/ML track · Project AIML-01</p>
+    <h1>Real-Time Financial Fraud Detection Platform</h1>
+    <p class="muted">Read live transactions, score each one in milliseconds, link suspicious accounts into fraud rings, and give analysts a dashboard to review cases.</p>
+    <div class="pipe" aria-label="Pipeline">
+      <span>Kafka replay</span><i>→</i><span>Feast / Redis features</span><i>→</i><span>XGBoost + GNN blend</span><i>→</i><span>FastAPI scorer</span><i>→</i><span>Case store</span><i>→</i><span>Streamlit dashboard</span><i>→</i><span>Evidently / PSI drift monitor</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="v">590,540</div><div class="l">IEEE-CIS transactions, time-ordered split</div></div>
+      <div class="stat"><div class="v">0.525</div><div class="l">test PR-AUC of the served blend (XGBoost 0.491)</div></div>
+      <div class="stat"><div class="v">128 ms</div><div class="l">end-to-end p95 at 50 tx/s on a laptop</div></div>
+      <div class="stat"><div class="v">242 tx/s</div><div class="l">sustained burst throughput</div></div>
+    </div>
+    <p>Anish Kumar Gupta</p>
+    <p class="small">Repository: branch <code>AIML-01</code> of the capstone repo (AIML-04 is on <code>main</code>).</p>
+  </div>
+</section>
+
+<!-- 2. Problem -->
+<section class="slide" id="s2" aria-label="Problem">
+  <div class="frame">
+    <p class="eyebrow">Problem</p>
+    <h2>Score every transaction as it happens, with a fixed alert budget</h2>
+    <div class="cols">
+      <div>
+        <h3>What the brief asks for</h3>
+        <ul>
+          <li>Replay transactions through <strong>Kafka</strong>; a <strong>FastAPI</strong> service fetches features and returns a fraud score</li>
+          <li>Features in <strong>Feast</strong>, so training and serving use the same values</li>
+          <li><strong>XGBoost</strong> with class weights or SMOTE, judged by <strong>PR-AUC</strong>, runs in <strong>MLflow</strong></li>
+          <li>A <strong>PyTorch Geometric</strong> GNN over accounts, devices and cards; blend with XGBoost</li>
+          <li><strong>Evidently</strong> drift reports and a retraining trigger</li>
+          <li>Analyst dashboard; services on <strong>Kubernetes</strong> (Minikube is fine)</li>
+        </ul>
+      </div>
+      <div>
+        <h3>What makes it hard</h3>
+        <ul>
+          <li><strong>Imbalance:</strong> predicting "legit" for everything is already about 97% accurate</li>
+          <li><strong>Training/serving skew:</strong> features computed in batch for training must match features computed one transaction at a time in the stream</li>
+          <li><strong>Time:</strong> fraud patterns and alert rates move week to week</li>
+          <li><strong>Budget:</strong> analysts can review a limited number of alerts. I fixed the operating point at <strong>1% of legit transactions flagged</strong></li>
+        </ul>
+        <h3>Constraints</h3>
+        <ul>
+          <li>Cloud first: Kaggle for data and training, GitHub Actions for tests, MLflow on DagsHub</li>
+          <li>Laptop runs only the serving stack in Docker (4 CPUs, 6 GB)</li>
+        </ul>
+      </div>
+    </div>
+    <p class="src">Sources: docs/PROJECT_BRIEF.md, PLAN.md, docs/MODEL.md, docs/SERVING.md</p>
+  </div>
+</section>
+
+<!-- 3. Dataset -->
+<section class="slide" id="s3" aria-label="Dataset and split">
+  <div class="frame">
+    <p class="eyebrow">Data</p>
+    <h2>IEEE-CIS: 590,540 transactions, 3.5% fraud, split by time</h2>
+    <div class="cols">
+      <div>
+        <svg class="chart" viewBox="0 0 640 74" role="img" aria-label="Time-ordered split: train 413,378 rows, val 88,581, test 88,581">
+          <rect x="20" y="8" width="420" height="34" class="b-primary" rx="3"/>
+          <rect x="442" y="8" width="88" height="34" class="b-accent" rx="3"/>
+          <rect x="532" y="8" width="88" height="34" class="b-muted" rx="3"/>
+          <text x="230" y="30" text-anchor="middle" style="fill:#fff;font-weight:600">train 70%</text>
+          <text x="486" y="30" text-anchor="middle" style="fill:#fff;font-weight:600">val 15%</text>
+          <text x="576" y="30" text-anchor="middle" style="fill:#fff;font-weight:600">test 15%</text>
+          <text x="20" y="64" class="t-muted" font-size="13">day 0</text>
+          <text x="442" y="64" class="t-muted" font-size="13">day 120</text>
+          <text x="620" y="64" class="t-muted" font-size="13" text-anchor="end">day 182</text>
+        </svg>
+        <table>
+          <thead><tr><th>Split</th><th class="n">Rows</th><th class="n">Frauds</th><th class="n">Fraud rate</th></tr></thead>
+          <tbody>
+            <tr><td>train</td><td class="n">413,378</td><td class="n">14,538</td><td class="n">3.52%</td></tr>
+            <tr><td>val</td><td class="n">88,581</td><td class="n">3,042</td><td class="n">3.43%</td></tr>
+            <tr><td>test</td><td class="n">88,581</td><td class="n">3,083</td><td class="n">3.48%</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>439 columns after joining the identity table; 229 are more than 50% missing</li>
+          <li>The brief says "under 1% fraud"; IEEE-CIS has 3.5%. Accuracy is still useless, so I use PR-AUC and recall at a fixed false-positive rate</li>
+          <li>ProductCD <code>C</code>: 11.2% fraud vs 2.1% for <code>W</code>; only 27% of transactions have identity data</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <img src="../../docs/figures/eda_daily_fraud_rate.png" alt="Daily fraud rate over the 182 days of TransactionDT, moving between about 1% and 7%">
+          <figcaption>Daily fraud rate moves between ~1% and ~7% and steps up from ~2.5% to ~4% after day 25. So the split must be by time, and the later weeks are a natural drift test.</figcaption>
+        </figure>
+      </div>
+    </div>
+    <p class="src">Sources: docs/EDA.md, docs/EXPERIMENTS.md (Kaggle anish2906/aiml01-data-prep v2)</p>
+  </div>
+</section>
+
+<!-- 4. Features + Feast -->
+<section class="slide" id="s4" aria-label="Point-in-time features and Feast parity">
+  <div class="frame">
+    <p class="eyebrow">Features</p>
+    <h2>Point-in-time features, one definition for training and serving</h2>
+    <div class="cols">
+      <div>
+        <h3>Entity: the client, not the card</h3>
+        <p><code>client_key = card1 | addr1 | day − D1</code>, where D1 is days since the card was first used, so <code>day − D1</code> stays constant per cardholder. <strong>217,850 clients.</strong></p>
+        <p class="small">The first version keyed on card1–card6 and raw DeviceInfo. Those are product and OS labels (about 800 transactions per "card"), and single features scored AUC 0.43–0.62. I replaced it.</p>
+        <h3>Features (earlier transactions only)</h3>
+        <ul>
+          <li>Velocity: count and amount in the last 1 h / 24 h / 7 d</li>
+          <li>Amount vs the client's mean, z-score, seconds since the previous transaction</li>
+          <li>New device / address / email on the card; device sharing counts</li>
+        </ul>
+        <p class="small">Strongest single features: <code>secs_since_prev</code> AUC 0.330 (fraud 2.5 days vs legit 8.3 days), <code>cnt_7d</code> AUC 0.644.</p>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Parity checks</h3>
+          <table>
+            <tbody>
+              <tr><td>Batch builder (training) vs <code>OnlineFeatureState</code> (stream), 30,000 real transactions</td><td class="n ok">max rel. diff 1.6e-11</td></tr>
+              <tr><td>Feast point-in-time <code>get_historical_features</code> vs builder, 5,000 transactions</td><td class="n ok">100% match</td></tr>
+              <tr><td>Feast push → <code>get_online_features</code> round trip, 20 clients</td><td class="n ok">100% match</td></tr>
+              <tr><td>Online cost per transaction (pure Python)</td><td class="n">~0.31 ms</td></tr>
+            </tbody>
+          </table>
+          <p class="small">Feast: entity <code>client_key</code>, view <code>client_features</code>, parquet offline store, Redis online store. 40% of transactions are a client's first, so their history features are missing by design.</p>
+        </div>
+      </div>
+    </div>
+    <p class="src">Sources: docs/FEATURES.md, docs/EXPERIMENTS.md (Kaggle anish2906/aiml01-features v2 and v4)</p>
+  </div>
+</section>
+
+<!-- 5. Models -->
+<section class="slide" id="s5" aria-label="Models and imbalance">
+  <div class="frame">
+    <p class="eyebrow">Models</p>
+    <h2>XGBoost with SMOTE, judged at a 1% false-positive budget</h2>
+    <div class="cols w60">
+      <div>
+        <table>
+          <thead><tr><th>Model (test split)</th><th class="n">PR-AUC</th><th class="n">ROC-AUC</th><th class="n">Recall</th><th class="n">Precision</th><th class="n">FPR</th></tr></thead>
+          <tbody>
+            <tr><td>Logistic regression (balanced)</td><td class="n">0.357</td><td class="n">0.860</td><td class="n">35.2%</td><td class="n">44.3%</td><td class="n">1.59%</td></tr>
+            <tr><td>XGBoost, raw fields only</td><td class="n">0.463</td><td class="n">0.874</td><td class="n">43.5%</td><td class="n">53.6%</td><td class="n">1.36%</td></tr>
+            <tr><td>XGBoost + F2 features (class weights)</td><td class="n">0.457</td><td class="n">0.869</td><td class="n">42.6%</td><td class="n">55.8%</td><td class="n">1.22%</td></tr>
+            <tr class="best"><td>XGBoost + F2 features + SMOTE</td><td class="n">0.491</td><td class="n">0.890</td><td class="n">45.4%</td><td class="n">55.8%</td><td class="n">1.30%</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>Threshold set on <strong>val</strong> so 1% of legit val transactions are flagged; test is reported once</li>
+          <li>Registered as <code>aiml01-xgb</code> in MLflow: 1,127 trees, threshold 0.215</li>
+          <li>The F2 features add little offline (val 0.505 vs 0.503): the raw C/D columns already hold per-card counts. F2 is what makes the features computable live</li>
+          <li>SMOTE also imputes with training medians, so part of its +0.04 may be the imputation. Not separated yet</li>
+          <li>The same threshold gives 1.2–1.6% FPR on test: the alert rate drifts</li>
+        </ul>
+      </div>
+      <div>
+        <figure>
+          <img src="../../docs/figures/f3_pr_curve_val.png" alt="Precision-recall curves on the validation split for logistic regression and the XGBoost variants">
+          <figcaption>Precision–recall on val (docs/figures/f3_pr_curve_val.png)</figcaption>
+        </figure>
+      </div>
+    </div>
+    <p class="src">Sources: docs/MODEL.md, docs/EXPERIMENTS.md (Kaggle anish2906/aiml01-train v3, MLflow experiment aiml01-fraud)</p>
+  </div>
+</section>
+
+<!-- 6. Graph / GNN -->
+<section class="slide" id="s6" aria-label="Graph model and fraud rings">
+  <div class="frame">
+    <p class="eyebrow">Graph</p>
+    <h2>GraphSAGE over clients, cards and devices; rings from shared devices</h2>
+    <div class="cols">
+      <div>
+        <svg class="chart" viewBox="0 0 640 300" role="img" aria-label="Test PR-AUC by model">
+          <text x="0" y="12" class="t-muted" font-size="13">Test PR-AUC (threshold at val 1% FPR)</text>
+          <g font-size="13">
+            <text x="200" y="40" text-anchor="end">Logistic regression</text>
+            <rect x="210" y="26" width="226.1" height="22" class="b-muted"/><text x="442" y="42">0.357</text>
+            <text x="200" y="78" text-anchor="end">XGBoost, raw fields</text>
+            <rect x="210" y="64" width="293.2" height="22" class="b-muted"/><text x="509" y="80">0.463</text>
+            <text x="200" y="116" text-anchor="end">XGBoost + SMOTE</text>
+            <rect x="210" y="102" width="311.0" height="22" class="b-accent"/><text x="527" y="118">0.491</text>
+            <text x="200" y="154" text-anchor="end">GraphSAGE alone</text>
+            <rect x="210" y="140" width="320.5" height="22" class="b-muted"/><text x="536" y="156">0.506</text>
+            <text x="200" y="192" text-anchor="end">Blend, full graph *</text>
+            <rect x="210" y="178" width="345.2" height="22" class="b-muted" opacity="0.55"/><text x="561" y="194">0.545</text>
+            <text x="200" y="230" text-anchor="end" font-weight="650">Live blend (served)</text>
+            <rect x="210" y="216" width="332.5" height="22" class="b-primary"/><text x="548" y="232" font-weight="650">0.525</text>
+          </g>
+          <line x1="210" y1="20" x2="210" y2="246" class="axis"/>
+          <text x="0" y="272" class="t-muted" font-size="12">* transductive: val/test transactions sit in the graph during training. Offline only.</text>
+          <text x="0" y="290" class="t-muted" font-size="12">Live blend = XGBoost + mean GNN risk of the client from earlier periods (a key lookup).</text>
+        </svg>
+        <p class="small">Graph: 590,540 transactions, 217,850 clients, 14,893 card products, 9,704 device fingerprints. 2-layer heterogeneous GraphSAGE, hidden 64, 104 s on a Kaggle T4. Blend = 0.5·logit(XGB) + 0.5·logit(GNN). Live blend: recall 49.8% (+4.4 points), precision 58.0%, FPR 1.30%.</p>
+      </div>
+      <div>
+        <svg class="chart" viewBox="0 0 640 220" role="img" aria-label="Fraud rate inside and outside rings: train 9.2% vs 2.8%, val 9.8% vs 2.8%, test 9.9% vs 2.5%">
+          <text x="0" y="12" class="t-muted" font-size="13">Fraud rate of transactions inside vs outside rings</text>
+          <g font-size="13">
+            <text x="110" y="45" text-anchor="end">train</text>
+            <rect x="120" y="28" width="276" height="20" class="b-danger"/><text x="402" y="43">9.2% in rings</text>
+            <rect x="120" y="50" width="84" height="20" class="b-muted"/><text x="210" y="65">2.8% outside</text>
+            <text x="110" y="110" text-anchor="end">val</text>
+            <rect x="120" y="93" width="294" height="20" class="b-danger"/><text x="420" y="108">9.8%</text>
+            <rect x="120" y="115" width="84" height="20" class="b-muted"/><text x="210" y="130">2.8%</text>
+            <text x="110" y="175" text-anchor="end" font-weight="650">test</text>
+            <rect x="120" y="158" width="297" height="20" class="b-danger"/><text x="423" y="173" font-weight="650">9.9% (about 3.9×)</text>
+            <rect x="120" y="180" width="75" height="20" class="b-muted"/><text x="201" y="195">2.5%</text>
+          </g>
+          <line x1="120" y1="22" x2="120" y2="206" class="axis"/>
+        </svg>
+        <ul class="small">
+          <li>Ring = 3+ clients linked by a specific device fingerprint (used by 2–20 clients). Found without labels.</li>
+          <li><strong>1,001 rings, 15,059 clients</strong>, median 5 clients; 54 rings were more than 50% fraud in train.</li>
+          <li>One component chains to 7,522 clients through mid-popularity fingerprints: the fingerprint is coarse.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="src">Sources: docs/GRAPH.md, docs/EXPERIMENTS.md (Kaggle anish2906/aiml01-gnn v2, MLflow run gnn_blend)</p>
+  </div>
+</section>
+
+<!-- 7. Architecture -->
+<section class="slide" id="s7" aria-label="Real-time architecture">
+  <div class="frame">
+    <p class="eyebrow">Architecture</p>
+    <h2>Real-time path: Kafka → consumer → Feast/Redis → FastAPI → case store → dashboard</h2>
+    <svg class="chart" viewBox="0 0 1050 420" role="img" aria-label="Architecture diagram of the streaming scoring stack">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" class="ah"/>
+        </marker>
+      </defs>
+      <!-- nodes -->
+      <g class="node"><rect x="20" y="40" width="140" height="70" rx="8"/>
+        <text x="90" y="68" text-anchor="middle" class="title">Producer</text>
+        <text x="90" y="88" text-anchor="middle" class="sub">replays test period</text></g>
+      <g class="node"><rect x="195" y="40" width="150" height="70" rx="8"/>
+        <text x="270" y="68" text-anchor="middle" class="title">Kafka (KRaft)</text>
+        <text x="270" y="88" text-anchor="middle" class="sub">topic transactions</text></g>
+      <g class="node key"><rect x="380" y="40" width="200" height="110" rx="8"/>
+        <text x="480" y="66" text-anchor="middle" class="title">Consumer</text>
+        <text x="480" y="88" text-anchor="middle" class="sub">OnlineFeatureState (F2)</text>
+        <text x="480" y="106" text-anchor="middle" class="sub">batches ≤ 200 msgs / 50 ms</text>
+        <text x="480" y="124" text-anchor="middle" class="sub">warm start 501,959 tx, ~13 s</text></g>
+      <g class="node key"><rect x="620" y="40" width="200" height="110" rx="8"/>
+        <text x="720" y="66" text-anchor="middle" class="title">FastAPI scorer</text>
+        <text x="720" y="88" text-anchor="middle" class="sub">POST /score: Feast read</text>
+        <text x="720" y="106" text-anchor="middle" class="sub">XGBoost + client GNN risk</text>
+        <text x="720" y="124" text-anchor="middle" class="sub">409 if features are stale</text></g>
+      <g class="node off"><rect x="850" y="40" width="180" height="110" rx="8"/>
+        <text x="940" y="66" text-anchor="middle" class="title">Serving bundle</text>
+        <text x="940" y="88" text-anchor="middle" class="sub">Kaggle jobs + MLflow</text>
+        <text x="940" y="106" text-anchor="middle" class="sub">model, threshold, blend,</text>
+        <text x="940" y="124" text-anchor="middle" class="sub">client risk (30 MB)</text></g>
+      <g class="node"><rect x="620" y="195" width="200" height="60" rx="8"/>
+        <text x="720" y="220" text-anchor="middle" class="title">Feast online / Redis</text>
+        <text x="720" y="240" text-anchor="middle" class="sub">view client_features</text></g>
+      <g class="node off"><rect x="850" y="195" width="180" height="65" rx="8"/>
+        <text x="940" y="220" text-anchor="middle" class="title">Retrain trigger</text>
+        <text x="940" y="240" text-anchor="middle" class="sub">kaggle kernels push (dry run)</text></g>
+      <g class="node"><rect x="380" y="300" width="200" height="70" rx="8"/>
+        <text x="480" y="328" text-anchor="middle" class="title">Case store</text>
+        <text x="480" y="348" text-anchor="middle" class="sub">SQLite (WAL), every score</text></g>
+      <g class="node key"><rect x="620" y="300" width="200" height="70" rx="8"/>
+        <text x="720" y="328" text-anchor="middle" class="title">Streamlit dashboard</text>
+        <text x="720" y="348" text-anchor="middle" class="sub">alerts, cases, rings</text></g>
+      <g class="node"><rect x="850" y="300" width="180" height="70" rx="8"/>
+        <text x="940" y="328" text-anchor="middle" class="title">Drift monitor</text>
+        <text x="940" y="348" text-anchor="middle" class="sub">PSI + alert budget, 30 s</text></g>
+      <!-- edges -->
+      <line x1="160" y1="75" x2="193" y2="75" class="edge" marker-end="url(#ah)"/>
+      <line x1="345" y1="75" x2="378" y2="75" class="edge" marker-end="url(#ah)"/>
+      <line x1="580" y1="75" x2="618" y2="75" class="edge" marker-start="url(#ah)" marker-end="url(#ah)"/>
+      <line x1="580" y1="135" x2="618" y2="210" class="edge" marker-end="url(#ah)"/>
+      <text x="530" y="185" class="elabel">Feast push</text>
+      <line x1="720" y1="152" x2="720" y2="193" class="edge" marker-start="url(#ah)"/>
+      <text x="728" y="178" class="elabel">read</text>
+      <line x1="480" y1="150" x2="480" y2="298" class="edge" marker-end="url(#ah)"/>
+      <text x="400" y="240" class="elabel">score + alert</text>
+      <line x1="580" y1="322" x2="618" y2="322" class="edge" marker-start="url(#ah)"/>
+      <line x1="580" y1="350" x2="618" y2="350" class="edge" marker-end="url(#ah)"/>
+      <text x="600" y="392" class="elabel" text-anchor="middle">feedback labels</text>
+      <path d="M480,370 V405 H940 V372" class="edge" marker-end="url(#ah)"/>
+      <line x1="940" y1="300" x2="940" y2="262" class="edge" marker-end="url(#ah)"/>
+      <line x1="940" y1="195" x2="940" y2="152" class="edge dash" marker-end="url(#ah)"/>
+      <line x1="850" y1="95" x2="822" y2="95" class="edge" marker-end="url(#ah)"/>
+    </svg>
+    <div class="cols3 small">
+      <div>Same F2 code in training and in the consumer, so features match (parity 1.6e-11). The consumer pushes features to Feast tagged with the transaction id; the scorer refuses with HTTP 409 if Redis holds another transaction's features.</div>
+      <div>Scores also go to a Kafka <code>scores</code> topic. Every score lands in the case store; alerts start as "open" and analysts confirm or dismiss them, which writes a feedback label.</div>
+      <div>Dashed boxes are offline or dry-run. Training and the serving bundle come from Kaggle jobs, logged in MLflow on DagsHub. The trigger only prints the retrain command unless run with <code>--execute</code>.</div>
+    </div>
+    <p class="src">Sources: docs/SERVING.md, docs/DRIFT.md, docs/DASHBOARD.md, docker-compose.yml</p>
+  </div>
+</section>
+
+<!-- 8. Latency -->
+<section class="slide" id="s8" aria-label="Latency and throughput">
+  <div class="frame">
+    <p class="eyebrow">Results: serving</p>
+    <h2>p95 128 ms end to end at 50 tx/s; 242 tx/s burst</h2>
+    <div class="stats">
+      <div class="stat"><div class="v">83 ms</div><div class="l">end-to-end p50 (producer → scored and stored)</div></div>
+      <div class="stat"><div class="v">128 ms</div><div class="l">end-to-end p95 (p99 161 ms)</div></div>
+      <div class="stat"><div class="v">5.3 ms</div><div class="l">scorer HTTP p95 (Feast read + XGBoost + blend)</div></div>
+      <div class="stat"><div class="v">242 tx/s</div><div class="l">unthrottled burst, 10,000 messages</div></div>
+    </div>
+    <div class="cols">
+      <div>
+        <svg class="chart" viewBox="0 0 640 190" role="img" aria-label="Per-transaction stage latency p50 and p95 in milliseconds">
+          <text x="0" y="12" class="t-muted" font-size="13">Per-transaction stage time, steady state at 50 tx/s (ms)</text>
+          <g font-size="13">
+            <text x="210" y="44" text-anchor="end">Feature update</text>
+            <rect x="220" y="30" width="1" height="14" class="b-primary"/><rect x="220" y="46" width="3" height="14" class="b-muted"/>
+            <text x="230" y="50">0.02 / 0.06</text>
+            <text x="210" y="94" text-anchor="end">Feast push (per tx)</text>
+            <rect x="220" y="80" width="76" height="14" class="b-primary"/><rect x="220" y="96" width="95.5" height="14" class="b-muted"/>
+            <text x="322" y="100">1.52 / 1.91</text>
+            <text x="210" y="144" text-anchor="end">Scorer HTTP round trip</text>
+            <rect x="220" y="130" width="190.5" height="14" class="b-primary"/><rect x="220" y="146" width="264.5" height="14" class="b-muted"/>
+            <text x="491" y="150">3.81 / 5.29</text>
+          </g>
+          <line x1="220" y1="24" x2="220" y2="166" class="axis"/>
+          <rect x="220" y="174" width="12" height="10" class="b-primary"/><text x="238" y="183" font-size="12">p50</text>
+          <rect x="280" y="174" width="12" height="10" class="b-muted"/><text x="298" y="183" font-size="12">p95</text>
+          <text x="620" y="183" font-size="12" class="t-muted" text-anchor="end">scale 0–8 ms</text>
+        </svg>
+      </div>
+      <div>
+        <svg class="chart" viewBox="0 0 640 150" role="img" aria-label="Consumer throughput: one-by-one about 43 tx/s, batched burst 242 tx/s">
+          <text x="0" y="12" class="t-muted" font-size="13">Consumer throughput (tx/s)</text>
+          <g font-size="13">
+            <text x="210" y="46" text-anchor="end">v1 one message at a time</text>
+            <rect x="220" y="30" width="68.8" height="24" class="b-danger"/><text x="308" y="47">~43 max (~23 ms per tx)</text>
+            <text x="210" y="96" text-anchor="end">v2 micro-batched</text>
+            <rect x="220" y="80" width="387.2" height="24" class="b-accent"/><text x="600" y="97" text-anchor="end" style="fill:#fff;font-weight:600">242</text>
+          </g>
+          <line x1="300" y1="22" x2="300" y2="114" class="l-muted" stroke-dasharray="4 3"/>
+          <text x="304" y="128" font-size="12" class="t-muted">50 tx/s test rate</text>
+          <line x1="220" y1="22" x2="220" y2="114" class="axis"/>
+        </svg>
+        <p class="small">Laptop, Docker Desktop, 4 CPUs / 6 GB. Burst memory: consumer 563 MB, Kafka 349 MB, scorer 226 MB, Redis 8 MB.</p>
+      </div>
+    </div>
+    <div class="card small">
+      <strong>Live detection on the first 5,000 replayed test transactions:</strong> 147 alerts; 64 of 131 frauds caught (49%); 83 false alerts out of 4,869 legit (1.7%). Offline test: recall 49.8% at about 1.3% FPR. The early test weeks have a higher false-alert rate, which the monitor watches.
+    </div>
+    <p class="src">Sources: docs/SERVING.md, docs/EXPERIMENTS.md (F5 load test 2026-11-27)</p>
+  </div>
+</section>
+
+<!-- 9. Drift -->
+<section class="slide" id="s9" aria-label="Drift monitoring and retraining trigger">
+  <div class="frame">
+    <p class="eyebrow">Results: drift</p>
+    <h2>Inputs stayed stable; the false-alert rate drifted 0.88% → 1.36%</h2>
+    <div class="cols w60">
+      <div>
+        <svg class="chart" viewBox="0 0 640 290" role="img" aria-label="Weekly false-positive rate from 0.88% in week 1 to 1.36% in week 9, against a 1% budget and a 1.5 times trigger">
+          <text x="0" y="12" class="t-muted" font-size="13">Weekly FPR of the F3 XGBoost at its fixed val threshold (val + test, days 120–182)</text>
+          <g font-size="12" class="t-muted">
+            <text x="50" y="204" text-anchor="end">0.8%</text>
+            <text x="50" y="164" text-anchor="end">1.0%</text>
+            <text x="50" y="124" text-anchor="end">1.2%</text>
+            <text x="50" y="84" text-anchor="end">1.4%</text>
+            <text x="50" y="44" text-anchor="end">1.6%</text>
+          </g>
+          <line x1="56" y1="240" x2="610" y2="240" class="axis"/>
+          <line x1="56" y1="160" x2="610" y2="160" class="l-muted"/>
+          <text x="610" y="154" font-size="12" text-anchor="end" class="t-muted">1% budget</text>
+          <line x1="56" y1="110" x2="610" y2="110" class="l-warn"/>
+          <text x="62" y="104" font-size="12" style="fill:var(--warn)">1.25× (would have fired w06–w09)</text>
+          <line x1="56" y1="60" x2="610" y2="60" class="l-danger"/>
+          <text x="610" y="54" font-size="12" text-anchor="end" style="fill:var(--danger)">configured trigger 1.5×</text>
+          <polyline points="60,184 125,148 190,190 255,156 320,126 385,92 450,98 515,98 580,88" class="l-primary"/>
+          <g class="dot">
+            <circle cx="60" cy="184" r="4"/><circle cx="125" cy="148" r="4"/><circle cx="190" cy="190" r="4"/>
+            <circle cx="255" cy="156" r="4"/><circle cx="320" cy="126" r="4"/><circle cx="385" cy="92" r="4"/>
+            <circle cx="450" cy="98" r="4"/><circle cx="515" cy="98" r="4"/><circle cx="580" cy="88" r="4"/>
+          </g>
+          <g font-size="11">
+            <text x="70" y="198">0.88</text><text x="125" y="140" text-anchor="middle">1.06</text>
+            <text x="190" y="206" text-anchor="middle">0.85</text><text x="255" y="172" text-anchor="middle">1.02</text>
+            <text x="320" y="142" text-anchor="middle">1.17</text><text x="385" y="84" text-anchor="middle">1.34</text>
+            <text x="450" y="90" text-anchor="middle">1.31</text><text x="515" y="90" text-anchor="middle">1.31</text>
+            <text x="580" y="80" text-anchor="middle">1.36</text>
+          </g>
+          <g font-size="12" class="t-muted">
+            <text x="60" y="258" text-anchor="middle">w01</text><text x="125" y="258" text-anchor="middle">w02</text>
+            <text x="190" y="258" text-anchor="middle">w03</text><text x="255" y="258" text-anchor="middle">w04</text>
+            <text x="320" y="258" text-anchor="middle">w05</text><text x="385" y="258" text-anchor="middle">w06</text>
+            <text x="450" y="258" text-anchor="middle">w07</text><text x="515" y="258" text-anchor="middle">w08</text>
+            <text x="580" y="258" text-anchor="middle">w09</text>
+          </g>
+          <text x="0" y="284" font-size="12" class="t-muted">Weekly PR-AUC: 0.695, 0.567, 0.518, 0.421, 0.494, 0.446, 0.454, 0.538, 0.498 (trigger below 0.40)</text>
+        </svg>
+      </div>
+      <div>
+        <h3>Offline, 9 weekly windows vs train</h3>
+        <ul class="small">
+          <li>PSI drift share <strong>0</strong> every week; largest feature PSI 0.19 (threshold 0.2)</li>
+          <li>Evidently flags 8–22% of inputs per week, under its 30% preset share</li>
+          <li>Score PSI ≤ 0.006: no prediction drift</li>
+          <li><strong>No retrain trigger fired.</strong> I kept the thresholds as designed and did not tune them on this result</li>
+          <li>Reading: a fixed threshold slowly overspends the alert budget before inputs drift. Re-picking the threshold on recent feedback is cheaper than retraining</li>
+        </ul>
+        <h3>Live monitor</h3>
+        <ul class="small">
+          <li>Every 30 s, latest 2,000 cases: PSI on amount and product, score PSI, reviewed-alert precision, estimated false-alert rate, alert rate</li>
+          <li>Trigger: <code>kaggle kernels push -p kaggle/train</code>, at most once per 24 h, <strong>dry run</strong> by default</li>
+          <li>Synthetic check (no Docker): amount ×3 after 2,000 rows gives PSI 2.37 on TransactionAmt, drift share 0.50 → retrain True. <span class="tag todo">live run TBD</span></li>
+        </ul>
+      </div>
+    </div>
+    <p class="src">Sources: docs/DRIFT.md, docs/EXPERIMENTS.md (Kaggle anish2906/aiml01-drift v2, MLflow run f6-drift-full)</p>
+  </div>
+</section>
+
+<!-- 10. Dashboard -->
+<section class="slide" id="s10" aria-label="Analyst dashboard">
+  <div class="frame">
+    <p class="eyebrow">Analyst dashboard</p>
+    <h2>Alerts, case status, feedback labels and the fraud-ring view</h2>
+    <div class="cols w60">
+      <div>
+        <figure class="shot" data-placeholder="[[SCREENSHOT: dashboard.png]] Live overview: scored, alerts, alert rate vs 1% budget, latency, throughput">
+          <img src="../../docs/screenshots/dashboard.png" alt="Dashboard live overview with transactions scored, alert rate against the 1% budget, latency and throughput">
+        </figure>
+      </div>
+      <div>
+        <ul class="small">
+          <li><strong>Live overview</strong> (refresh 5 s): scored, alerts, alert rate vs the 1% budget, latency p50/p95, throughput, live precision</li>
+          <li><strong>Alert queue:</strong> sorted by score with the breakdown <code>p_xgb</code>, <code>gnn_risk</code>, <code>gnn_shift</code>. Confirm / Dismiss stores the feedback label the monitor uses</li>
+          <li><strong>Cases:</strong> open / confirmed / dismissed, live precision. Ground truth only in an "evaluation only" expander</li>
+          <li><strong>Fraud rings:</strong> rings seen in the stream; Graphviz view of clients, devices and cards (capped at 40 clients)</li>
+          <li><strong>Model:</strong> <code>/model</code>, <code>/health</code>, consumer stage latencies</li>
+        </ul>
+        <p class="small">Query logic in <code>fraud/dashboard_data.py</code> (unit-tested); the app is smoke-tested with Streamlit's <code>AppTest</code>.</p>
+      </div>
+    </div>
+    <div class="cols">
+      <figure class="shot" data-placeholder="[[SCREENSHOT: dashboard_alerts.png]] Alert queue with score breakdown and Confirm / Dismiss">
+        <img src="../../docs/screenshots/dashboard_alerts.png" alt="Alert queue with score breakdown and confirm or dismiss buttons">
+      </figure>
+      <figure class="shot" data-placeholder="[[SCREENSHOT: dashboard_rings.png]] Fraud-ring table and network view">
+        <img src="../../docs/screenshots/dashboard_rings.png" alt="Fraud ring table and network graph of clients, devices and cards">
+      </figure>
+    </div>
+    <p class="src">Sources: docs/DASHBOARD.md. Screenshots: docs/screenshots/ (to be captured from a live run)</p>
+  </div>
+</section>
+
+<!-- 11. Kubernetes -->
+<section class="slide" id="s11" aria-label="Kubernetes manifests">
+  <div class="frame">
+    <p class="eyebrow">Deployment</p>
+    <h2>Docker Compose runs the stack; Minikube manifests are written and tested statically</h2>
+    <div class="cols w60">
+      <div>
+        <table>
+          <thead><tr><th>Component</th><th>Kubernetes object (namespace <code>aiml01</code>)</th></tr></thead>
+          <tbody>
+            <tr><td>Kafka (KRaft, single node)</td><td>Deployment + Service <code>kafka:9092</code></td></tr>
+            <tr><td>Feast online store</td><td>Deployment + Service <code>redis:6379</code></td></tr>
+            <tr><td>FastAPI scorer</td><td>Deployment + Service <code>scorer:8000</code></td></tr>
+            <tr><td>Stream consumer</td><td>Deployment, 1 replica (the only case-DB writer)</td></tr>
+            <tr><td>Replay producer</td><td>Job <code>producer</code></td></tr>
+            <tr><td>Analyst dashboard</td><td>Deployment + NodePort <code>30851</code></td></tr>
+            <tr><td>Serving bundle + case DB</td><td>PVC <code>aiml01-bundle</code> (1 Gi)</td></tr>
+          </tbody>
+        </table>
+        <p class="small">Service names equal the compose names, so the same configs work in both. A ConfigMap repeats the env overrides.</p>
+      </div>
+      <div>
+        <ul class="small">
+          <li><code>kubectl apply -k k8s/</code> for the long-running stack; producer as a one-off Job</li>
+          <li>Memory: requests ~2.4 GiB, limits ~4.8 GiB; Minikube gets 4600 MB of the 6 GB WSL cap</li>
+          <li><code>enableServiceLinks: false</code> on every pod; otherwise Kubernetes injects <code>KAFKA_PORT=tcp://…</code> into the Kafka pod and the image reads it as a broker setting</li>
+          <li><code>tests/test_k8s_manifests.py</code> checks the manifests against compose and the configs in CI</li>
+          <li><span class="tag todo">TBD</span> Not yet run on Minikube. The demo uses Docker Compose</li>
+        </ul>
+        <figure class="shot" data-placeholder="[[SCREENSHOT: minikube_pods.png]] optional, only if a Minikube run happens">
+          <img src="../../docs/screenshots/minikube_pods.png" alt="kubectl get pods output for the aiml01 namespace on Minikube">
+        </figure>
+      </div>
+    </div>
+    <p class="src">Sources: docs/DEPLOY.md, k8s/, docker-compose.yml</p>
+  </div>
+</section>
+
+<!-- 12. Challenges -->
+<section class="slide" id="s12" aria-label="Challenges">
+  <div class="frame">
+    <p class="eyebrow">Challenges</p>
+    <h2>What went wrong and what fixed it</h2>
+    <div class="cols3">
+      <div class="card"><h3>Weak features</h3><p class="small">Card-keyed features scored AUC 0.43–0.62 on their own: card1–6 is a card product, not a person. Re-keying on <code>card1 | addr1 | day − D1</code> gave 217,850 clients and real velocity signal (<code>cnt_7d</code> AUC 0.644).</p></div>
+      <div class="card"><h3>Consumer too slow</h3><p class="small">One message at a time cost ~23 ms (Feast push 6.2, scorer 4.4, SQLite commit + publish ~10), so it topped out at ~43 tx/s. Micro-batching (≤ 200 messages, ≤ 50 ms wait) reached 242 tx/s.</p></div>
+      <div class="card"><h3>Latency from polling</h3><p class="small">The first consumer polled Kafka with a 1 s timeout. The batched poll waits at most 50 ms, which bounds the added delay: end-to-end p50 83 ms, p95 128 ms at 50 tx/s.</p></div>
+      <div class="card"><h3>SMOTE at serving time</h3><p class="small">SMOTE needs no missing values, so training imputed with medians. The serving model only matches training if it imputes the same way, so the training medians are stored in the feature spec and used by the scorer.</p></div>
+      <div class="card"><h3>scikit-learn dependency</h3><p class="small">The scorer loaded the model through XGBoost's scikit-learn wrapper, which needs scikit-learn. The serving image and its test environment do not install it. The scorer now loads a plain XGBoost <code>Booster</code>, and the test does the same.</p></div>
+      <div class="card"><h3>Data access</h3><p class="small">IEEE-CIS is competition data: the Kaggle jobs can only read it after the competition rules are accepted once on kaggle.com. The repo ships 300 synthetic rows with the same schema instead of real data.</p></div>
+    </div>
+    <p class="src">Sources: docs/FEATURES.md, docs/SERVING.md, docs/MODEL.md, PLAN.md (F0.3, F1.3), commit history</p>
+  </div>
+</section>
+
+<!-- 13. Limitations -->
+<section class="slide" id="s13" aria-label="Limitations and next steps">
+  <div class="frame">
+    <p class="eyebrow">Limitations and next steps</p>
+    <h2>What the numbers do not show yet</h2>
+    <div class="cols">
+      <div>
+        <h3>Limitations</h3>
+        <ul class="small">
+          <li>The best offline blend (0.545) is transductive and cannot be served; the served blend scores 0.525</li>
+          <li>Device fingerprints are coarse (no true device ids), so one ring component chains to 7,522 clients</li>
+          <li>The SMOTE gain may partly be median imputation; a weights-plus-imputation run is missing</li>
+          <li>Retraining can only reuse the same splits: the dataset has no newer data</li>
+          <li>Live drift covers amount, product and scores only; the full input set is checked offline</li>
+          <li>SQLite case store means one consumer replica</li>
+          <li>Not yet run live: monitor + drift demo, Minikube</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Next steps</h3>
+        <ul class="small">
+          <li>Re-pick the alert threshold on recent feedback labels before retraining</li>
+          <li>Add device and card risk lookups to the live blend (now client risk only)</li>
+          <li>Run the weights-plus-imputation ablation to explain the SMOTE gain</li>
+          <li>Train the GNN longer: val PR-AUC was still rising at epoch 400</li>
+          <li>Move the case store to Postgres to scale consumers horizontally</li>
+          <li>Stretch: Elliptic as a second GNN benchmark; a public dashboard URL</li>
+        </ul>
+      </div>
+    </div>
+    <p class="src">Sources: docs/GRAPH.md, docs/MODEL.md, docs/DRIFT.md, docs/DEPLOY.md, PLAN.md</p>
+  </div>
+</section>
+
+<!-- 14. Summary -->
+<section class="slide center" id="s14" aria-label="Summary and questions">
+  <div class="frame">
+    <p class="eyebrow">Summary</p>
+    <h2>Questions</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Features</td><td>Batch vs stream parity 1.6e-11; Feast point-in-time 100%</td></tr>
+        <tr><td>XGBoost + SMOTE (test)</td><td>PR-AUC 0.491, recall 45.4%, precision 55.8% at the val 1% FPR threshold</td></tr>
+        <tr><td>Served blend with GNN risk (test)</td><td>PR-AUC 0.525, recall 49.8%, precision 58.0%</td></tr>
+        <tr><td>Fraud rings (test)</td><td>9.9% fraud inside 1,001 rings vs 2.5% outside</td></tr>
+        <tr><td>Serving (laptop)</td><td>50 tx/s: end-to-end p50 83 / p95 128 ms; burst 242 tx/s</td></tr>
+        <tr><td>Drift (9 weeks)</td><td>No input drift, no trigger; FPR 0.88% → 1.36%</td></tr>
+      </tbody>
+    </table>
+    <p class="small">Code, tests and docs: branch <code>AIML-01</code>. Experiments: MLflow on DagsHub, experiment <code>aiml01-fraud</code>. Demo video: <code>[[LINK: demo video]]</code></p>
+  </div>
+</section>
+
+<nav class="bar" aria-label="Slide navigation">
+  <button type="button" id="prev" aria-label="Previous slide">←</button>
+  <span class="count" id="count">1 / 14</span>
+  <button type="button" id="next" aria-label="Next slide">→</button>
+  <div class="prog" aria-hidden="true"><div id="prog"></div></div>
+  <span class="hint">arrows / swipe · t: theme</span>
+  <button type="button" id="theme" aria-label="Toggle light or dark theme">◐</button>
+</nav>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var idx = 0;
+  var count = document.getElementById('count');
+  var prog = document.getElementById('prog');
+
+  function show(n) {
+    idx = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (s, k) { s.classList.toggle('active', k === idx); });
+    slides[idx].scrollTop = 0;
+    count.textContent = (idx + 1) + ' / ' + slides.length;
+    prog.style.width = ((idx + 1) / slides.length * 100) + '%';
+    if (location.hash !== '#' + (idx + 1)) history.replaceState(null, '', '#' + (idx + 1));
+  }
+  function fromHash() {
+    var n = parseInt(location.hash.slice(1), 10);
+    return isNaN(n) ? 0 : n - 1;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    switch (e.key) {
+      case 'ArrowRight': case 'PageDown': case ' ': e.preventDefault(); show(idx + 1); break;
+      case 'ArrowLeft': case 'PageUp': e.preventDefault(); show(idx - 1); break;
+      case 'Home': e.preventDefault(); show(0); break;
+      case 'End': e.preventDefault(); show(slides.length - 1); break;
+      case 't': case 'T': toggleTheme(); break;
+    }
+  });
+  document.getElementById('prev').addEventListener('click', function () { show(idx - 1); });
+  document.getElementById('next').addEventListener('click', function () { show(idx + 1); });
+
+  var x0 = null, y0 = null;
+  document.addEventListener('touchstart', function (e) {
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) show(idx + (dx < 0 ? 1 : -1));
+    x0 = y0 = null;
+  }, { passive: true });
+
+  function toggleTheme() {
+    var root = document.documentElement;
+    var cur = root.getAttribute('data-theme') ||
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  }
+  document.getElementById('theme').addEventListener('click', toggleTheme);
+
+  // Screenshot placeholders: show the [[SCREENSHOT: ...]] box when the image is not there yet.
+  Array.prototype.forEach.call(document.querySelectorAll('figure.shot img'), function (img) {
+    function miss() { img.parentElement.classList.add('missing'); }
+    img.addEventListener('error', miss);
+    if (img.complete && img.naturalWidth === 0) miss();
+  });
+
+  window.addEventListener('hashchange', function () { show(fromHash()); });
+  show(fromHash());
+})();
+</script>
+</body>
+</html>
