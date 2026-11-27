@@ -1,0 +1,48 @@
+# Streamlit analyst dashboard (services/dashboard/app.py), image built from
+# services/dashboard/Dockerfile. Reads/writes cases.db on the shared PVC; NodePort 30851.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: aiml01
+  labels: {app: dashboard}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: dashboard}
+  template:
+    metadata:
+      labels: {app: dashboard}
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: dashboard
+          image: aiml01-dashboard:dev
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef: {name: aiml01-serving}
+          ports:
+            - {name: http, containerPort: 8501}
+          volumeMounts:
+            - {name: bundle, mountPath: /app/data, subPath: data}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          readinessProbe:
+            httpGet: {path: /_stcore/health, port: 8501}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: bundle
+          persistentVolumeClaim: {claimName: aiml01-bundle}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  namespace: aiml01
+spec:
+  type: NodePort
+  selector: {app: dashboard}
+  ports:
+    - {name: http, port: 8501, targetPort: 8501, nodePort: 30851}

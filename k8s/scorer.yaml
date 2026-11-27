@@ -1,0 +1,75 @@
+# FastAPI scorer (services/scorer/app.py). "args" replaces the image CMD only, so
+# services/entrypoint.sh still runs "feast apply" against Redis first (as in compose).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scorer
+  namespace: aiml01
+  labels: {app: scorer}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: scorer}
+  template:
+    metadata:
+      labels: {app: scorer}
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-deps
+          image: aiml01-services:dev
+          imagePullPolicy: Never
+          command:
+            - python
+            - -c
+            - |
+              import socket, sys, time
+              for hp in sys.argv[1:]:
+                  host, port = hp.rsplit(":", 1)
+                  while True:
+                      try:
+                          socket.create_connection((host, int(port)), timeout=2).close()
+                          break
+                      except OSError:
+                          print(f"waiting for {hp}", flush=True)
+                          time.sleep(2)
+            - redis:6379
+          resources:
+            limits: {cpu: 200m, memory: 128Mi}
+      containers:
+        - name: scorer
+          image: aiml01-services:dev
+          imagePullPolicy: Never
+          args: ["uvicorn", "services.scorer.app:app", "--host", "0.0.0.0", "--port", "8000"]
+          envFrom:
+            - configMapRef: {name: aiml01-serving}
+          ports:
+            - {name: http, containerPort: 8000}
+          volumeMounts:
+            - {name: bundle, mountPath: /app/models, subPath: models, readOnly: true}
+            - {name: bundle, mountPath: /app/data, subPath: data}
+          resources:
+            requests: {cpu: 250m, memory: 400Mi}
+            limits: {cpu: "1", memory: 700Mi}
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+      volumes:
+        - name: bundle
+          persistentVolumeClaim: {claimName: aiml01-bundle}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scorer
+  namespace: aiml01
+spec:
+  selector: {app: scorer}
+  ports:
+    - {name: http, port: 8000, targetPort: 8000}

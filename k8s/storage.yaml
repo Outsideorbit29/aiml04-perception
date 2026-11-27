@@ -1,0 +1,16 @@
+# One PVC holds the serving bundle and the live state:
+#   models/ -> /app/models (read-only): model.json, spec.json, threshold.json, blend.json, client_risk.parquet
+#   data/   -> /app/data: history.parquet, replay.parquet, rings.parquet, cases.db (SQLite, WAL),
+#              consumer_stats.json
+# Minikube's default "standard" class is hostPath on the single node, so every pod mounts the same
+# directory (ReadWriteOnce allows several pods on one node). Fill it with k8s/bundle-loader.yaml.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aiml01-bundle
+  namespace: aiml01
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

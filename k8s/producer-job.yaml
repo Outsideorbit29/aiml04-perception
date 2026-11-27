@@ -1,0 +1,58 @@
+# Replay producer (services/producer/main.py) as a one-off Job; not in kustomization.yaml.
+#   kubectl apply -f k8s/producer-job.yaml      (edit args for rate/limit)
+#   kubectl -n aiml01 delete job producer       (before running it again)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: producer
+  namespace: aiml01
+  labels: {app: producer}
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: {app: producer}
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-deps
+          image: aiml01-services:dev
+          imagePullPolicy: Never
+          command:
+            - python
+            - -c
+            - |
+              import socket, sys, time
+              for hp in sys.argv[1:]:
+                  host, port = hp.rsplit(":", 1)
+                  while True:
+                      try:
+                          socket.create_connection((host, int(port)), timeout=2).close()
+                          break
+                      except OSError:
+                          print(f"waiting for {hp}", flush=True)
+                          time.sleep(2)
+            - kafka:9092
+          resources:
+            limits: {cpu: 200m, memory: 128Mi}
+      containers:
+        - name: producer
+          image: aiml01-services:dev
+          imagePullPolicy: Never
+          # "command" replaces the image ENTRYPOINT, like compose's entrypoint override.
+          command: ["python", "-m", "services.producer.main"]
+          args: ["--rate", "50", "--limit", "5000"]
+          env:
+            - {name: FEAST_APPLY, value: "0"}
+          envFrom:
+            - configMapRef: {name: aiml01-serving}
+          volumeMounts:
+            - {name: bundle, mountPath: /app/data, subPath: data, readOnly: true}
+          resources:
+            requests: {cpu: 100m, memory: 300Mi}
+            limits: {cpu: 500m, memory: 700Mi}
+      volumes:
+        - name: bundle
+          persistentVolumeClaim: {claimName: aiml01-bundle}
