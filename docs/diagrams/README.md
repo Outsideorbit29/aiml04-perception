@@ -104,9 +104,13 @@ Stages 1 to 4 each read the raw frame; only the tracker depends on the detector.
 place where they meet. `timings_ms` records the wall time of each call, so frames where YOLOP or
 MiDaS is skipped show a small amortised cost.
 
-## Exporting PNG/SVG (TODO for slides and Drive)
-Rendering locally needs `@mermaid-js/mermaid-cli`, which downloads a headless Chromium. That is too
-heavy for the laptop, so the export was not done. To export without installing anything:
-1. Open this page on GitHub, or paste a `.mmd` file into the Mermaid Live Editor in a browser.
-2. Export PNG (for slides) and SVG (for print), and save them as `docs/diagrams/architecture.png`
-   and `docs/diagrams/pipeline.png`.
+## PNG exports
+`architecture.png` (7014x1854) and `pipeline.png` (2102x2494) were rendered on 2026-11-27 from the
+`.mmd` files with Mermaid 10.9.1 in headless Chrome (Docker image
+`zenika/alpine-chrome:with-puppeteer`, scale 2, `useMaxWidth: false`).
+
+![System architecture](architecture.png)
+
+![Pipeline](pipeline.png)
+
+If you change a `.mmd` file, re-export it (Mermaid Live Editor → PNG works too) and overwrite the PNG.

@@ -15,7 +15,7 @@ How to use this file
 - To make a PPTX (laptop, light; pandoc turns "::: notes" into speaker notes), from the repo root:
     pandoc presentation/slides.md -o presentation/AIML-04_presentation.pptx --slide-level=2
   Then insert the visuals named in each notes block by hand and export a PDF for Drive.
-- Visuals that do not exist yet are marked TODO (diagram PNG export, demo video clips).
+- Visuals that do not exist yet are marked TODO (demo video clips).
 -->
 
 ## 1. Problem and brief
@@ -45,7 +45,7 @@ The headline: in the four scripted CARLA scenarios, a stopped car, a pedestrian 
 - Kaggle budget about 30 GPU-hours per week; one deadline shared with a second project
 
 ::: notes
-Visual: the compute-placement table from ARCHITECTURE.md 2.1, or the cloud half of `docs/diagrams/architecture.mmd` (PNG TODO).
+Visual: the compute-placement table from ARCHITECTURE.md 2.1, or the cloud half of `docs/diagrams/architecture.mmd` (`docs/diagrams/architecture.png`).
 
 Time: 0:40.
 
@@ -64,7 +64,7 @@ Kaggle gives about 30 GPU-hours a week, so long runs had to fit one session or r
 - Controller: AUTOPILOT / ACC / GAP / AEB / HOLD on a lead that stays in the ego lane for 3 frames
 
 ::: notes
-Visual: `docs/diagrams/architecture.png` (TODO: export from `docs/diagrams/architecture.mmd` in the Mermaid Live Editor). Optional second slide or inset: `docs/diagrams/pipeline.mmd`.
+Visual: `docs/diagrams/architecture.png`. Optional second slide or inset: `docs/diagrams/pipeline.mmd`.
 
 Time: 1:00.
 
