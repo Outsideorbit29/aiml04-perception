@@ -92,6 +92,25 @@ kubectl delete namespace aiml01                  # removes everything incl. the 
 minikube stop                                    # or: minikube delete (frees the disk too)
 ```
 
+### Live run (2026-11-27)
+Minikube v1.39.0 (Kubernetes v1.37.0, docker driver, 4 CPU / 4600 MB), steps 1–5 above, then
+teardown. All five Deployments reached Ready; the producer Job replayed 5,000 test-period
+transactions at 50 tx/s.
+
+| Metric (consumer_stats.json in the pod) | Minikube | Compose (F5, `docs/SERVING.md`) |
+|---|---|---|
+| Processed / alerts | 5,000 / 147 | 5,000 / 147 |
+| End-to-end p50 / p95 / p99 | 64 / 99 / 106 ms | 83 / 128 / 161 ms |
+| Scorer HTTP p50 / p95 | 3.8 / 5.0 ms | 3.8 / 5.3 ms |
+| Consumer capacity | 158 tx/s | – |
+
+Same alerts as Compose, so the cluster scores identically. Screenshot:
+`docs/screenshots/minikube_pods.png`. One fix was needed: the Kafka readiness probe
+(`kafka-topics.sh --list`, as in compose) starts a second JVM and timed out on every probe under the
+1-CPU / 900Mi limit, so the pod never became Ready and the consumer's init container waited
+forever. It is now a `tcpSocket` probe on 9092. `kubectl top` needs the metrics-server addon (not
+enabled in this run).
+
 Notes
 - With the docker driver on Windows, a NodePort is not reachable at `$(minikube ip):30851`
   directly; `minikube service ... --url` opens a tunnel and prints a `127.0.0.1` URL.

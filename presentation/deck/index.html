@@ -636,7 +636,7 @@ nav.bar .hint { color: var(--muted); font-size: 13px; }
 <section class="slide" id="s11" aria-label="Kubernetes manifests">
   <div class="frame">
     <p class="eyebrow">Deployment</p>
-    <h2>Docker Compose runs the stack; Minikube manifests are written and tested statically</h2>
+    <h2>The same stack runs on Docker Compose and on Minikube</h2>
     <div class="cols w60">
       <div>
         <table>
@@ -659,9 +659,9 @@ nav.bar .hint { color: var(--muted); font-size: 13px; }
           <li>Memory: requests ~2.4 GiB, limits ~4.8 GiB; Minikube gets 4600 MB of the 6 GB WSL cap</li>
           <li><code>enableServiceLinks: false</code> on every pod; otherwise Kubernetes injects <code>KAFKA_PORT=tcp://…</code> into the Kafka pod and the image reads it as a broker setting</li>
           <li><code>tests/test_k8s_manifests.py</code> checks the manifests against compose and the configs in CI</li>
-          <li><span class="tag todo">TBD</span> Not yet run on Minikube. The demo uses Docker Compose</li>
+          <li><span class="tag done">live</span> Minikube run: all pods Ready, 5,000 replayed, <strong>147 alerts (same as Compose)</strong>, end-to-end p95 99 ms. Fix needed: Kafka readiness probe → TCP check (the CLI probe timed out under the CPU limit)</li>
         </ul>
-        <figure class="shot" data-placeholder="[[SCREENSHOT: minikube_pods.png]] optional, only if a Minikube run happens">
+        <figure class="shot" data-placeholder="[[SCREENSHOT: minikube_pods.png]]">
           <img src="../../docs/screenshots/minikube_pods.png" alt="kubectl get pods output for the aiml01 namespace on Minikube">
         </figure>
       </div>
@@ -713,7 +713,7 @@ nav.bar .hint { color: var(--muted); font-size: 13px; }
           <li>Run the weights-plus-imputation ablation to explain the SMOTE gain</li>
           <li>Train the GNN longer: val PR-AUC was still rising at epoch 400</li>
           <li>Move the case store to Postgres to scale consumers horizontally</li>
-          <li>Stretch: Elliptic as a second GNN benchmark; a public dashboard URL</li>
+          <li>Stretch: Elliptic as a second GNN benchmark</li>
         </ul>
       </div>
     </div>

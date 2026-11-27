@@ -43,15 +43,14 @@ spec:
           resources:
             requests: {cpu: 250m, memory: 600Mi}
             limits: {cpu: "1", memory: 900Mi}
+          # TCP check, not `kafka-topics.sh --list` as in compose: the CLI starts a second JVM,
+          # which under the 1-CPU / 900Mi limit timed out on every probe (Minikube run 2026-11-27).
+          # The broker only opens 9092 once it is unfenced and running.
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+            tcpSocket: {port: 9092}
             initialDelaySeconds: 15
             periodSeconds: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 12
 ---
 apiVersion: v1

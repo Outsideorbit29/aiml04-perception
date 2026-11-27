@@ -64,7 +64,7 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 ## F7 Dashboard + Kubernetes (Dec 8–10)
 - [x] F7.1 Streamlit dashboard: live alerts, case status (open / confirmed / dismissed),
       analyst feedback labels, fraud-ring view
-- [x] F7.2 Kubernetes manifests (Minikube): Kafka, Redis, scorer, consumer, dashboard
+- [x] F7.2 Kubernetes manifests (Minikube): Kafka, Redis, scorer, consumer, dashboard (live run 2026-11-27)
 - [ ] F7.3 **(S)** Public dashboard on Render / Streamlit Cloud as the Live Deployment URL
 
 ## F8 Deliverables (Dec 10–13)

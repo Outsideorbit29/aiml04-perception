@@ -24,7 +24,9 @@ replay `docker compose run --rm producer --rate 50 --limit 5000 [--drift amount_
 `docker compose down`. Live drift demo passed 2026-11-27 (TransactionAmt PSI 1.6, dry-run retrain;
 `min_window` raised to 1000 after a warm-up false trigger). F8.1–F8.3 + F8.5 done: README,
 docs/ARCHITECTURE.md, API.md, TEST_REPORT.md, screenshots, deck `presentation/deck/index.html`.
-Open: Minikube live run (optional), demo video (script docs/DEMO_SCRIPT.md), reflection (user
+Minikube live run passed 2026-11-27 (147 alerts = Compose; Kafka probe now tcpSocket; minikube at
+`C:\Program Files\Kubernetes\Minikube`, stopped). F7.3 public demo: `services/dashboard/streamlit_app.py`
+(`DASHBOARD_DEMO=1`, synthetic data) ready; user deploys on Streamlit Cloud. Open: demo video (script docs/DEMO_SCRIPT.md), reflection (user
 rewrites docs/REFLECTION_DRAFT.md). Laptop browsers can't reach localhost; screenshots use
 `zenika/alpine-chrome:with-puppeteer` on the compose network.
 MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
