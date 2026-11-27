@@ -56,7 +56,7 @@ STATS_PATH=serving_bundle/data/consumer_stats.json SCORER_URL=http://localhost:8
 **Kubernetes (Minikube):** see [DEPLOY.md](DEPLOY.md); the dashboard is on NodePort 30851.
 
 ## Public demo (Streamlit Community Cloud)
-Live URL: **`<add the Streamlit Cloud URL here>`** (F7.3, the portal's optional Live Deployment URL)
+Live URL: **https://aiml01-fraud-dashboard.streamlit.app** (deployed 2026-11-27, Python 3.12) (F7.3, the portal's optional Live Deployment URL)
 
 The public app runs the same `services/dashboard/app.py` in **demo mode**. The entrypoint
 `services/dashboard/streamlit_app.py` sets `DASHBOARD_DEMO=1`; at startup

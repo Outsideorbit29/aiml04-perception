@@ -5,6 +5,10 @@ branch **`AIML-01`** of this repository. The other project, **AIML-04 Autonomous
 Perception Stack**, is on branch [`main`](https://github.com/Outsideorbit29/aiml04-perception/tree/main).
 The two branches are never merged.
 
+**Live demo:** [aiml01-fraud-dashboard.streamlit.app](https://aiml01-fraud-dashboard.streamlit.app): the analyst dashboard on
+Streamlit Community Cloud in demo mode (synthetic data, not IEEE-CIS; entrypoint
+`services/dashboard/streamlit_app.py`). The full streaming stack runs locally with Docker Compose or Minikube.
+
 ## Overview
 The platform reads a stream of card transactions, scores each one for fraud risk in a few
 milliseconds, links clients that share device fingerprints into candidate fraud rings, and gives

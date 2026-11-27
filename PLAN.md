@@ -65,7 +65,7 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 - [x] F7.1 Streamlit dashboard: live alerts, case status (open / confirmed / dismissed),
       analyst feedback labels, fraud-ring view
 - [x] F7.2 Kubernetes manifests (Minikube): Kafka, Redis, scorer, consumer, dashboard (live run 2026-11-27)
-- [ ] F7.3 **(S)** Public dashboard on Render / Streamlit Cloud as the Live Deployment URL
+- [x] F7.3 **(S)** Public dashboard on Render / Streamlit Cloud as the Live Deployment URL (https://aiml01-fraud-dashboard.streamlit.app, demo mode, synthetic data)
 
 ## F8 Deliverables (Dec 10–13)
 - [x] F8.1 README: architecture, setup, run steps, feature breakdown, results
