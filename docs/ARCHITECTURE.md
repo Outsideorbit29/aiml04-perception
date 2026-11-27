@@ -150,7 +150,9 @@ the risk table is only as fresh as the last GNN run, and device and card risk ar
 
 **Feature freshness check (409).** The consumer pushes features before it calls the scorer, and the
 scorer refuses to score when the features in Feast carry another `TransactionID`. That rules out
-scoring with stale features at the cost of a retry path if the push has not landed.
+scoring with stale features. Because the consumer pushes before it scores, the 409 should not
+happen in normal operation; if it does, the consumer logs the response and skips that transaction
+(there is no retry).
 
 **Micro-batching in the consumer.** A one-by-one consumer topped out at about 43 tx/s on the
 laptop (~23 ms per transaction, most of it the Feast push and the SQLite commit). Batching the
