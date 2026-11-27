@@ -1,6 +1,7 @@
 """Replay producer: test-period transactions -> Kafka topic, in time order, at a fixed rate.
 
 Run: python -m services.producer.main [--rate 50] [--limit 2000] [--start 0]
+     [--drift amount_scale=3,shift_after=2000[,ProductCD=C]]   # F6 drift demo (default: none)
 Each message is the raw transaction as JSON (NaN -> null) plus `_produced_at` (unix time) so the
 consumer can measure end-to-end latency. The label isFraud is included for offline evaluation
 in the case store; the scorer never uses it.
@@ -14,6 +15,7 @@ import time
 
 import pandas as pd
 
+from fraud.drift import apply_drift, parse_drift_spec
 from services.common import json_safe, serving_config
 
 
@@ -25,7 +27,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--rate", type=float, default=float(cfg["producer_rate"]))
     ap.add_argument("--limit", type=int, default=int(cfg["producer_limit"]))
     ap.add_argument("--start", type=int, default=0, help="skip this many replay rows")
+    ap.add_argument(
+        "--drift",
+        default="",
+        help="inject drift after N messages, e.g. amount_scale=3,shift_after=2000,ProductCD=C",
+    )
     args = ap.parse_args(argv)
+    drift = parse_drift_spec(args.drift)
 
     df = pd.read_parquet(cfg["replay_path"]).sort_values("TransactionDT", kind="stable")
     df = df.iloc[args.start :]
@@ -35,8 +43,12 @@ def main(argv: list[str] | None = None) -> None:
     interval = 1.0 / args.rate if args.rate > 0 else 0.0
     t_next = time.time()
     print(f"replaying {len(df):,} transactions at {args.rate} tx/s", flush=True)
+    if args.drift:
+        print(f"drift injection: {drift}", flush=True)
     for i, row in enumerate(df.to_dict("records"), 1):
         msg = json_safe(row)
+        if args.drift:
+            msg = apply_drift(msg, i, drift)
         msg["_produced_at"] = time.time()
         producer.produce(
             cfg["topic_transactions"], key=str(msg["TransactionID"]), value=json.dumps(msg)
