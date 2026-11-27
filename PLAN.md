@@ -34,10 +34,10 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
       (`scripts/make_fixtures.py`); the competition data is not redistributed in the repo
 
 ## F2 Features + Feast (Nov 29 – Dec 1)
-- [ ] F2.1 Features: per-card velocity (1 h / 24 h / 7 d counts and sums), amount / card mean,
+- [x] F2.1 Features: per-client velocity (1 h / 24 h / 7 d counts and sums), amount / card mean,
       new device, new address, email-domain risk
-- [ ] F2.2 Feast repo: entities (card, device), feature views, offline parquet, Redis online
-- [ ] F2.3 Point-in-time correct training set from Feast; parity test offline vs online
+- [x] F2.2 Feast repo: entity client, feature views, offline parquet, Redis online
+- [x] F2.3 Point-in-time correct training set from Feast; parity test offline vs online (`docs/FEATURES.md`)
 
 ## F3 XGBoost + MLflow (Dec 1–3)
 - [ ] F3.1 Baseline LR, then XGBoost with `scale_pos_weight` (SMOTE as a comparison)

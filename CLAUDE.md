@@ -16,10 +16,11 @@ worktree at `D:\Project_ai_aiml01`; AIML-04 (`main`) is at `D:\Project_ai`. Dead
 - Never submit on the portal for the user.
 
 ## Progress snapshot
-_Last updated: 2026-11-27_ — F0.1, F0.2, F1 done. Full data prep: 590,540 rows, fraud 3.5%,
-split 413,378 / 88,581 / 88,581 (`docs/EDA.md`). Splits are parquet in the Kaggle output of
-`anish2906/aiml01-data-prep` (`/kaggle/input/aiml01-data-prep/f1_data/splits/` when attached via
-kernel_sources). Next: F2 features + Feast. MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
+_Last updated: 2026-11-27_ — F0, F1, F2 done. F2: client key card1|addr1|day-D1, 18 features,
+offline/online parity exact, Feast checked (`docs/FEATURES.md`). Features are in the Kaggle output of
+`anish2906/aiml01-features` (`f2_features/features/{train,val,test}.parquet`, attach via
+kernel_sources). Next: F3 XGBoost + MLflow.
+MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
 `fraud.tracking.configure()` and must attach dataset `anish2906/aiml04-secrets` (file `dagshub_token`).
 
 Useful facts:
