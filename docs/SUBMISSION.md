@@ -2,58 +2,73 @@
 
 Each portal requirement mapped to the artifact that satisfies it.
 
-Status updated 2026-11-19 (M7.1 QA pass; M7.4–M7.6 work merged to `main`). `[~]` = partly done.
+Status updated 2026-11-27 (portal checked 2026-11-26). `[~]` = partly done.
+
+## Portal facts (checked 2026-11-26)
+- **Deadline: 2026-12-15** for both projects (was 2026-11-30). Plan: submit by 2026-12-14.
+- The form takes **one public GitHub repo URL** holding both projects "as subfolders or branches
+  (e.g. AIML-04 and AIML-01) with complete source code, tests, and screenshots".
+  - AIML-04 Autonomous Driving Perception Stack: branch `main` of
+    `https://github.com/Outsideorbit29/aiml04-perception`.
+  - AIML-01 Real-Time Financial Fraud Detection: branch `AIML-01` of the same repo.
+  - The README on `main` links to the `AIML-01` branch at the top so reviewers find both.
+- The Google Drive folder URL and the Live Deployment URL are **optional** now.
+- **Single submission only.** It is locked once submitted.
+
+## Deliverables
 
 | Portal requirement | Artifact | Location | Done | Status / owner |
 |---|---|---|---|---|
-| Working demo | 3–4 min screen recording of the CARLA scenarios with overlay | Drive `AIML-04/demo/` + link in README | [~] | Final recordings: Session C (`media/*_20261119_01*.mp4` and `night_rain_20261119_020707.mp4`, local), all four passed (M5.8 done). Video builder: `python scripts/make_demo_video.py --config configs/demo_video.yaml` (cards from `docs/DEMO_SCRIPT.md`). TODO: build, check, upload (user). README has marked placeholders for the GIF and video link; `media/demo.gif` is gitignored, so commit a small copy elsewhere (e.g. `docs/figures/`) if the README embeds it. |
-| GitHub repo with clean commits, README, setup | Public repo, `README.md`, `docs/SETUP.md` | GitHub | [~] | README results use the final Session C closed-loop runs (M7.1 QA, 2026-11-19). Fresh clone checked: ruff clean, pytest green (`docs/TEST_REPORT.md`). Demo GIF missing (M7.4). Kaggle fresh-clone run of the offline pipeline not repeated in M7.1 (last run `e12sh0xi`). No LICENSE file (**user decision**). |
-| Architecture diagram | `docs/diagrams/architecture.mmd` + `pipeline.mmd` (Mermaid, rendered by GitHub in `docs/diagrams/README.md` and README) | repo + Drive | [~] | Mermaid done (detector node now the mix model). PNG export for slides/Drive is TODO (**user**: Mermaid Live Editor in a browser, save as `docs/diagrams/architecture.png` and `pipeline.png`). |
+| Working demo (deployed or screen-recorded) | Demo video built from the four final Session C recordings, plus the README GIF | `media/aiml04_demo.mp4` (1 min 56 s, local, gitignored); `docs/figures/demo.gif` in the README | [~] | Video built (M7.4, `python scripts/make_demo_video.py --config configs/demo_video.yaml`, shots in `docs/DEMO_SCRIPT.md`). It is shorter than the 3–4 min in the original plan. TODO (**user**): upload it (YouTube unlisted or Drive) and replace the TODO link in README "Demo". |
+| GitHub repo with clean commits, README, setup | Public repo, `README.md`, `docs/SETUP.md`, `LICENSE` (AGPL-3.0) | GitHub `main` | [x] | README has the two-project note, results, screenshots and a License section. Fresh clone checked: ruff clean, pytest green (`docs/TEST_REPORT.md`); Kaggle fresh-clone pipeline smoke W&B `h31f403p` on `81a650e` (M7.1). |
+| Screenshots (in the repo) | One frame per scenario with the overlay | `docs/screenshots/` (`stopped_car.jpg`, `cut_in.jpg`, `pedestrian_crossing.jpg`, `night_rain.jpg`), shown in README "Screenshots" | [x] | Extracted from the final Session C recordings (frame numbers in the README captions). |
+| Architecture diagram | `docs/diagrams/architecture.mmd` + `pipeline.mmd` (Mermaid, rendered by GitHub in `docs/diagrams/README.md` and the README) | repo | [~] | Mermaid renders on GitHub, which meets the requirement. PNG export for the slides is still open (**user**, M7.3: Mermaid Live Editor, save as `docs/diagrams/architecture.png` and `pipeline.png`). |
 | Data / API documentation | `docs/API.md` (ROS2 topics/messages, Python interfaces, config files); dataset notes in README "Datasets and licences" and `docs/figures/eda_summary.md` | repo | [x] | Done. |
-| Test results | `docs/TEST_REPORT.md` (pytest/ruff counts, coverage by module, known gaps) + `docs/EXPERIMENTS.md` | repo + Drive `AIML-04/reports/` | [x] | CI green on `main` (GitHub Actions). Export `docs/TEST_REPORT.md` to PDF for the Drive (user). |
-| Performance / accuracy numbers | mAP, MOTA/IDF1, lane F1, depth AbsRel, `docs/benchmarks.md`, closed-loop table | repo + slides | [~] | In README, `docs/EXPERIMENTS.md`, `docs/benchmarks.md`, slides 5–12. TBD: live-loop p95 latency not logged (sim-ros-integrator); `docs/benchmarks.md` laptop section still quotes the 2026-11-18 "40–45 ms" and not the Session B 35.0–44.0 ms windows (edge-optimizer). |
-| 10-min presentation | `AIML-04_presentation.pptx/pdf` | Drive `AIML-04/` | [~] | Slide markdown with speaker notes and visuals: `presentation/slides.md` (14 slides, ~10 min). TODO (**user**): pandoc to PPTX, insert visuals (diagram PNG, demo clip), rehearse, export PDF. |
-| Individual reflection | `docs/REFLECTION.md` (1 page) | repo + Drive | [~] | Scaffold: `docs/REFLECTION_DRAFT.md` (marked DRAFT). TODO (**user**): rewrite in own words as `docs/REFLECTION.md`. |
-| Screenshots | `media/screenshots/` exported | Drive `AIML-04/screenshots/` | [ ] | TODO (**user**): export frames from the final CARLA recordings (one per scenario, plus the overlay freeze frame from `docs/DEMO_SCRIPT.md` shot 2); KITTI pipeline snapshots exist in the M4.6 Kaggle job output (W&B `e12sh0xi`). |
-| Datasets | Sample subset + download scripts (not the full dataset) | Drive `AIML-04/data_sample/` | [ ] | TODO M7.7: `tests/fixtures/` (5 BDD images, 3 s KITTI clip) + `scripts/data/` + Kaggle dataset links. Drive upload is the user's action. |
+| Test results | `docs/TEST_REPORT.md` (pytest/ruff counts, coverage by module, known gaps) + `docs/EXPERIMENTS.md` | repo | [x] | CI green on `main` (GitHub Actions). |
+| Performance / accuracy numbers | mAP, MOTA/IDF1, lane F1, depth AbsRel, `docs/benchmarks.md`, closed-loop table | README "Results", `docs/EXPERIMENTS.md`, `docs/benchmarks.md`, slides | [~] | Done except **TBD**: per-frame p95 latency in the live loop is not logged (owner `sim-ros-integrator`). Minor (owner `edge-optimizer`): `docs/benchmarks.md` still has an older 2026-11-18 "40–45 ms" paragraph above the full all-sessions table (35.0–49.2 ms, median 40.6 ms). The two do not contradict each other, but the older paragraph could be removed. |
+| 10-min presentation | Deck https://claude.ai/artifact/Gi42bagsTDZuMyVkVgz8UW (source `presentation/deck/`), slide markdown with notes `presentation/slides.md` | repo (+ PDF export) | [~] | TODO (**user**): fill the deck placeholders (demo video link, diagram PNG), rehearse to 10 min, export PDF. Slide 1 can use `docs/screenshots/stopped_car.jpg`. |
+| Individual reflection | `docs/REFLECTION.md` (1 page) | repo | [~] | Scaffold: `docs/REFLECTION_DRAFT.md` (marked DRAFT). TODO (**user**, M7.6): rewrite in your own words as `docs/REFLECTION.md` and delete the draft box. |
+| Datasets | Download/conversion scripts, small fixtures, Kaggle dataset links | `scripts/data/`, `kaggle/data_prep/`, `tests/fixtures/`, README "Datasets and licences" | [x] | Full datasets are linked, not committed. A Drive `data_sample/` is optional now (see below). |
 
-## Drive folder plan (M7.7, upload is the user's action)
+## Remaining for the user (in order)
+1. Rewrite `docs/REFLECTION_DRAFT.md` as `docs/REFLECTION.md` in your own words (M7.6).
+2. Upload `media/aiml04_demo.mp4` (YouTube unlisted or Drive), put the link in README "Demo" and
+   in the deck.
+3. Export `docs/diagrams/architecture.mmd` and `pipeline.mmd` to PNG (M7.3) and fill the deck
+   placeholders; rehearse and export the deck PDF.
+4. Check that branch `AIML-01` is pushed, complete and has its own README, tests and screenshots.
+5. Submit once on the portal by 2026-12-14 (deadline 2026-12-15).
+
+## Optional: Drive folder (M7.7)
+The Drive folder URL is optional on the portal now. If you still make one (for the video and the
+deck PDF), use this layout. Upload is the user's action.
 
 ```
 Anish_Kumar_Gupta_Capstone_Projects/          (share: Anyone with the link can view)
 ├─ AIML-04/
-│  ├─ README.txt                    repo URL, demo link, one-paragraph summary, folder index
-│  ├─ AIML-04_presentation.pdf      exported from presentation/slides.md (+ .pptx)
+│  ├─ README.txt                    repo URL (branch main), demo link, one-paragraph summary
+│  ├─ AIML-04_presentation.pdf      exported deck (+ .pptx if made)
 │  ├─ AIML-04_reflection.pdf        from docs/REFLECTION.md (the rewritten version)
-│  ├─ code/
-│  │  └─ aiml04-perception_<commit>.zip   `git archive` of the submitted commit (no models, data, media)
 │  ├─ demo/
-│  │  ├─ AIML-04_demo.mp4           edited 3–4 min video (docs/DEMO_SCRIPT.md)
-│  │  └─ raw/                       the four final scenario recordings (optional)
-│  ├─ reports/
-│  │  ├─ EXPERIMENTS.pdf            docs/EXPERIMENTS.md
-│  │  ├─ benchmarks.pdf             docs/benchmarks.md
-│  │  ├─ API.pdf                    docs/API.md
-│  │  ├─ architecture.png, pipeline.png   docs/diagrams exports
-│  │  ├─ lanes_comparison.md, depth_comparison.md, lanes_failures.jpg, eda_*.png   docs/figures
-│  │  └─ TEST_REPORT.pdf            docs/TEST_REPORT.md (M7.1)
-│  ├─ screenshots/                  one PNG per scenario + overlay freeze frame + KITTI snapshot
-│  └─ data_sample/
-│     ├─ fixtures/                  copy of tests/fixtures/ (5 BDD images + labels, 3 s KITTI clip)
-│     ├─ scripts_data/              copy of scripts/data/
-│     └─ DATASETS.txt               links: Kaggle awsaf49/bdd100k-dataset, solesensei/solesensei_bdd100k,
-│                                   garymk/kitti-3d-object-detection-dataset, leducnhuan/kitti-tracking;
-│                                   licences (BDD100K non-commercial, KITTI CC BY-NC-SA 3.0); the CARLA
-│                                   frames dataset is private on Kaggle (say so)
-└─ AIML-01/                         second project (separate work)
+│  │  ├─ AIML-04_demo.mp4           media/aiml04_demo.mp4
+│  │  └─ raw/                       the four final Session C recordings (optional)
+│  ├─ reports/                      PDFs of docs/EXPERIMENTS.md, benchmarks.md, API.md, TEST_REPORT.md;
+│  │                                diagram PNGs
+│  ├─ screenshots/                  copy of docs/screenshots/
+│  └─ data_sample/                  copy of tests/fixtures/ + DATASETS.txt (Kaggle links and licences:
+│                                   BDD100K non-commercial, KITTI CC BY-NC-SA 3.0; CARLA frames dataset private)
+└─ AIML-01/                         second project
 ```
-Do not upload model weights, full datasets or `kaggle.json`.
+Do not upload model weights, full datasets or `kaggle.json`. The local `.codex/` folder is
+gitignored and must not go into any zip.
 
 ## Portal form
-- GitHub Repository URL: the repo root
-- Live Deployment URL: a demo video link (YouTube unlisted or Drive), or a Hugging Face Space running the offline pipeline on uploaded video **(S)**
-- Drive Folder URL: `Anish_Kumar_Gupta_Capstone_Projects` (both projects)
-- Notes: results summary and how to run
+- GitHub Repository URL: `https://github.com/Outsideorbit29/aiml04-perception` (AIML-04 on `main`,
+  AIML-01 on branch `AIML-01`; say this in the notes too)
+- Live Deployment URL (optional): the demo video link, if uploaded. No Hugging Face Space was built
+  (M7.8 stretch).
+- Drive Folder URL (optional): `Anish_Kumar_Gupta_Capstone_Projects`, if made
+- Notes: which branch holds which project, results summary, how to run
 
 **Submit only once, after AIML-01 is also ready.**
 

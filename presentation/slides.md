@@ -26,7 +26,7 @@ How to use this file
 - Result: in CARLA the car stopped without a collision in all 4 scripted scenarios
 
 ::: notes
-Visual: title strip plus one frame from `media/stopped_car_20261119_004127.mp4` with the overlay (lead box, distance, mode). TODO: export the frame.
+Visual: title strip plus `docs/screenshots/stopped_car.jpg` (frame 178 of the final Session C recording `media/stopped_car_20261119_013806.mp4`; overlay shows the lead box, distance and ACC mode). Other scenario frames are in `docs/screenshots/`.
 
 Time: 0:45.
 
