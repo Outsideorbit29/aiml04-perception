@@ -121,6 +121,7 @@ def fit_xgb(xtr, ytr, xva, yva, cfg: dict, imbalance: str, smote_cfg: dict, seed
         xtr, ytr = sm.fit_resample(impute(xtr, medians), ytr)
         xva = impute(xva, medians)
         info["smote_rows"] = int(len(ytr))
+        info["medians"] = medians
 
         def transform(x, m=medians):
             return impute(x, m)
@@ -242,6 +243,8 @@ def main(argv: list[str] | None = None) -> dict:
                 "threshold": thr,
             }
             metrics.update({k: v for k, v in info.items() if isinstance(v, (int, float))})
+            if "medians" in info:  # serve with the same imputation as training
+                spec.medians = [float(m) for m in info["medians"]]
             mlflow.log_metrics(metrics)
             run_id = mlflow.active_run().info.run_id
             if exp["model"] == "xgb":
@@ -257,9 +260,9 @@ def main(argv: list[str] | None = None) -> dict:
 
     fig = pr_curve_figure(curves, out_dir / "pr_curve_val.png")
     best = max(results, key=lambda r: r["val_pr_auc"])
-    # Serving model: best class-weighted XGBoost (SMOTE's imputation isn't reproduced online).
-    weighted = [r for r in results if models[r["name"]][3].get("imbalance") == "weight"]
-    serving = max(weighted, key=lambda r: r["val_pr_auc"]) if weighted else None
+    # Serving model: best XGBoost on val PR-AUC (its spec carries any SMOTE imputation medians).
+    xgb_runs = [r for r in results if models[r["name"]][3]["model"] == "xgb"]
+    serving = max(xgb_runs, key=lambda r: r["val_pr_auc"]) if xgb_runs else None
     registered = None
     if serving:
         model, spec, thr, exp = models[serving["name"]]

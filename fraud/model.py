@@ -3,6 +3,8 @@
 `FeatureSpec` fixes the column order and the category vocabularies learned on the training split,
 so the scorer turns an incoming transaction into exactly the matrix the model was trained on.
 Categoricals become integer codes (unknown or missing -> NaN), which tree models handle directly.
+If `medians` is set (models trained on SMOTE-resampled data), NaNs are replaced by the training
+medians, exactly as during training.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ class FeatureSpec:
     numeric: list[str]
     categorical: list[str]
     vocab: dict[str, list[str]] = field(default_factory=dict)
+    medians: list[float] | None = None
 
     @property
     def columns(self) -> list[str]:
@@ -51,7 +54,12 @@ class FeatureSpec:
             s = df[c].astype("object")
             codes = s.map(lambda v, idx=index: idx.get(str(v), np.nan) if pd.notna(v) else np.nan)
             cols.append(codes.to_numpy(dtype="float32"))
-        return np.column_stack(cols) if cols else np.empty((len(df), 0), dtype="float32")
+        x = np.column_stack(cols) if cols else np.empty((len(df), 0), dtype="float32")
+        if self.medians is not None:
+            med = np.asarray(self.medians, dtype="float32")
+            rows, idx = np.where(np.isnan(x))
+            x[rows, idx] = med[idx]
+        return x
 
     def transform_row(self, row: Mapping[str, Any]) -> np.ndarray:
         """One transaction (dict) -> 1 x n_features matrix; same encoding as `transform`."""

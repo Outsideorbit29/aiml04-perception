@@ -62,3 +62,11 @@ def test_feature_spec_roundtrip(tmp_path):
     row = {"amt": 5.0, "prod": "W", "rare": "x"}
     assert np.array_equal(again.transform_row(row), x, equal_nan=True)
     assert again.columns == ["amt", "prod", "rare"]
+
+
+def test_feature_spec_medians_impute():
+    train = pd.DataFrame({"a": [1.0, np.nan, 3.0] * 10, "c": ["W", None, "W"] * 10})
+    spec = FeatureSpec.fit(train, ["a"], ["c"], min_count=1)
+    spec.medians = [2.0, 0.0]
+    x = spec.transform(pd.DataFrame({"a": [np.nan], "c": [None]}))
+    assert x.tolist() == [[2.0, 0.0]]
