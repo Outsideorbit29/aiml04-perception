@@ -43,4 +43,4 @@ def test_build_features_end_to_end(tmp_path):
     assert saved["rows"] == 300
     for name in ("train", "val", "test"):
         assert (out / "features" / f"{name}.parquet").exists()
-    assert (out / "card_features.parquet").exists()
+    assert (out / "client_features.parquet").exists()
