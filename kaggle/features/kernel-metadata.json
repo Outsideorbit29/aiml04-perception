@@ -1,0 +1,13 @@
+{
+  "id": "anish2906/aiml01-features",
+  "title": "aiml01-features",
+  "code_file": "runner.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": ["anish2906/aiml01-data-prep"]
+}

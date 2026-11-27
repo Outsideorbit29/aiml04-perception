@@ -1,0 +1,32 @@
+# F2 feature engineering. All features for a transaction use only EARLIER transactions
+# (processing order = TransactionDT, stable), so they can be computed identically online.
+input_dir: auto          # folder with splits/{train,val,test}.parquet; "auto" searches /kaggle/input
+out_dir: /kaggle/working/f2_features
+
+# Card entity: the card fields concatenated (missing -> "NA"). Columns absent from the data
+# are skipped.
+card_key_columns: [card1, card2, card3, card4, card5, card6]
+device_column: DeviceInfo
+addr_column: addr1
+email_column: P_emaildomain
+amount_column: TransactionAmt
+time_column: TransactionDT
+id_column: TransactionID
+target: isFraud
+
+# Velocity windows in seconds: count and amount sum of the card's earlier transactions in
+# [t - window, t). Same-second transactions are excluded from windows.
+windows:
+  1h: 3600
+  24h: 86400
+  7d: 604800
+
+# Raw transaction fields passed through to the model (they arrive in the Kafka message).
+passthrough_numeric: [TransactionAmt, hour, weekday, has_identity, dist1,
+  C1, C2, C4, C5, C6, C9, C11, C13, C14, D1, D2, D3, D4, D10, D15]
+passthrough_categorical: [ProductCD, card4, card6, P_emaildomain, R_emaildomain, DeviceType,
+  M4, M6]
+
+# Online/offline parity check on this many rows (full mode); smoke mode uses smoke_rows.
+parity_rows: 30000
+smoke_rows: 20000

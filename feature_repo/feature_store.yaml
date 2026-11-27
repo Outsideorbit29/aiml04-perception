@@ -1,0 +1,10 @@
+# Feast repo for AIML-01. Development defaults: parquet offline store + SQLite online store.
+# The Kubernetes deployment (F7) swaps the online store for Redis.
+project: aiml01_fraud
+registry: data/registry.db
+provider: local
+offline_store:
+  type: file
+online_store:
+  type: sqlite
+  path: data/online_store.db

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from fraud.data import add_time_columns
 from fraud.eda import eda_summary, fraud_rate_by
 from fraud.synthetic import make_synthetic
@@ -28,6 +30,7 @@ def test_fraud_rate_by_handles_missing():
 
 
 def test_prep_data_end_to_end(tmp_path):
+    pytest.importorskip("pyarrow")
     result = prep_main(
         [
             "--config",
