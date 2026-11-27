@@ -27,8 +27,9 @@ docs/ARCHITECTURE.md, API.md, TEST_REPORT.md, screenshots, deck `presentation/de
 Minikube live run passed 2026-11-27 (147 alerts = Compose; Kafka probe now tcpSocket; minikube at
 `C:\Program Files\Kubernetes\Minikube`, stopped). F7.3 public demo: `services/dashboard/streamlit_app.py`
 (`DASHBOARD_DEMO=1`, synthetic data) live at https://aiml01-fraud-dashboard.streamlit.app (Streamlit Community Cloud, branch AIML-01). Open: demo video (script docs/DEMO_SCRIPT.md), reflection (user
-rewrites docs/REFLECTION_DRAFT.md). Laptop browsers can't reach localhost; screenshots use
-`zenika/alpine-chrome:with-puppeteer` on the compose network.
+rewrites docs/REFLECTION_DRAFT.md). Chrome/Edge time out on Docker-published ports (WSL
+`networkingMode=mirrored`; curl/PowerShell/Python work): use `py -3.14 scripts/browser_relay.py
+18501:8501 18000:8000` and open 127.0.0.1:18501. Screenshots: `zenika/alpine-chrome:with-puppeteer`.
 MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
 `fraud.tracking.configure()` and must attach dataset `anish2906/aiml04-secrets` (file `dagshub_token`).
 
