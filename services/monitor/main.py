@@ -126,6 +126,10 @@ class Monitor:
             print(f"waiting for the case store {db}", flush=True)
             return None
         total = count_cases(db)
+        if total == 0:
+            # PSI against an empty window is meaningless (it printed values like 8.3 before).
+            print("case store is empty, waiting for scored transactions", flush=True)
+            return None
         baseline_ready = self._ensure_score_baseline(db, total)
         cases = read_cases(db, int(self.mon["window_rows"]))
         result = monitor_window(cases, self.reference, self.cfg, self.expected_alert_rate)

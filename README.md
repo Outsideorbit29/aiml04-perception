@@ -233,7 +233,11 @@ More: [scorer OpenAPI docs](docs/screenshots/scorer_docs.png),
 
 ## Demo video
 
-> **Placeholder.** Demo video link: TBD (3–4 min screen recording, to be uploaded by the user).
+Captioned demo (3:12, no voice-over): **link TBD after upload**. Built from a live run of the Docker
+stack: 6,000 replayed transactions with injected drift, screenshots of the dashboard and scorer from
+headless Chrome, captions and result cards. Rebuild it with `bash scripts/record_demo.sh` (about 4 min
+of Docker) and `python scripts/make_demo_video.py` (writes `media/aiml01_demo.mp4`, which is gitignored);
+captions are in `configs/demo_video.yaml`. A narrated take can follow `docs/DEMO_SCRIPT.md`.
 
 ## Documentation
 

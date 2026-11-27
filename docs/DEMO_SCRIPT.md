@@ -71,6 +71,12 @@ Response fields to point at: `score`, `p_xgb`, `gnn_risk`, `alert`, `threshold`,
 Footer line: "Laptop: Docker Desktop, 4 CPUs / 6 GB. Offline drift over 9 weeks: no retrain
 trigger; false-alert rate 0.88% → 1.36%."
 
+## Captioned version (no narration)
+`bash scripts/record_demo.sh` then `python scripts/make_demo_video.py` builds a 3:12 captioned
+video (`media/aiml01_demo.mp4`) from a live run: 6,000 replayed transactions with
+`--drift amount_scale=3,shift_after=2500`, dashboard / scorer frames from headless Chrome, terminal
+cards from the logs, `/score` response and consumer stats. Captions: `configs/demo_video.yaml`.
+
 ## Recording checklist
 
 > **Browser access on this laptop.** WSL runs with `networkingMode=mirrored` (needed by AIML-04),

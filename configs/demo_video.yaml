@@ -1,0 +1,145 @@
+# F8.4 captioned demo video (scripts/make_demo_video.py). Material from scripts/record_demo.sh.
+# Numbers in cards come from the docs (offline results) or from the captured run ({run.*} fields,
+# filled from media/demo_capture/*). Sped-up screen segments say so in their caption.
+output: media/aiml01_demo.mp4
+capture_dir: media/demo_capture
+size: [1280, 720]
+fps: 25
+caption_height: 104
+
+segments:
+  - type: card
+    seconds: 7
+    title: Real-Time Financial Fraud Detection
+    lines:
+      - AIML-01 · Nexvia Technologies internship capstone (AI/ML track)
+      - Anish Kumar Gupta
+      - ""
+      - Kafka · Feast / Redis · XGBoost + GraphSAGE · FastAPI · Streamlit · Evidently / PSI
+      - "Data: IEEE-CIS, 590,540 card transactions, 3.5% fraud, split by time"
+
+  - type: image
+    path: "{capture}/architecture.png"
+    seconds: 14
+    captions:
+      - {at: 0, text: "Offline on Kaggle: data prep → point-in-time features → XGBoost (SMOTE) + GraphSAGE GNN → serving bundle. Runs logged to MLflow on DagsHub."}
+      - {at: 7, text: "Online on the laptop: producer → Kafka → consumer (features → Feast / Redis) → FastAPI scorer → case store → dashboard and drift monitor."}
+
+  - type: card
+    seconds: 14
+    title: Offline results (test split, threshold set on val at 1% FPR)
+    lines:
+      - "Features: batch vs stream parity 1.6e-11 on 30,000 tx; Feast point-in-time 100%"
+      - "Logistic regression            PR-AUC 0.357"
+      - "XGBoost + features + SMOTE     PR-AUC 0.491   recall 45.4%   precision 55.8%"
+      - "GraphSAGE GNN alone            PR-AUC 0.506"
+      - "Served blend (XGB + client GNN risk)   PR-AUC 0.525   recall 49.8%   precision 58.0%"
+      - "Fraud rings: 1,001 rings; test fraud 9.9% inside vs 2.5% outside"
+    caption: "PR-AUC, not accuracy: predicting 'legit' for everything is already ~97% accurate."
+
+  - type: terminal
+    file: "{capture}/ps.txt"
+    command: docker compose up -d kafka redis scorer consumer monitor dashboard && docker compose ps
+    seconds: 7
+    caption: "Docker Compose stack on the laptop: Kafka (KRaft), Redis (Feast online store), FastAPI scorer, stream consumer, drift monitor, Streamlit dashboard."
+
+  - type: terminal
+    file: "{capture}/producer.log"
+    command: docker compose run --rm producer --rate 50 --limit 6000 --drift amount_scale=3,shift_after=2500
+    max_lines: 4
+    seconds: 6
+    caption: "Replay 6,000 test-period transactions at 50 tx/s. After 2,500 the amounts are multiplied by 3: an injected drift for the monitor."
+
+  - type: frames
+    segs: [overview_live]
+    seconds: 30
+    crop_top: 70
+    captions:
+      - {at: 0, text: "Live overview while the replay runs: transactions scored, alerts, alert rate vs the expected 2.7%, latency, throughput (screen sped up ~1.7×)."}
+      - {at: 15, text: "The threshold flags at most 1% of legitimate transactions (set on validation); with ~3.5% fraud and ~50% recall that is ~2.7% alerts."}
+
+  - type: frames
+    segs: [alerts, alerts_confirm, alerts_dismiss]
+    seconds: 14
+    caption: "Alert queue: each alert shows the XGBoost probability, the client's GNN graph risk and the ring. Confirm / Dismiss stores an analyst feedback label."
+
+  - type: frames
+    segs: [rings_table, rings_graph]
+    seconds: 13
+    caption: "Fraud rings: clients linked by a specific device fingerprint (found without labels). On test data, 9.9% of ring transactions are fraud vs 2.5% outside."
+
+  - type: frames
+    segs: [cases, model]
+    seconds: 8
+    caption: "Cases tab (open / confirmed / dismissed, live precision) and the model page: scorer /model and consumer stage latencies."
+
+  - type: frames
+    segs: [docs, docs_score]
+    seconds: 7
+    crop_top: 0
+    caption: "FastAPI scorer (OpenAPI docs): POST /score reads the client's features from Feast / Redis, applies XGBoost + GNN risk, returns score and timings."
+
+  - type: terminal
+    file: "{capture}/score.json"
+    command: "POST /score  (latest replayed transaction)"
+    seconds: 8
+    caption: "{run.score_caption}"
+
+  - type: terminal
+    file: "{capture}/monitor.log"
+    command: docker compose logs monitor
+    grep: "window|dry-run"
+    exclude: "too small"
+    strip_prefix: "monitor-1  | "
+    seconds: 16
+    caption: "Drift monitor, every 30 s on the latest 2,000 cases: {run.drift_caption}"
+
+  - type: frames
+    segs: [overview_final]
+    seconds: 6
+    crop_top: 70
+    caption: "End of the replay: {run.processed} transactions scored, {run.alerts} alerts."
+
+  - type: card
+    seconds: 9
+    title: Measured in this run (laptop, Docker Desktop, 4 CPUs / 6 GB)
+    lines:
+      - "End-to-end latency (produced → scored and stored): p50 {run.e2e_p50} ms, p95 {run.e2e_p95} ms"
+      - "Scorer HTTP round trip: p50 {run.http_p50} ms, p95 {run.http_p95} ms"
+      - "Consumer capacity: {run.capacity} tx/s (micro-batches of up to 200 messages)"
+      - ""
+      - "F5 load test (docs/SERVING.md): 50 tx/s steady p50 83 / p95 128 ms; burst 242 tx/s"
+    caption: "The monitor and dashboard run alongside the scorer here; the F5 numbers were measured without them."
+
+  - type: card
+    seconds: 8
+    title: Drift over time, offline (9 weekly windows, Evidently + PSI)
+    lines:
+      - "No input feature reached PSI 0.2 (largest 0.19); score PSI ≤ 0.006"
+      - "False-alert rate at the fixed threshold: 0.88% (week 1) → 1.36% (week 9)"
+      - "No retrain trigger fired (trigger at 1.5× the 1% budget); thresholds were not tuned"
+      - "Retraining = kaggle kernels push -p kaggle/train (dry run by default)"
+    caption: "Takeaway: re-pick the threshold on recent analyst feedback before the inputs themselves drift."
+
+  - type: image
+    path: docs/screenshots/minikube_pods.png
+    seconds: 8
+    caption: "The same stack on Kubernetes (Minikube): all pods Ready, 5,000 replayed, 147 alerts, identical to Docker Compose; end-to-end p95 99 ms."
+
+  - type: frames
+    segs: [public]
+    seconds: 5
+    crop_top: 0
+    caption: "Public demo on Streamlit Community Cloud (synthetic data, not IEEE-CIS): aiml01-fraud-dashboard.streamlit.app"
+
+  - type: card
+    seconds: 12
+    title: Summary
+    lines:
+      - "Served blend (XGBoost + client GNN risk): test PR-AUC 0.525, recall 49.8%, precision 58.0%"
+      - "Point-in-time features shared by training and streaming (parity 1.6e-11)"
+      - "Laptop serving: p95 128 ms at 50 tx/s; 242 tx/s burst; Compose and Minikube"
+      - "Drift monitor with a dry-run retraining trigger; analyst dashboard with feedback"
+      - ""
+      - "Code, tests, docs: github.com/Outsideorbit29/aiml04-perception (branch AIML-01)"
+    caption: "Limitations: the best offline blend (0.545) is transductive; device fingerprints are coarse; the live drift demo is synthetic."

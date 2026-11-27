@@ -26,7 +26,7 @@ replay `docker compose run --rm producer --rate 50 --limit 5000 [--drift amount_
 docs/ARCHITECTURE.md, API.md, TEST_REPORT.md, screenshots, deck `presentation/deck/index.html`.
 Minikube live run passed 2026-11-27 (147 alerts = Compose; Kafka probe now tcpSocket; minikube at
 `C:\Program Files\Kubernetes\Minikube`, stopped). F7.3 public demo: `services/dashboard/streamlit_app.py`
-(`DASHBOARD_DEMO=1`, synthetic data) live at https://aiml01-fraud-dashboard.streamlit.app (Streamlit Community Cloud, branch AIML-01). Open: demo video (script docs/DEMO_SCRIPT.md), reflection (user
+(`DASHBOARD_DEMO=1`, synthetic data) live at https://aiml01-fraud-dashboard.streamlit.app (Streamlit Community Cloud, branch AIML-01). Captioned demo video built 2026-11-27 (3:12, media/aiml01_demo.mp4, local; `bash scripts/record_demo.sh` + `python scripts/make_demo_video.py`). Open: upload video + add link, reflection (user
 rewrites docs/REFLECTION_DRAFT.md). Chrome/Edge time out on Docker-published ports (WSL
 `networkingMode=mirrored`; curl/PowerShell/Python work): use `py -3.14 scripts/browser_relay.py
 18501:8501 18000:8000` and open 127.0.0.1:18501. Screenshots: `zenika/alpine-chrome:with-puppeteer`.

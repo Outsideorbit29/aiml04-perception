@@ -151,6 +151,21 @@ def test_monitor_end_to_end_with_case_store(tmp_path, monkeypatch):
     store.close()
 
 
+def test_monitor_skips_empty_case_store(tmp_path, monkeypatch, capsys):
+    hist = pd.DataFrame({"TransactionAmt": [1.0, 2.0, 3.0], "ProductCD": ["W", "C", "W"]})
+    ref = build_reference(hist, ["TransactionAmt"], ["ProductCD"])
+    (tmp_path / "ref.json").write_text(json.dumps({"columns": ref, "expected_alert_rate": None}))
+    monkeypatch.setenv("MONITOR_REFERENCE_PATH", str(tmp_path / "ref.json"))
+    monkeypatch.setenv("MONITOR_STATUS_PATH", str(tmp_path / "status.json"))
+    db = tmp_path / "cases.db"
+    store = CaseStore(db)  # schema only, no scored rows yet
+    monitor = Monitor(monitor_config(), {"cases_db": str(db)})
+    assert monitor.check() is None
+    assert "empty" in capsys.readouterr().out
+    assert not (tmp_path / "status.json").exists()
+    store.close()
+
+
 def test_monitor_waits_for_missing_db(tmp_path, monkeypatch):
     monkeypatch.setenv("MONITOR_REFERENCE_PATH", str(tmp_path / "missing.json"))
     cfg = monitor_config()

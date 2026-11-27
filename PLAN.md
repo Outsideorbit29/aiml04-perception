@@ -71,7 +71,7 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 - [x] F8.1 README: architecture, setup, run steps, feature breakdown, results
 - [x] F8.2 Architecture diagram + API docs (FastAPI OpenAPI) + data docs
 - [x] F8.3 Test report and metrics table; screenshots in `docs/screenshots/`
-- [ ] F8.4 Demo video (3–4 min)
+- [x] F8.4 Demo video (3–4 min): captioned 3:12, `media/aiml01_demo.mp4` (local; upload + link: user)
 - [x] F8.5 10-minute presentation
 - [ ] F8.6 Individual reflection (**user**, own words)
 
