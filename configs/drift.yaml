@@ -1,0 +1,68 @@
+# F6 drift monitoring and the automatic retraining trigger (fraud/drift.py).
+# Offline: scripts/drift_report.py on Kaggle (kaggle/drift). Live: services/monitor.
+
+psi:
+  bins: 10                    # reference quantile bins per numeric feature (+ a missing bin)
+  max_categories: 20          # top reference categories (+ other + missing)
+  eps: 1.0e-4                 # proportion floor inside the log
+  feature_threshold: 0.2      # a feature counts as drifted at PSI >= this (0.1 moderate, 0.25 large)
+
+# Retrain when any enabled check fires on a window.
+retrain:
+  checks: [data_drift, score_drift, precision, alert_budget, alert_rate, pr_auc]
+  min_window: 500             # fewer transactions -> no decision
+  drift_share: 0.3            # share of monitored features with PSI >= feature_threshold
+  score_psi: 0.2              # PSI of the model score vs the reference (val) scores
+  min_reviewed: 50            # precision / alert-budget checks need this many reviewed alerts
+  min_precision: 0.35         # val precision at the 1% FPR threshold is ~0.56 (docs/MODEL.md)
+  alert_budget: 0.01          # = configs/train.yaml max_fpr
+  max_fpr_budget_ratio: 1.5   # estimated false-alert rate above 1.5% of legit traffic
+  max_alert_rate_ratio: 2.0   # alert rate vs the reference (val) alert rate
+  min_pr_auc: 0.40            # offline windows only (all labels known); val PR-AUC 0.545
+  cooldown_hours: 24          # scripts/drift_retrain.py: at most one launch per cooldown
+
+# Columns that change with calendar time by construction (day counters, the clock itself, history
+# lengths that grow as the replay goes on). They drift in every window and say nothing about the
+# customers, so they are reported but left out of the drift share.
+exclude_from_share: [TransactionDT, D1, D2, D3, D4, D10, D15, client_prior_count, card_n_devices,
+  device_prior_count, device_n_clients]
+
+# Offline weekly report (Kaggle job kaggle/drift).
+offline:
+  input_dir: auto             # folder with features/{train,val,test}.parquet (F2 output)
+  model_dir: auto             # folder with model.json, spec.json, threshold.json (F3 output)
+  out_dir: /kaggle/working/f6_drift
+  window_days: 7
+  min_window_rows: 2000       # a short last window is merged into the previous one
+  score_reference: val        # model scores on train are optimistic, so val is the reference
+  evidently:
+    enabled: true
+    reference_rows: 50000     # sample of train for Evidently (PSI uses all rows)
+    html: [all, first, last]  # windows that also get an HTML report ("all" = val + test)
+    drift_share: 0.3
+  mlflow: true
+  smoke:
+    train_rows: 60000
+    current_rows: 40000
+
+# Live monitor (services/monitor). Paths are inside the containers; env overrides like serving.yaml.
+monitor:
+  interval_s: 30
+  window_rows: 2000           # most recent scored transactions per check
+  reference_path: /app/data/drift_reference.json   # written by the Kaggle job; optional
+  baseline_rows: 2000         # without a score reference: the first N live scores are the baseline
+  status_path: /app/data/monitor_status.json
+  history_limit: 200          # decisions kept in the status file
+  feedback_source: feedback_label   # analyst labels; "true_label" simulates full review (demo)
+  score_column: p_xgb
+  # reference column -> case-store column. "hour" (derived from event_time) is supported but off:
+  # a 2000-transaction window spans only ~14 h of the replay, so its hour mix always "drifts".
+  live_columns: {TransactionAmt: amount, ProductCD: product, p_xgb: p_xgb}
+  auto_retrain: true          # call the trigger when a decision says retrain ...
+  execute_retrain: false      # ... but only print the Kaggle command unless this is true
+
+# Retraining job (F3 training on Kaggle).
+trigger:
+  kaggle_cli: kaggle          # or set the KAGGLE env var to the CLI path
+  kernel_dir: kaggle/train
+  state_path: data/retrain_state.json
