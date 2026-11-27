@@ -2,6 +2,12 @@
 
 [![CI](https://github.com/Outsideorbit29/aiml04-perception/actions/workflows/ci.yml/badge.svg)](https://github.com/Outsideorbit29/aiml04-perception/actions/workflows/ci.yml)
 
+> **This repository holds two Nexvia capstone projects.**
+> - **AIML-04 Autonomous Driving Perception Stack**: this branch, [`main`](https://github.com/Outsideorbit29/aiml04-perception/tree/main).
+> - **AIML-01 Real-Time Financial Fraud Detection**: branch [`AIML-01`](https://github.com/Outsideorbit29/aiml04-perception/tree/AIML-01).
+>
+> Each branch has its own README, source code, tests and screenshots.
+
 A camera-only perception stack built for the Nexvia Technologies AI/ML internship. For each frame
 it detects vehicles, pedestrians, cyclists and traffic lights/signs with a YOLO11s model
 fine-tuned on BDD100K (and, for the simulator, a further 5 epochs on a BDD + CARLA mix), tracks
@@ -25,8 +31,27 @@ run on Kaggle and are logged to Weights & Biases; the laptop only runs CARLA and
 > `python scripts/make_demo_video.py --config configs/demo_video.yaml` (shot list in
 > [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)).
 >
-> **TODO (M7.8, stretch):** live deployment URL (Hugging Face Space running the offline pipeline),
-> or the demo video link if the Space is not built.
+> The portal's live deployment URL is optional; a Hugging Face Space (M7.8, stretch) was not built.
+
+## Screenshots
+
+One frame from each final closed-loop recording (CARLA Town01, Session C, 2026-11-19). The overlay
+shows tracked boxes with track id, the lead object (red) with its estimated distance and time to
+collision, the ego lane (green) with its left/right lines, per-stage timings (top left) and the
+controller mode and brake command (bottom bar). Overlay values are the stack's own estimates for
+that frame, not ground truth; the measured results are in the tables below.
+
+| `stopped_car` (ClearNoon) | `cut_in` (ClearNoon) |
+|---|---|
+| ![Stopped car: ACC closing on the stopped lead car](docs/screenshots/stopped_car.jpg) | ![Cut-in: GAP mode behind the car that cut in](docs/screenshots/cut_in.jpg) |
+| ACC slowing behind the stopped lead car (frame 178, 8.9 s) | GAP mode braking behind the car that cut in (frame 146, 7.3 s) |
+| **`pedestrian_crossing` (ClearNoon)** | **`night_rain` (HardRainNight)** |
+| ![Pedestrian crossing: AEB at full brake](docs/screenshots/pedestrian_crossing.jpg) | ![Night and rain: ACC behind the stopped lead car](docs/screenshots/night_rain.jpg) |
+| AEB at full brake for the walker in the ego lane (frame 106, 5.3 s) | ACC near standstill behind the lead car; a second track (#3) on the left is outside the ego lane (frame 208, 10.4 s). At night the lead read about 20 % long. |
+
+Frames were extracted from `media/stopped_car_20261119_013806.mp4`,
+`cut_in_20261119_014200.mp4`, `pedestrian_crossing_20261119_014523.mp4` and
+`night_rain_20261119_020707.mp4` (local recordings, not in git).
 
 ## Results
 
@@ -266,8 +291,8 @@ ruff check . && pytest -q
 ├─ kaggle/                  one folder per cloud job (kernel-metadata.json + runner.py)
 ├─ configs/                 every tunable: models, thresholds, camera, CARLA, benchmark
 ├─ tests/                   pytest suite + small fixtures (5 BDD images, 3 s KITTI clip)
-├─ docs/                    setup, experiments, benchmarks, API, diagrams, figures, submission
-└─ ARCHITECTURE.md  PLAN.md  AGENTS.md  CLAUDE.md
+├─ docs/                    setup, experiments, benchmarks, API, diagrams, figures, screenshots, submission
+└─ ARCHITECTURE.md  PLAN.md  AGENTS.md  CLAUDE.md  LICENSE
 ```
 Not in git: `data/`, `models/` (ONNX and engines), `runs/`, `media/` (videos), `wandb/`.
 
@@ -293,7 +318,7 @@ Not in git: `data/`, `models/` (ONNX and engines), `runs/`, `media/` (videos), `
 | CARLA synthetic frames (3,000 Town01 frames recorded with `sim/record_dataset.py`, private Kaggle dataset) | Sim-to-real detection and distance evaluation | Rendered by the CARLA simulator; CARLA's code is MIT-licensed and its assets CC-BY |
 
 Datasets are not stored in this repo or on the laptop; only `tests/fixtures/` (a few frames) is
-committed. The Drive folder will hold a small sample and the download scripts, not the full data.
+committed. The download and conversion scripts are in `scripts/data/` and `kaggle/data_prep/`.
 
 ## Credits
 
@@ -303,9 +328,12 @@ committed. The Drive folder will hold a small sample and the download scripts, n
 - MiDaS, Intel ISL (MiDaS-small and DPT-Hybrid monocular depth).
 - CARLA 0.9.15, ROS2 Humble, ONNX Runtime, NVIDIA TensorRT, OpenCV, Weights & Biases, Kaggle.
 
-Check each upstream project's licence before reusing this code outside a research or
-educational setting (Ultralytics is AGPL-3.0). This repository has no LICENSE file yet (**TBD**,
-owner: main session).
+## License
+
+This repository is released under the GNU Affero General Public License v3.0 ([LICENSE](LICENSE)),
+because it builds on Ultralytics YOLO, which is AGPL-3.0. The datasets keep their own terms (see
+"Datasets and licences"; BDD100K and KITTI are non-commercial), and the other upstream projects
+above keep their own licences.
 
 ## Limitations
 
