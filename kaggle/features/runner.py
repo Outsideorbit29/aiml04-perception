@@ -13,7 +13,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "AIML-01"
-MODE = "smoke"  # smoke | full
+MODE = "full"  # smoke | full
 WORKDIR = "/kaggle/temp/repo"
 OUT = "/kaggle/working/f2_features"
 
