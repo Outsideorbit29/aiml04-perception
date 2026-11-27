@@ -151,3 +151,20 @@ def test_online_state_evicts_old_transactions():
     f = state.update(_tx(11 * DAY, 1.0, d1=11.0))
     assert f["cnt_7d"] == 0 and f["client_prior_count"] == 1
     assert len(state.clients[f["client_key"]].recent) == 1
+
+
+@pytest.mark.parametrize("seed", [0, 3])
+def test_warm_start_matches_full_replay(seed):
+    df = _random_frame(n=900, seed=seed).sort_values("TransactionDT", kind="stable")
+    df = df.reset_index(drop=True)
+    full = online_features(df, CFG)
+    cut = 600
+    state = OnlineFeatureState.from_history(df.iloc[:cut], CFG)
+    rest = [state.update(r) for r in df.iloc[cut:].to_dict("records")]
+    rest = pd.DataFrame(rest, index=df.index[cut:])
+    expected = full.iloc[cut:]
+    for k in KEY_COLUMNS:
+        assert (expected[k].fillna("<none>") == rest[k].fillna("<none>")).all()
+    for n in NAMES:
+        a, b = expected[n].to_numpy(float), rest[n].to_numpy(float)
+        assert np.array_equal(a, b, equal_nan=True), n  # bit-identical

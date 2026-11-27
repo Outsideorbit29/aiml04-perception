@@ -62,11 +62,33 @@ class FeatureSpec:
         return x
 
     def transform_row(self, row: Mapping[str, Any]) -> np.ndarray:
-        """One transaction (dict) -> 1 x n_features matrix; same encoding as `transform`."""
-        return self.transform(pd.DataFrame([dict(row)]))
+        """One transaction (dict) -> 1 x n_features matrix; same encoding as `transform`.
+
+        Pure Python (no DataFrame), so it costs microseconds on the serving path.
+        """
+        if not hasattr(self, "_index"):
+            self._index = {c: {v: i for i, v in enumerate(self.vocab[c])} for c in self.categorical}
+        vals: list[float] = []
+        for c in self.numeric:
+            v = row.get(c)
+            try:
+                f = float(v) if v is not None else np.nan
+            except (TypeError, ValueError):
+                f = np.nan
+            vals.append(f)
+        for c in self.categorical:
+            v = row.get(c)
+            missing = v is None or (isinstance(v, float) and v != v)
+            vals.append(np.nan if missing else float(self._index[c].get(str(v), np.nan)))
+        x = np.asarray([vals], dtype="float32")
+        if self.medians is not None:
+            nan = np.isnan(x[0])
+            x[0, nan] = np.asarray(self.medians, dtype="float32")[nan]
+        return x
 
     def save(self, path: str | Path) -> None:
-        Path(path).write_text(json.dumps(asdict(self), indent=2))
+        d = {k: v for k, v in asdict(self).items() if not k.startswith("_")}
+        Path(path).write_text(json.dumps(d, indent=2))
 
     @classmethod
     def load(cls, path: str | Path) -> FeatureSpec:

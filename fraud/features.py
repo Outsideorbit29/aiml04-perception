@@ -247,6 +247,58 @@ class OnlineFeatureState:
         self.cards: dict[str, _CardState] = {}
         self.devices: dict[str, _DeviceState] = {}
 
+    @classmethod
+    def from_history(cls, history: pd.DataFrame, cfg: Mapping[str, Any]) -> OnlineFeatureState:
+        """State after processing `history` in time order, built in bulk (seconds, not minutes).
+
+        Equivalent to calling `update` on every row: client aggregates, the recent-window deque
+        (rows within max_window of each client's last transaction), and the card / device sets.
+        """
+        state = cls(cfg)
+        t_col, a_col = cfg["time_column"], cfg["amount_column"]
+        d = history.sort_values(t_col, kind="stable")
+        keys = add_keys(d, cfg)
+        t = d[t_col].astype("int64").to_numpy()
+        amt = d[a_col].astype("float64").to_numpy()
+        frame = pd.DataFrame({"client": keys["client_key"].to_numpy(), "t": t, "amt": amt})
+        agg = frame.groupby("client", sort=False).agg(count=("t", "size"), last_t=("t", "last"))
+        last = frame["client"].map(agg["last_t"]).to_numpy()
+        recent = frame[t >= last - state.max_window]
+        recent_by_client = {
+            k: deque(zip(g["t"].tolist(), g["amt"].tolist(), strict=True))
+            for k, g in recent.groupby("client", sort=False)
+        }
+        for k, row in agg.iterrows():
+            # Sequential sums can differ from pandas' in the last bits; recompute in order so
+            # warm-started and replayed states give bit-identical features.
+            state.clients[k] = _ClientState(
+                count=int(row["count"]),
+                last_t=int(row["last_t"]),
+                recent=recent_by_client.get(k, deque()),
+            )
+        for k, a in zip(frame["client"].tolist(), amt.tolist(), strict=True):
+            cs = state.clients[k]
+            cs.total += a
+            cs.total_sq += a * a
+        card = keys["card_key"].tolist()
+        device = keys["device_key"].tolist()
+        addr = _col(d, cfg["addr_column"]).tolist()
+        email = _col(d, cfg["email_column"]).tolist()
+        client = keys["client_key"].tolist()
+        for i in range(len(d)):
+            ks = state.cards.setdefault(card[i], _CardState())
+            dev = device[i]
+            if isinstance(dev, str):
+                ks.devices.add(dev)
+                ds = state.devices.setdefault(dev, _DeviceState())
+                ds.count += 1
+                ds.clients.add(client[i])
+            if not _is_missing(addr[i]):
+                ks.addrs.add(addr[i])
+            if not _is_missing(email[i]):
+                ks.emails.add(email[i])
+        return state
+
     def _values(self, tx: Mapping[str, Any]) -> tuple[Any, Any]:
         return tx.get(self.cfg["addr_column"]), tx.get(self.cfg["email_column"])
 

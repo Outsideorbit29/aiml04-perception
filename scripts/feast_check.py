@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> dict:
 
     # Online: push the latest row of a few cards, read them back.
     latest = full.sort_values("event_timestamp").groupby("client_key").tail(1)
-    push = latest.head(args.push_rows).drop(columns=["TransactionID"], errors="ignore")
+    push = latest.head(args.push_rows)
     store.push("client_features_push", push)
     online = store.get_online_features(
         features=[f"client_features:{n}" for n in FEATURES],

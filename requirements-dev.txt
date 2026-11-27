@@ -4,5 +4,6 @@ numpy>=1.26
 pandas>=2.1
 pyarrow>=14
 pyyaml>=6.0
+xgboost-cpu>=2.1  # scorer tests (CPU-only wheel)
 pytest>=8.0
 ruff>=0.6

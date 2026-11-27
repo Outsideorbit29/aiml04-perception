@@ -11,7 +11,7 @@ import os
 from datetime import timedelta
 
 from feast import Entity, FeatureView, Field, FileSource, PushSource, ValueType
-from feast.types import Float32
+from feast.types import Float32, Int64
 
 # Must equal fraud.features.feature_names(configs/features.yaml windows); a test checks this.
 FEATURES = [
@@ -49,7 +49,9 @@ client_features = FeatureView(
     name="client_features",
     entities=[client],
     ttl=timedelta(days=400),
-    schema=[Field(name=name, dtype=Float32) for name in FEATURES],
+    # TransactionID lets the scorer check the features belong to the transaction it is scoring.
+    schema=[Field(name=name, dtype=Float32) for name in FEATURES]
+    + [Field(name="TransactionID", dtype=Int64)],
     source=client_push,
     online=True,
 )
