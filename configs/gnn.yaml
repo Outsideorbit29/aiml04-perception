@@ -1,0 +1,35 @@
+# F4: account/card/device graph, GraphSAGE, fraud rings and the blend with XGBoost.
+features_dir: auto      # folder containing features/{train,val,test}.parquet (F2 output)
+model_dir: auto         # folder containing model.json + spec.json (F3 output)
+out_dir: /kaggle/working/f4_gnn
+target: isFraud
+id_column: TransactionID
+time_column: TransactionDT
+max_fpr: 0.01
+seed: 42
+
+# Transaction -> entity edges (one entity node per distinct key value; NaN keys get no edge).
+entities: [client_key, card_key, device_key]
+
+gnn:
+  hidden: 64
+  layers: 2
+  dropout: 0.2
+  lr: 0.005
+  weight_decay: 1.0e-5
+  epochs: 400
+  eval_every: 5
+  patience: 60          # epochs without val PR-AUC improvement
+
+# Candidate fraud rings: clients linked by sharing a specific device fingerprint (one used by
+# between 2 and max_clients_per_device clients). Rings = connected groups of >= min_size clients.
+rings:
+  max_clients_per_device: 20
+  min_size: 3
+
+# Blend: w * logit(xgb) + (1 - w) * logit(gnn), w chosen on val from this grid.
+blend_grid: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+smoke:
+  rows_per_split: {train: 50000, val: 10000, test: 10000}
+  epochs: 40
