@@ -37,9 +37,9 @@ class Scorer:
 
         model_dir = Path(model_dir)
         self.spec = FeatureSpec.load(model_dir / "spec.json")
-        clf = xgb.XGBClassifier()
-        clf.load_model(model_dir / "model.json")
-        self.booster = clf.get_booster()
+        # Plain Booster (no scikit-learn needed at serving); inplace_predict returns P(fraud).
+        self.booster = xgb.Booster()
+        self.booster.load_model(model_dir / "model.json")
         meta = json.loads((model_dir / "threshold.json").read_text())
         self.model_name = meta.get("experiment", "xgb")
         self.threshold = float(meta["threshold"])

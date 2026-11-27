@@ -38,14 +38,14 @@ def test_scorer_matches_batch_xgboost(tmp_path):
 
     df = _frame(600)
     spec = FeatureSpec.fit(df, ["amt", "cnt", "flag"], ["prod"], min_count=1)
-    clf = xgb.XGBClassifier(n_estimators=20, max_depth=3)
     x = spec.transform(df)
-    clf.fit(x, df["y"])
-    clf.save_model(tmp_path / "model.json")
+    params = {"objective": "binary:logistic", "max_depth": 3}
+    booster = xgb.train(params, xgb.DMatrix(x, label=df["y"]), num_boost_round=20)
+    booster.save_model(tmp_path / "model.json")
     spec.save(tmp_path / "spec.json")
     (tmp_path / "threshold.json").write_text(json.dumps({"threshold": 0.3, "experiment": "t"}))
     scorer = Scorer(tmp_path)
-    expected = clf.predict_proba(x)[:, 1]
+    expected = booster.predict(xgb.DMatrix(x))
     rows = df.to_dict("records")
     got = [scorer.score(r, {"client_key": "c"})["score"] for r in rows[:50]]
     assert np.allclose(got, expected[:50], atol=1e-6)
@@ -59,8 +59,8 @@ def test_scorer_blends_known_client_risk(tmp_path):
 
     df = _frame(300)
     spec = FeatureSpec.fit(df, ["amt", "cnt", "flag"], ["prod"], min_count=1)
-    clf = xgb.XGBClassifier(n_estimators=5, max_depth=2).fit(spec.transform(df), df["y"])
-    clf.save_model(tmp_path / "model.json")
+    dtrain = xgb.DMatrix(spec.transform(df), label=df["y"])
+    xgb.train({"objective": "binary:logistic"}, dtrain, 5).save_model(tmp_path / "model.json")
     spec.save(tmp_path / "spec.json")
     (tmp_path / "threshold.json").write_text(json.dumps({"threshold": 0.5}))
     (tmp_path / "blend.json").write_text(json.dumps({"weight_xgb": 0.5, "threshold": 0.4}))
