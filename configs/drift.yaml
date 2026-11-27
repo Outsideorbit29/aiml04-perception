@@ -10,7 +10,8 @@ psi:
 # Retrain when any enabled check fires on a window.
 retrain:
   checks: [data_drift, score_drift, precision, alert_budget, alert_rate, pr_auc]
-  min_window: 500             # fewer transactions -> no decision
+  min_window: 1000            # fewer transactions -> no decision. 500 was too noisy live: the
+                              # first 962-row window gave ProductCD PSI 0.23 with no drift injected
   drift_share: 0.3            # share of monitored features with PSI >= feature_threshold
   score_psi: 0.2              # PSI of the model score vs the reference (val) scores
   min_reviewed: 50            # precision / alert-budget checks need this many reviewed alerts

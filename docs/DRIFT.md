@@ -91,8 +91,8 @@ and `[dry-run] would retrain: kaggle kernels push -p kaggle/train`.
 
 ## Demo (laptop, Docker; ask before starting the stack)
 ```bash
-# Windows, Git Bash: copy the reference from the Kaggle job into the bundle (optional)
-kaggle kernels output anish2906/aiml01-drift -p serving_bundle/data --file-pattern 'drift_reference\.json$'
+# Windows, Git Bash: scripts/fetch_serving_bundle.sh also fetches the drift reference
+# (Kaggle writes it as f6_drift/drift_reference.json; it must end up in serving_bundle/data/)
 docker compose up -d --build kafka redis scorer consumer monitor
 # 2,000 normal transactions, then amounts x3 (PSI 0.81 on synthetic lognormal; x1.5 gives only 0.10)
 docker compose run --rm producer --rate 50 --limit 5000 --drift amount_scale=3,shift_after=2000
@@ -103,6 +103,30 @@ docker compose down
 `ProductCD=C` (e.g. `--drift shift_after=2000,ProductCD=C`) also fires and raises the scores.
 Without analyst reviews the precision checks are skipped; set `MONITOR_FEEDBACK_SOURCE=true_label`
 on the monitor to simulate an analyst who reviews every alert.
+
+### Live run (Docker Desktop, 2026-11-27)
+Full stack (kafka, redis, scorer, consumer, monitor, dashboard) with the Kaggle drift reference,
+fresh case store, `--rate 50 --limit 5000 --drift amount_scale=3,shift_after=2000`. Monitor log:
+
+| Window (last ≤2,000 cases) | PSI TransactionAmt | PSI ProductCD | Score PSI | Retrain |
+|---|---|---|---|---|
+| 962 cases (all before drift) | 0.054 | 0.231 | 0.054 | **True** (false trigger, see below) |
+| 2,000 of 2,466 (mostly before drift) | 0.158 | 0.131 | 0.011 | False |
+| 2,000 of 3,973 (after drift) | **1.472** | 0.164 | 0.039 | **True**, `[dry-run] would retrain: kaggle kernels push -p kaggle/train` |
+| 2,000 of 5,000 (after drift) | **1.630** | 0.096 | 0.028 | **True** (dry run) |
+
+- The amount drift is detected within one monitor interval once ~1,000 drifted rows are in the
+  window. The model score barely moves (score PSI ≤ 0.04): amount alone does not change the
+  scores much, so only the data-drift check fires.
+- The first window was a **false trigger**: 962 rows covering a few hours of the replay have a
+  different product mix from the whole reference. `retrain.min_window` was raised from 500 to
+  1,000 after this run, so that window would now give no decision.
+- Consumer for the run: 5,000 processed, 153 alerts (64 of 131 frauds caught), wall 55.9 tx/s,
+  capacity 137 tx/s with the monitor and dashboard also running; scorer HTTP p50 3.5 ms / p95
+  5.1 ms; end-to-end p50 85 ms, but p95 7.2 s (max 11.4 s). The tail was not traced (the
+  case store does not keep per-transaction end-to-end times); a likely cause is a backlog while
+  the consumer, monitor and dashboard compete for CPU. The steady-state F5 run without them gave
+  p95 128 ms (`docs/SERVING.md`).
 
 ## Limitations
 - Retraining reuses the F2 splits: the dataset has no newer data. In production the data-prep and

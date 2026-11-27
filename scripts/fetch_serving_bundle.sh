@@ -10,7 +10,14 @@ TMP="$(mktemp -d)"
 rm -rf "$OUT"
 mv "$TMP/serving_bundle" "$OUT"
 rm -rf "$TMP"
-# F6 drift reference for the live monitor (optional; it falls back to history.parquet).
-"$KAGGLE" kernels output anish2906/aiml01-drift -p "$OUT/data" --file-pattern 'drift_reference\.json$' \
-  || echo "no drift reference found; the monitor will build one from history.parquet"
+# F6 drift reference for the live monitor (optional; it falls back to the first live scores).
+# The Kaggle job writes it as f6_drift/drift_reference.json.
+TMP="$(mktemp -d)"
+if "$KAGGLE" kernels output anish2906/aiml01-drift -p "$TMP" \
+    --file-pattern 'drift_reference\.json$' && [ -f "$TMP/f6_drift/drift_reference.json" ]; then
+  mv "$TMP/f6_drift/drift_reference.json" "$OUT/data/drift_reference.json"
+else
+  echo "no drift reference found; the monitor will use the first live scores as its baseline"
+fi
+rm -rf "$TMP"
 du -sh "$OUT"/models "$OUT"/data
