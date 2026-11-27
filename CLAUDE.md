@@ -16,11 +16,11 @@ worktree at `D:\Project_ai_aiml01`; AIML-04 (`main`) is at `D:\Project_ai`. Dead
 - Never submit on the portal for the user.
 
 ## Progress snapshot
-_Last updated: 2026-11-27_ — F0–F3 done. F3: serving model xgb_smote (test PR-AUC 0.491,
-recall 45% @ 1% FPR), registered `aiml01-xgb`; artefacts in Kaggle output of `anish2906/aiml01-train`
-(`f3_model/model.json, spec.json, threshold.json`), write-up `docs/MODEL.md`. F4 in flight: smoke job
-`anish2906/aiml01-gnn` v1 (T4); then set MODE=full, run, write docs/GRAPH.md, tick F4.
-F2 features: Kaggle output of `anish2906/aiml01-features`.
+_Last updated: 2026-11-27_ — F0–F4 done. Live scoring rule: xgb_smote blended with client GNN risk,
+w=0.5, threshold 0.30995 (test PR-AUC 0.525, recall 49.8% @ 1.3% FPR; `docs/GRAPH.md`). Artefacts:
+F3 `anish2906/aiml01-train` (f3_model/model.json, spec.json, threshold.json), F4 `anish2906/aiml01-gnn`
+(f4_gnn/client_risk.parquet, rings.parquet). F5 in progress: core (warm start, scorer, stores) + services
+written; next: serving-data export job, Dockerfile/compose, then ask user before starting Docker.
 MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
 `fraud.tracking.configure()` and must attach dataset `anish2906/aiml04-secrets` (file `dagshub_token`).
 

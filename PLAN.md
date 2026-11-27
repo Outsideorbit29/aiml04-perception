@@ -45,9 +45,9 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 - [x] F3.3 Register the best model in MLflow
 
 ## F4 Graph + GNN (Dec 3–5)
-- [ ] F4.1 Build the heterogeneous graph; connected components as candidate fraud rings
-- [ ] F4.2 GraphSAGE node classifier on Kaggle; PR-AUC vs XGBoost
-- [ ] F4.3 Blend (weighted average or stacked LR) on validation; report the lift
+- [x] F4.1 Build the heterogeneous graph; connected components as candidate fraud rings
+- [x] F4.2 GraphSAGE node classifier on Kaggle; PR-AUC vs XGBoost
+- [x] F4.3 Blend (weighted average or stacked LR) on validation; report the lift
 - [ ] F4.4 **(S)** Elliptic dataset as a second GNN benchmark
 
 ## F5 Streaming + scoring service (Dec 5–7)

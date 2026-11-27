@@ -1,0 +1,21 @@
+# F5 serving stack (docker compose / Minikube). Paths are inside the containers; any key can be
+# overridden with an environment variable of the same name in upper case (e.g. SCORER_URL).
+kafka_bootstrap: kafka:9092
+topic_transactions: transactions
+topic_scores: scores
+consumer_group: fraud-consumer
+
+model_dir: /app/models            # model.json, spec.json, threshold.json [, blend.json, client_risk.parquet]
+feature_repo: /app/feature_repo
+feature_store_yaml: feature_store.redis.yaml
+history_path: /app/data/history.parquet   # train+val transactions to warm up the feature state
+replay_path: /app/data/replay.parquet     # test-period transactions the producer replays
+cases_db: /app/data/cases.db
+stats_path: /app/data/consumer_stats.json
+scorer_url: http://scorer:8000
+start_date: "2017-12-01"          # TransactionDT anchor (configs/data.yaml)
+
+producer_rate: 50                 # transactions per second
+producer_limit: 0                 # 0 = whole replay file
+consumer_stats_every: 500         # write latency/throughput stats every N transactions
+http_timeout_s: 5
