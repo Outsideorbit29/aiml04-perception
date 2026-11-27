@@ -16,11 +16,11 @@ worktree at `D:\Project_ai_aiml01`; AIML-04 (`main`) is at `D:\Project_ai`. Dead
 - Never submit on the portal for the user.
 
 ## Progress snapshot
-_Last updated: 2026-11-27_ — F0, F1, F2 done. F3 in flight: full job `anish2906/aiml01-train` v2
-(4 experiments: logreg, xgb_raw, xgb, xgb_smote). Smoke v1 proved DagsHub logging works. When it
-finishes: fetch `f3_model/*.json|csv|png` (`kaggle kernels output ... --file-pattern`), check
-train_summary.json, write docs/MODEL.md + EXPERIMENTS row, tick F3. F2 features live in the Kaggle
-output of `anish2906/aiml01-features` (attach via kernel_sources).
+_Last updated: 2026-11-27_ — F0–F3 done. F3: serving model xgb_smote (test PR-AUC 0.491,
+recall 45% @ 1% FPR), registered `aiml01-xgb`; artefacts in Kaggle output of `anish2906/aiml01-train`
+(`f3_model/model.json, spec.json, threshold.json`), write-up `docs/MODEL.md`. F4 in flight: smoke job
+`anish2906/aiml01-gnn` v1 (T4); then set MODE=full, run, write docs/GRAPH.md, tick F4.
+F2 features: Kaggle output of `anish2906/aiml01-features`.
 MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
 `fraud.tracking.configure()` and must attach dataset `anish2906/aiml04-secrets` (file `dagshub_token`).
 

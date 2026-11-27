@@ -40,9 +40,9 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 - [x] F2.3 Point-in-time correct training set from Feast; parity test offline vs online (`docs/FEATURES.md`)
 
 ## F3 XGBoost + MLflow (Dec 1–3)
-- [ ] F3.1 Baseline LR, then XGBoost with `scale_pos_weight` (SMOTE as a comparison)
-- [ ] F3.2 Metrics: PR-AUC, ROC-AUC, recall at 1% FPR, threshold choice; all runs in MLflow
-- [ ] F3.3 Register the best model in MLflow
+- [x] F3.1 Baseline LR, then XGBoost with `scale_pos_weight` (SMOTE as a comparison)
+- [x] F3.2 Metrics: PR-AUC, ROC-AUC, recall at 1% FPR, threshold choice; all runs in MLflow
+- [x] F3.3 Register the best model in MLflow
 
 ## F4 Graph + GNN (Dec 3–5)
 - [ ] F4.1 Build the heterogeneous graph; connected components as candidate fraud rings
