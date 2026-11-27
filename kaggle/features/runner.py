@@ -4,7 +4,7 @@ Attaches the F1 output (kernel anish2906/aiml01-data-prep) for splits/*.parquet.
     kaggle kernels push -p kaggle/features
     smoke -> first 20k transactions; check features_summary.json and feast_check.json
     full  -> all 590k
-Outputs: /kaggle/working/f2_features (features/*.parquet, card_features.parquet,
+Outputs: /kaggle/working/f2_features (features/*.parquet, client_features.parquet,
 features_summary.json, feast_check.json). The F3 training job attaches this kernel's output.
 """
 
@@ -13,7 +13,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "AIML-01"
-MODE = "full"  # smoke | full
+MODE = "smoke"  # smoke | full
 WORKDIR = "/kaggle/temp/repo"
 OUT = "/kaggle/working/f2_features"
 

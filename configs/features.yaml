@@ -3,10 +3,12 @@
 input_dir: auto          # folder with splits/{train,val,test}.parquet; "auto" searches /kaggle/input
 out_dir: /kaggle/working/f2_features
 
-# Card entity: the card fields concatenated (missing -> "NA"). Columns absent from the data
-# are skipped.
+# Keys (see fraud/features.py). Columns absent from the data are skipped; "d1n" is derived
+# as day - D1. Velocity/amount features use the client key, change flags the card key.
+client_key_columns: [card1, addr1, d1n]
 card_key_columns: [card1, card2, card3, card4, card5, card6]
-device_column: DeviceInfo
+device_key_columns: [DeviceInfo, id_30, id_31, id_33]
+d1_column: D1
 addr_column: addr1
 email_column: P_emaildomain
 amount_column: TransactionAmt
@@ -14,7 +16,7 @@ time_column: TransactionDT
 id_column: TransactionID
 target: isFraud
 
-# Velocity windows in seconds: count and amount sum of the card's earlier transactions in
+# Velocity windows in seconds: count and amount sum of the client's earlier transactions in
 # [t - window, t). Same-second transactions are excluded from windows.
 windows:
   1h: 3600

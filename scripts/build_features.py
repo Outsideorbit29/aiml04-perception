@@ -1,10 +1,10 @@
-"""F2: build card/device features for all splits, check offline/online parity, write outputs.
+"""F2: build client/card/device features for all splits, check offline/online parity, write outputs.
 
 Runs on Kaggle (kaggle/features) with the F1 output attached. Locally, on a prepared split dir:
     python -m scripts.build_features --input-dir <dir with splits/> --out-dir out
 Outputs in out_dir:
     features/{train,val,test}.parquet  model-ready rows (id, time, label, passthrough, features)
-    card_features.parquet              Feast offline source (card_key, event_timestamp, features)
+    client_features.parquet            Feast offline source (client_key, event_timestamp, features)
     features_summary.json              timings, parity report, per-feature stats on train
 """
 
@@ -22,7 +22,7 @@ import pandas as pd
 
 from fraud.config import load_config
 from fraud.data import SPLIT_NAMES
-from fraud.features import build_features, feature_names, online_features, parity
+from fraud.features import KEY_COLUMNS, build_features, feature_names, online_features, parity
 
 
 def find_splits(input_dir: str, search_root: str = "/kaggle/input") -> Path:
@@ -102,7 +102,12 @@ def main(argv: list[str] | None = None) -> dict:
     online = online_features(df.iloc[:n_par], cfg)
     t_online = time.time() - t0
     report = parity(feats.iloc[:n_par], online, names)
-    key_match = float((feats["card_key"].iloc[:n_par] == online["card_key"]).mean())
+    head = feats.iloc[:n_par]
+    key_match = float(
+        np.mean(
+            [(head[k].fillna("<none>") == online[k].fillna("<none>")).mean() for k in KEY_COLUMNS]
+        )
+    )
     print(f"parity on {n_par:,} rows: max rel diff {max(report.values()):.2e}", flush=True)
 
     keep_num = [c for c in cfg["passthrough_numeric"] if c in df]
@@ -121,17 +126,20 @@ def main(argv: list[str] | None = None) -> dict:
     event_ts = pd.Timestamp(data_cfg["start_date"], tz="UTC") + pd.to_timedelta(
         df[t_col].astype("int64"), unit="s"
     )
-    feast_df = feats[["card_key", *names]].astype({n: "float32" for n in names})
+    feast_df = feats[["client_key", *names]].astype({n: "float32" for n in names})
     feast_df.insert(1, "event_timestamp", event_ts.values)
     feast_df.insert(2, id_col, df[id_col].values)
-    feast_df.to_parquet(out_dir / "card_features.parquet", index=False)
+    feast_df.to_parquet(out_dir / "client_features.parquet", index=False)
 
     train = model_df[model_df["split"] == "train"]
     summary = {
         "smoke": bool(args.smoke),
         "rows": int(len(df)),
         "rows_per_split": {n: int((model_df["split"] == n).sum()) for n in SPLIT_NAMES},
+        "clients": int(feats["client_key"].nunique()),
         "cards": int(feats["card_key"].nunique()),
+        "devices": int(feats["device_key"].nunique()),
+        "client_tx_median": float(feats.groupby("client_key").size().median()),
         "offline_seconds": round(t_offline, 1),
         "online_seconds": round(t_online, 1),
         "online_us_per_tx": round(1e6 * t_online / max(n_par, 1), 1),

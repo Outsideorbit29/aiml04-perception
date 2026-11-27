@@ -1,14 +1,19 @@
-"""Per-card and per-device behavioural features, offline (vectorised) and online (incremental).
+"""Behavioural features per client, card and device: offline (vectorised) and online (incremental).
 
-Definitions (for a transaction at time t, using the card's earlier transactions in processing
-order, i.e. sorted by time with a stable tie-break):
-- card_prior_count, card_amt_mean, card_amt_std: count, mean and std of earlier amounts
-- amt_to_card_mean: amount / card_amt_mean; amt_zscore: (amount - mean) / std
-- secs_since_prev: seconds since the card's previous transaction
-- cnt_<w>, sum_<w>: count and amount sum of earlier transactions with time in [t - w, t)
-- new_device / new_addr / new_email: 1 if the value was never seen on this card before
-  (NaN when the value is missing); card_n_devices: distinct devices seen before
-- device_prior_count, device_n_cards: earlier transactions and distinct cards on the device
+Three keys (strings; missing parts -> "NA"):
+- client_key = card1 | addr1 | d1n, where d1n = day - D1 (D1 = days since the card was first
+  used, so d1n is constant for one cardholder). This is the usual IEEE-CIS client proxy.
+- card_key   = card1 | ... | card6 (card product; shared by many clients)
+- device_key = DeviceInfo | id_30 | id_31 | id_33 (OS, browser, screen); NaN if all missing
+
+Definitions, for a transaction at time t using EARLIER transactions in processing order
+(sorted by time, stable tie-break):
+- client_prior_count, client_amt_mean, client_amt_std; amt_to_client_mean, amt_zscore
+- secs_since_prev: seconds since the client's previous transaction
+- cnt_<w>, sum_<w>: count and amount sum of the client's transactions with time in [t - w, t)
+- new_device / new_addr / new_email: 1 if never seen on this card_key before, 0 if seen,
+  NaN if the value is missing; card_n_devices: distinct devices seen before on the card_key
+- device_prior_count, device_n_clients: earlier transactions and distinct clients on the device
 
 `build_features` (pandas, training) and `OnlineFeatureState` (one transaction at a time, serving)
 implement the same definitions; tests check they agree.
@@ -26,48 +31,87 @@ import numpy as np
 import pandas as pd
 
 NA = "NA"
-
-
-def card_key(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
-    """Concatenate the available card columns into one string key (missing -> "NA")."""
-    cols = [c for c in columns if c in df]
-    if not cols:
-        raise ValueError(f"none of {list(columns)} in data")
-    parts = [_as_key(df[c]) for c in cols]
-    key = parts[0]
-    for part in parts[1:]:
-        key = key + "|" + part
-    return key
-
-
-def _as_key(s: pd.Series) -> pd.Series:
-    """String form of a key column; floats that are whole numbers lose the '.0'."""
-    if pd.api.types.is_float_dtype(s):
-        out = s.map(_fmt)
-    else:
-        out = s.astype("object").where(s.notna(), NA).astype(str)
-    return out.astype(str)
+SECONDS_PER_DAY = 86_400
 
 
 def _fmt(v: Any) -> str:
-    if v is None or (isinstance(v, float) and math.isnan(v)) or v is pd.NA:
+    if v is None or v is pd.NA or (isinstance(v, (float, np.floating)) and math.isnan(v)):
         return NA
     if isinstance(v, (float, np.floating)) and float(v).is_integer():
         return str(int(v))
     return str(v)
 
 
+def _is_missing(v: Any) -> bool:
+    return v is None or v is pd.NA or (isinstance(v, (float, np.floating)) and v != v)
+
+
+def _as_key(s: pd.Series) -> pd.Series:
+    """String form of a key column, identical to `_fmt` per value."""
+    if pd.api.types.is_float_dtype(s):
+        return s.map(_fmt).astype(str)
+    return s.astype("object").where(s.notna(), NA).astype(str)
+
+
+def concat_key(df: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
+    """Concatenate the available columns into one string key (missing -> "NA")."""
+    cols = [c for c in columns if c in df]
+    if not cols:
+        raise ValueError(f"none of {list(columns)} in data")
+    key = _as_key(df[cols[0]])
+    for c in cols[1:]:
+        key = key + "|" + _as_key(df[c])
+    return key
+
+
 def row_key(row: Mapping[str, Any], columns: Sequence[str]) -> str:
-    """Card key for a single transaction dict; matches `card_key` on a frame."""
+    """Key for one transaction dict; matches `concat_key` on a frame."""
     return "|".join(_fmt(row[c]) for c in columns if c in row)
+
+
+def _d1n(t: Any, d1: Any) -> float:
+    if _is_missing(d1):
+        return math.nan
+    return float(int(t) // SECONDS_PER_DAY - float(d1))
+
+
+def add_keys(df: pd.DataFrame, cfg: Mapping[str, Any]) -> pd.DataFrame:
+    """Return a frame with client_key, card_key and device_key (NaN when no device fields)."""
+    d = df.copy()
+    t = d[cfg["time_column"]].astype("int64")
+    d1 = d[cfg["d1_column"]] if cfg["d1_column"] in d else pd.Series(np.nan, index=d.index)
+    d["d1n"] = (t // SECONDS_PER_DAY).astype("float64") - d1.astype("float64")
+    keys = pd.DataFrame(index=d.index)
+    keys["client_key"] = concat_key(d, cfg["client_key_columns"])
+    keys["card_key"] = concat_key(d, cfg["card_key_columns"])
+    dev_cols = [c for c in cfg["device_key_columns"] if c in d]
+    if dev_cols:
+        has_dev = d[dev_cols].notna().any(axis=1)
+        keys["device_key"] = concat_key(d, dev_cols).where(has_dev, np.nan)
+    else:
+        keys["device_key"] = np.nan
+    return keys
+
+
+def row_keys(tx: Mapping[str, Any], cfg: Mapping[str, Any]) -> tuple[str, str, str | None]:
+    """(client_key, card_key, device_key) for one transaction; matches `add_keys`."""
+    row = dict(tx)
+    row["d1n"] = _d1n(tx[cfg["time_column"]], tx.get(cfg["d1_column"]))
+    dev_cols = [c for c in cfg["device_key_columns"] if c in row]
+    has_dev = any(not _is_missing(row[c]) for c in dev_cols)
+    return (
+        row_key(row, cfg["client_key_columns"]),
+        row_key(row, cfg["card_key_columns"]),
+        row_key(row, dev_cols) if has_dev else None,
+    )
 
 
 def feature_names(windows: Mapping[str, int]) -> list[str]:
     names = [
-        "card_prior_count",
-        "card_amt_mean",
-        "card_amt_std",
-        "amt_to_card_mean",
+        "client_prior_count",
+        "client_amt_mean",
+        "client_amt_std",
+        "amt_to_client_mean",
         "amt_zscore",
         "secs_since_prev",
     ]
@@ -79,25 +123,18 @@ def feature_names(windows: Mapping[str, int]) -> list[str]:
         "new_email",
         "card_n_devices",
         "device_prior_count",
-        "device_n_cards",
+        "device_n_clients",
     ]
     return names
 
 
 # Variances below this (relative to mean^2 + 1) count as zero in both implementations, so
-# float rounding on constant-amount cards can't make one side NaN and the other finite.
+# float rounding on constant-amount clients can't make one side NaN and the other finite.
 VAR_EPS = 1e-9
 
 
 def _std(var: float, mean: float) -> float:
     return 0.0 if var <= VAR_EPS * (mean * mean + 1.0) else math.sqrt(var)
-
-
-def _ratio_and_z(amount, mean, std):
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ratio = np.where(mean > 0, amount / mean, np.nan)
-        z = np.where(std > 0, (amount - mean) / std, np.nan)
-    return ratio, z
 
 
 def _first_seen(key: pd.Series, value: pd.Series) -> pd.Series:
@@ -106,78 +143,84 @@ def _first_seen(key: pd.Series, value: pd.Series) -> pd.Series:
     return first.astype(float).where(value.notna(), np.nan)
 
 
+def _col(d: pd.DataFrame, name: str) -> pd.Series:
+    return d[name] if name in d else pd.Series(np.nan, index=d.index)
+
+
 def build_features(df: pd.DataFrame, cfg: Mapping[str, Any]) -> pd.DataFrame:
-    """Offline features for every row of `df` (any order); returned in `df`'s index order."""
+    """Offline keys + features for every row of `df` (any order), in `df`'s index order."""
     t_col, a_col = cfg["time_column"], cfg["amount_column"]
-    order = df.sort_values(t_col, kind="stable").index
-    d = df.loc[order]
-    key = card_key(d, cfg["card_key_columns"])
+    d = df.loc[df.sort_values(t_col, kind="stable").index]
+    keys = add_keys(d, cfg)
+    client, card, device = keys["client_key"], keys["card_key"], keys["device_key"]
     t = d[t_col].astype("int64")
     amt = d[a_col].astype("float64")
-    g = amt.groupby(key, sort=False)
+    out = keys.copy()
 
-    out = pd.DataFrame(index=d.index)
-    count = g.cumcount().astype("float64")
-    csum = g.cumsum() - amt
-    csq = (amt**2).groupby(key, sort=False).cumsum() - amt**2
-    mean = np.where(count > 0, csum / count.replace(0, np.nan), np.nan)
-    var = np.where(count > 1, (csq - count * mean**2) / (count - 1).replace(0, np.nan), np.nan)
-    std = np.where(
-        np.isnan(var),
-        np.nan,
-        np.where(var <= VAR_EPS * (mean**2 + 1.0), 0.0, np.sqrt(np.clip(var, 0, None))),
+    # Client amount profile from earlier transactions.
+    count = amt.groupby(client, sort=False).cumcount().astype("float64")
+    csum = amt.groupby(client, sort=False).cumsum() - amt
+    csq = (amt**2).groupby(client, sort=False).cumsum() - amt**2
+    with np.errstate(divide="ignore", invalid="ignore"):
+        mean = np.where(count > 0, csum / count, np.nan)
+        var = np.where(count > 1, (csq - count * mean**2) / (count - 1), np.nan)
+        std = np.where(
+            np.isnan(var),
+            np.nan,
+            np.where(var <= VAR_EPS * (mean**2 + 1.0), 0.0, np.sqrt(np.clip(var, 0, None))),
+        )
+        out["client_prior_count"] = count
+        out["client_amt_mean"] = mean
+        out["client_amt_std"] = std
+        out["amt_to_client_mean"] = np.where(mean > 0, amt / mean, np.nan)
+        out["amt_zscore"] = np.where(std > 0, (amt - mean) / std, np.nan)
+    out["secs_since_prev"] = t.groupby(client, sort=False).diff().astype("float64")
+
+    # Velocity windows [t - w, t) per client: time-based rolling with closed="left".
+    frame = pd.DataFrame(
+        {"key": client.values, "amt": amt.values, "pos": np.arange(len(d))},
+        index=pd.to_datetime(t.values, unit="s"),
     )
-    out["card_prior_count"] = count
-    out["card_amt_mean"] = mean
-    out["card_amt_std"] = std
-    out["amt_to_card_mean"], out["amt_zscore"] = _ratio_and_z(amt.values, mean, std)
-    out["secs_since_prev"] = t.groupby(key, sort=False).diff().astype("float64")
-
-    # Time windows [t - w, t): rolling over a time index per card, closed="left".
-    ts = pd.to_datetime(t, unit="s")
-    frame = pd.DataFrame({"key": key.values, "amt": amt.values, "pos": np.arange(len(d))}, index=ts)
+    grouped = frame.groupby("key", sort=False)
+    pos = grouped["pos"].rolling(1).max().to_numpy().astype(int)  # same row order as below
     for name, seconds in cfg["windows"].items():
-        roll = frame.groupby("key", sort=False)["amt"].rolling(f"{int(seconds)}s", closed="left")
-        cnt = roll.count()
-        tot = roll.sum()
-        pos = frame.groupby("key", sort=False)["pos"].rolling(1).max()  # aligns rows to positions
-        cnt_arr = np.empty(len(d))
-        sum_arr = np.empty(len(d))
-        cnt_arr[pos.values.astype(int)] = cnt.values
-        sum_arr[pos.values.astype(int)] = tot.values
-        out[f"cnt_{name}"] = np.nan_to_num(cnt_arr, nan=0.0)
-        out[f"sum_{name}"] = np.nan_to_num(sum_arr, nan=0.0)
+        roll = grouped["amt"].rolling(f"{int(seconds)}s", closed="left")
+        cnt = np.zeros(len(d))
+        tot = np.zeros(len(d))
+        cnt[pos] = np.nan_to_num(roll.count().to_numpy(), nan=0.0)
+        tot[pos] = np.nan_to_num(roll.sum().to_numpy(), nan=0.0)
+        out[f"cnt_{name}"] = cnt
+        out[f"sum_{name}"] = tot
 
-    dev = d[cfg["device_column"]] if cfg["device_column"] in d else pd.Series(np.nan, index=d.index)
-    addr = d[cfg["addr_column"]] if cfg["addr_column"] in d else pd.Series(np.nan, index=d.index)
-    email = d[cfg["email_column"]] if cfg["email_column"] in d else pd.Series(np.nan, index=d.index)
-    new_dev = _first_seen(key, dev)
+    # Changes on the card product: device, address, email never seen before.
+    new_dev = _first_seen(card, device)
     out["new_device"] = new_dev
-    out["new_addr"] = _first_seen(key, addr)
-    out["new_email"] = _first_seen(key, email)
-    # distinct devices seen before this row = cumulative first-sightings, excluding this row
+    out["new_addr"] = _first_seen(card, _col(d, cfg["addr_column"]))
+    out["new_email"] = _first_seen(card, _col(d, cfg["email_column"]))
     first_dev = new_dev.fillna(0.0)
-    out["card_n_devices"] = first_dev.groupby(key, sort=False).cumsum() - first_dev
+    out["card_n_devices"] = first_dev.groupby(card, sort=False).cumsum() - first_dev
 
-    dev_key = dev.astype("object")
-    has_dev = dev.notna()
-    dev_count = dev_key.groupby(dev_key, sort=False).cumcount().astype("float64")
-    new_card_on_dev = (~pd.DataFrame({"d": dev_key, "k": key}).duplicated(["d", "k"])).astype(float)
-    dev_cards = new_card_on_dev.groupby(dev_key, sort=False).cumsum() - new_card_on_dev
+    # Device fingerprint: earlier transactions and distinct clients.
+    has_dev = device.notna()
+    dev_count = device.groupby(device, sort=False).cumcount().astype("float64")
+    new_client = (~pd.DataFrame({"d": device, "c": client}).duplicated(["d", "c"])).astype(float)
+    dev_clients = new_client.groupby(device, sort=False).cumsum() - new_client
     out["device_prior_count"] = dev_count.where(has_dev, np.nan)
-    out["device_n_cards"] = dev_cards.where(has_dev, np.nan)
-
-    out.insert(0, "card_key", key)
+    out["device_n_clients"] = dev_clients.where(has_dev, np.nan)
     return out.loc[df.index]
 
 
 @dataclass
-class _CardState:
+class _ClientState:
     count: int = 0
     total: float = 0.0
     total_sq: float = 0.0
     last_t: int | None = None
     recent: deque = field(default_factory=deque)  # (t, amount) within the longest window
+
+
+@dataclass
+class _CardState:
     devices: set = field(default_factory=set)
     addrs: set = field(default_factory=set)
     emails: set = field(default_factory=set)
@@ -186,98 +229,92 @@ class _CardState:
 @dataclass
 class _DeviceState:
     count: int = 0
-    cards: set = field(default_factory=set)
+    clients: set = field(default_factory=set)
 
 
 class OnlineFeatureState:
     """Incremental version of `build_features` for the streaming path.
 
-    Call `update(tx)` once per transaction in time order; it returns the features for that
-    transaction (computed before the transaction is added to the state).
+    Call `update(tx)` once per transaction in time order; it returns the keys and features for
+    that transaction (computed before the transaction is added to the state).
     """
 
     def __init__(self, cfg: Mapping[str, Any]):
         self.cfg = cfg
         self.windows = dict(cfg["windows"])
         self.max_window = max(self.windows.values())
+        self.clients: dict[str, _ClientState] = {}
         self.cards: dict[str, _CardState] = {}
         self.devices: dict[str, _DeviceState] = {}
 
-    @staticmethod
-    def _missing(v: Any) -> bool:
-        return v is None or (isinstance(v, float) and math.isnan(v))
+    def _values(self, tx: Mapping[str, Any]) -> tuple[Any, Any]:
+        return tx.get(self.cfg["addr_column"]), tx.get(self.cfg["email_column"])
 
     def features(self, tx: Mapping[str, Any]) -> dict[str, Any]:
-        """Features for `tx` given the current state, without updating it."""
+        """Keys and features for `tx` given the current state, without updating it."""
         cfg = self.cfg
-        key = row_key(tx, cfg["card_key_columns"])
+        client, card, device = row_keys(tx, cfg)
         t = int(tx[cfg["time_column"]])
         amt = float(tx[cfg["amount_column"]])
-        st = self.cards.get(key, _CardState())
-        n = st.count
-        mean = st.total / n if n > 0 else math.nan
-        if n > 1:
-            var = (st.total_sq - n * mean * mean) / (n - 1)
-            std = _std(var, mean)
-        else:
-            std = math.nan
+        cs = self.clients.get(client, _ClientState())
+        n = cs.count
+        mean = cs.total / n if n > 0 else math.nan
+        std = _std((cs.total_sq - n * mean * mean) / (n - 1), mean) if n > 1 else math.nan
         f: dict[str, Any] = {
-            "card_key": key,
-            "card_prior_count": float(n),
-            "card_amt_mean": mean,
-            "card_amt_std": std,
-            "amt_to_card_mean": amt / mean if n > 0 and mean > 0 else math.nan,
+            "client_key": client,
+            "card_key": card,
+            "device_key": device if device is not None else math.nan,
+            "client_prior_count": float(n),
+            "client_amt_mean": mean,
+            "client_amt_std": std,
+            "amt_to_client_mean": amt / mean if n > 0 and mean > 0 else math.nan,
             "amt_zscore": (amt - mean) / std if n > 1 and std > 0 else math.nan,
-            "secs_since_prev": float(t - st.last_t) if st.last_t is not None else math.nan,
+            "secs_since_prev": float(t - cs.last_t) if cs.last_t is not None else math.nan,
         }
         for name, w in self.windows.items():
-            in_win = [a for (tt, a) in st.recent if t - w <= tt < t]
+            in_win = [a for (tt, a) in cs.recent if t - w <= tt < t]
             f[f"cnt_{name}"] = float(len(in_win))
             f[f"sum_{name}"] = float(sum(in_win))
-        dev = tx.get(cfg["device_column"])
-        addr = tx.get(cfg["addr_column"])
-        email = tx.get(cfg["email_column"])
-        f["new_device"] = math.nan if self._missing(dev) else float(dev not in st.devices)
-        f["new_addr"] = math.nan if self._missing(addr) else float(addr not in st.addrs)
-        f["new_email"] = math.nan if self._missing(email) else float(email not in st.emails)
-        f["card_n_devices"] = float(len(st.devices))
-        if self._missing(dev):
+        ks = self.cards.get(card, _CardState())
+        addr, email = self._values(tx)
+        f["new_device"] = math.nan if device is None else float(device not in ks.devices)
+        f["new_addr"] = math.nan if _is_missing(addr) else float(addr not in ks.addrs)
+        f["new_email"] = math.nan if _is_missing(email) else float(email not in ks.emails)
+        f["card_n_devices"] = float(len(ks.devices))
+        if device is None:
             f["device_prior_count"] = math.nan
-            f["device_n_cards"] = math.nan
+            f["device_n_clients"] = math.nan
         else:
-            ds = self.devices.get(dev, _DeviceState())
+            ds = self.devices.get(device, _DeviceState())
             f["device_prior_count"] = float(ds.count)
-            f["device_n_cards"] = float(len(ds.cards))
+            f["device_n_clients"] = float(len(ds.clients))
         return f
 
     def update(self, tx: Mapping[str, Any]) -> dict[str, Any]:
-        """Return features for `tx`, then add it to the state."""
+        """Return keys and features for `tx`, then add it to the state."""
         f = self.features(tx)
-        cfg = self.cfg
-        key = f["card_key"]
-        t = int(tx[cfg["time_column"]])
-        amt = float(tx[cfg["amount_column"]])
-        st = self.cards.setdefault(key, _CardState())
-        st.count += 1
-        st.total += amt
-        st.total_sq += amt * amt
-        st.last_t = t
-        st.recent.append((t, amt))
-        while st.recent and st.recent[0][0] < t - self.max_window:
-            st.recent.popleft()
-        for col, bucket in (
-            (cfg["device_column"], st.devices),
-            (cfg["addr_column"], st.addrs),
-            (cfg["email_column"], st.emails),
-        ):
-            v = tx.get(col)
-            if not self._missing(v):
-                bucket.add(v)
-        dev = tx.get(cfg["device_column"])
-        if not self._missing(dev):
-            ds = self.devices.setdefault(dev, _DeviceState())
+        t = int(tx[self.cfg["time_column"]])
+        amt = float(tx[self.cfg["amount_column"]])
+        cs = self.clients.setdefault(f["client_key"], _ClientState())
+        cs.count += 1
+        cs.total += amt
+        cs.total_sq += amt * amt
+        cs.last_t = t
+        cs.recent.append((t, amt))
+        while cs.recent and cs.recent[0][0] < t - self.max_window:
+            cs.recent.popleft()
+        ks = self.cards.setdefault(f["card_key"], _CardState())
+        device = f["device_key"] if isinstance(f["device_key"], str) else None
+        addr, email = self._values(tx)
+        if device is not None:
+            ks.devices.add(device)
+            ds = self.devices.setdefault(device, _DeviceState())
             ds.count += 1
-            ds.cards.add(key)
+            ds.clients.add(f["client_key"])
+        if not _is_missing(addr):
+            ks.addrs.add(addr)
+        if not _is_missing(email):
+            ks.emails.add(email)
         return f
 
 
@@ -290,16 +327,12 @@ def online_features(df: pd.DataFrame, cfg: Mapping[str, Any]) -> pd.DataFrame:
 
 
 def _clean(row: dict) -> dict:
-    """NaN-like values (pd.NA, numpy NaN) -> float NaN so `_missing` sees them."""
-    return {k: (math.nan if _is_nan(v) else v) for k, v in row.items()}
-
-
-def _is_nan(v: Any) -> bool:
-    return v is pd.NA or (isinstance(v, (float, np.floating)) and v != v)
+    """NaN-like values (pd.NA, numpy NaN) -> float NaN."""
+    return {k: (math.nan if _is_missing(v) else v) for k, v in row.items()}
 
 
 def parity(offline: pd.DataFrame, online: pd.DataFrame, names: Sequence[str]) -> dict[str, float]:
-    """Max absolute difference per feature (NaNs must match position-wise; else inf)."""
+    """Max relative difference per feature (NaNs must match position-wise; else inf)."""
     report = {}
     for n in names:
         a = offline[n].to_numpy(dtype="float64")
@@ -312,3 +345,6 @@ def parity(offline: pd.DataFrame, online: pd.DataFrame, names: Sequence[str]) ->
         scale = np.maximum(1.0, np.abs(a[m]))
         report[n] = float((diff / scale).max()) if m.any() else 0.0
     return report
+
+
+KEY_COLUMNS = ["client_key", "card_key", "device_key"]
