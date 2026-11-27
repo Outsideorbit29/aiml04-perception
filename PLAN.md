@@ -68,11 +68,11 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 - [ ] F7.3 **(S)** Public dashboard on Render / Streamlit Cloud as the Live Deployment URL
 
 ## F8 Deliverables (Dec 10–13)
-- [ ] F8.1 README: architecture, setup, run steps, feature breakdown, results
-- [ ] F8.2 Architecture diagram + API docs (FastAPI OpenAPI) + data docs
-- [ ] F8.3 Test report and metrics table; screenshots in `docs/screenshots/`
+- [x] F8.1 README: architecture, setup, run steps, feature breakdown, results
+- [x] F8.2 Architecture diagram + API docs (FastAPI OpenAPI) + data docs
+- [x] F8.3 Test report and metrics table; screenshots in `docs/screenshots/`
 - [ ] F8.4 Demo video (3–4 min)
-- [ ] F8.5 10-minute presentation
+- [x] F8.5 10-minute presentation
 - [ ] F8.6 Individual reflection (**user**, own words)
 
 ## Submission (Dec 13)

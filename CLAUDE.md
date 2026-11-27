@@ -21,8 +21,12 @@ F5 load test: 50 tx/s steady e2e p95 128 ms, burst 242 tx/s (`docs/SERVING.md`).
 `anish2906/aiml01-drift` v2, no retrain trigger; alert FPR drifts 0.88% → 1.36% (`docs/DRIFT.md`).
 Stack: `docker compose up -d --build kafka redis scorer consumer monitor dashboard` (dashboard :8501);
 replay `docker compose run --rm producer --rate 50 --limit 5000 [--drift amount_scale=3,shift_after=2000]`;
-`docker compose down`. Not yet run live: monitor + drift demo, Minikube (F7.2 manifests). Next: F8
-deliverables (README, diagram, test report, screenshots, demo video, slides, reflection by user).
+`docker compose down`. Live drift demo passed 2026-11-27 (TransactionAmt PSI 1.6, dry-run retrain;
+`min_window` raised to 1000 after a warm-up false trigger). F8.1–F8.3 + F8.5 done: README,
+docs/ARCHITECTURE.md, API.md, TEST_REPORT.md, screenshots, deck `presentation/deck/index.html`.
+Open: Minikube live run (optional), demo video (script docs/DEMO_SCRIPT.md), reflection (user
+rewrites docs/REFLECTION_DRAFT.md). Laptop browsers can't reach localhost; screenshots use
+`zenika/alpine-chrome:with-puppeteer` on the compose network.
 MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
 `fraud.tracking.configure()` and must attach dataset `anish2906/aiml04-secrets` (file `dagshub_token`).
 

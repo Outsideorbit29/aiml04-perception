@@ -99,7 +99,7 @@ of CI.
 
 | Item | Status |
 |---|---|
-| Live monitor + drift demo on the Docker stack | not run yet (checked without Docker only) |
+| Live monitor + drift demo on the Docker stack | passed 2026-11-27: TransactionAmt PSI 1.47–1.63 after the shift, dry-run retrain printed; one false trigger on a 962-row warm-up window, fixed by `min_window` 1000 (`docs/DRIFT.md`) |
 | Minikube deployment (F7.2 manifests) | manifests checked statically by `test_k8s_manifests.py`; not run on a cluster yet |
 | Screenshots of the running dashboard, scorer docs and drift monitor | TBD (main session, `docs/screenshots/`) |
 | SMOTE gain vs imputation gain | open question in `docs/MODEL.md` |

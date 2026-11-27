@@ -209,14 +209,23 @@ producer Job, dashboard on NodePort 30851, teardown) are in [`docs/DEPLOY.md`](d
 
 ## Screenshots
 
-> **Placeholder.** Images go in [`docs/screenshots/`](docs/screenshots/) and will be added by the
-> main session.
+Captured on 2026-11-27 from the Docker stack after a 5,000-transaction replay with drift injection
+(headless Chrome inside the compose network).
 
-| Screen | File |
-|---|---|
-| Analyst dashboard | `docs/screenshots/dashboard.png` (TBD) |
-| Scorer OpenAPI docs | `docs/screenshots/scorer_docs.png` (TBD) |
-| Drift monitor output | `docs/screenshots/drift_monitor.png` (TBD) |
+**Analyst dashboard** (live overview + alert queue):
+
+![Analyst dashboard](docs/screenshots/dashboard.png)
+
+**Fraud rings tab:**
+
+![Fraud rings](docs/screenshots/dashboard_rings.png)
+
+**Drift monitor** (`--drift amount_scale=3,shift_after=2000`; dry-run retraining trigger):
+
+![Drift monitor](docs/screenshots/drift_monitor.png)
+
+More: [scorer OpenAPI docs](docs/screenshots/scorer_docs.png),
+[cases tab](docs/screenshots/dashboard_cases.png), [model tab](docs/screenshots/dashboard_model.png).
 
 ## Demo video
 

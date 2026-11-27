@@ -37,7 +37,7 @@ blends peak at w = 0.5, so the two models carry complementary signal.
 
 **Live blend (used by the F5 scorer).** For each client, its *GNN risk* is the mean GNN
 probability over that client's transactions in **earlier periods only**: train for val and
-train+val for test. At serving time this is a key-value lookup (`client_risk.parquet`, 180k clients).
+train+val for test. At serving time this is a key-value lookup (`client_risk.parquet`, 191,596 clients in the F5 bundle).
 Clients never seen before get the XGBoost score alone. That gives +0.034 test PR-AUC and +4.4
 points of recall at the same alert rate, for a lookup that costs microseconds.
 
