@@ -73,10 +73,16 @@ trigger; false-alert rate 0.88% → 1.36%."
 
 ## Recording checklist
 
+> **Browser access on this laptop.** WSL runs with `networkingMode=mirrored` (needed by AIML-04),
+> and with it Chrome/Edge time out on Docker-published ports (`localhost:8501`, `:8000`), while
+> curl, PowerShell and Python reach them. Start the relay in a separate terminal (Windows) and use
+> the relay ports in the browser for shots 4 and 5:
+> `py -3.14 scripts/browser_relay.py 18501:8501 18000:8000` → `http://127.0.0.1:18501` (dashboard),
+> `http://127.0.0.1:18000/docs` (scorer). Terminal commands keep using `localhost:8000`.
+
 ### Before the session (can be done earlier, not during recording)
 - [ ] Serving bundle present: `KAGGLE=<path to kaggle.exe> bash scripts/fetch_serving_bundle.sh`
-- [ ] Drift reference for the monitor (optional, better baseline):
-      `kaggle kernels output anish2906/aiml01-drift -p serving_bundle/data --file-pattern 'drift_reference\.json$'`
+- [ ] Drift reference: fetched by `scripts/fetch_serving_bundle.sh` (`serving_bundle/data/drift_reference.json`)
 - [ ] Images built: `docker compose build` (do this before, not while recording)
 - [ ] Rehearse shots 5 and 6 once, then `docker compose down`
 - [ ] Fresh case store: with the stack down, move the old one aside, e.g.
