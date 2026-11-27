@@ -16,13 +16,13 @@ worktree at `D:\Project_ai_aiml01`; AIML-04 (`main`) is at `D:\Project_ai`. Dead
 - Never submit on the portal for the user.
 
 ## Progress snapshot
-_Last updated: 2026-11-27_ — F0–F4 done. F5 code done and CI-green (46 tests): warm-start state,
-row scorer (Booster), Feast/memory store, case store, FastAPI scorer, consumer, producer, Dockerfile,
-docker-compose.yml. Serving bundle ready in Kaggle output `anish2906/aiml01-serving-bundle` (30 MB:
-model, blend w=0.5 thr 0.30995, client_risk, history, replay). Next (laptop, ask user first): start
-Docker Desktop, `KAGGLE=<cli> bash scripts/fetch_serving_bundle.sh`, `docker compose up -d --build
-kafka redis scorer consumer`, replay with `docker compose run --rm producer --rate 50 --limit 5000`,
-record latency/throughput (serving_bundle/data/consumer_stats.json), then `docker compose down`.
+_Last updated: 2026-11-27_ — F0–F5 done, F7.1/F7.2 done (merged from aiml01-f7-dashboard; Minikube
+not yet run). F5 load test: 50 tx/s steady e2e p95 128 ms, burst 242 tx/s (`docs/SERVING.md`). Stack:
+`docker compose up -d --build kafka redis scorer consumer dashboard` (dashboard :8501), replay with
+`docker compose run --rm producer --rate 50 --limit 5000`, then `docker compose down`. Serving bundle in
+gitignored `serving_bundle/` (from Kaggle `anish2906/aiml01-serving-bundle`). F6 drift being built on
+branch `aiml01-f6-drift` by an agent (merge + QA when done). Known fix: dashboard "over budget" compares
+total alert rate with the 1% FPR budget (expected total alert rate ~2.7%). Then F8 deliverables.
 MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
 `fraud.tracking.configure()` and must attach dataset `anish2906/aiml04-secrets` (file `dagshub_token`).
 

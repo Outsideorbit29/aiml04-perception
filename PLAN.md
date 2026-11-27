@@ -62,9 +62,9 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
       (launches the Kaggle training job); inject drift in the replay to demo it
 
 ## F7 Dashboard + Kubernetes (Dec 8–10)
-- [ ] F7.1 Streamlit dashboard: live alerts, case status (open / confirmed / dismissed),
+- [x] F7.1 Streamlit dashboard: live alerts, case status (open / confirmed / dismissed),
       analyst feedback labels, fraud-ring view
-- [ ] F7.2 Kubernetes manifests (Minikube): Kafka, Redis, scorer, consumer, dashboard
+- [x] F7.2 Kubernetes manifests (Minikube): Kafka, Redis, scorer, consumer, dashboard
 - [ ] F7.3 **(S)** Public dashboard on Render / Streamlit Cloud as the Live Deployment URL
 
 ## F8 Deliverables (Dec 10–13)
