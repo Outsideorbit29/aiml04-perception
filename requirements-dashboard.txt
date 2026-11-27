@@ -1,0 +1,6 @@
+# F7 analyst dashboard image (services/dashboard/Dockerfile). No xgboost, feast or kafka needed.
+streamlit==1.40.1
+numpy>=1.26,<2.3
+pandas>=2.1,<2.3
+pyarrow>=14
+pyyaml>=6.0
