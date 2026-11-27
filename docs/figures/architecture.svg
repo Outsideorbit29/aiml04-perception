@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <title>AIML-01 fraud detection platform: offline (Kaggle) and online (Docker Compose / Minikube) data flow</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b3261e"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #4a5568; stroke-width: 1.4; rx: 6; }
+      .store { fill: #fff8e1; stroke: #8d6e00; stroke-width: 1.4; }
+      .ext { fill: #f3e8ff; stroke: #6b46c1; stroke-width: 1.4; }
+      .t { font-weight: 600; fill: #1a202c; }
+      .s { font-size: 11px; fill: #4a5568; }
+      .flow { stroke: #333; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #555; stroke-width: 1.3; fill: none; stroke-dasharray: 6 4; marker-end: url(#arrow); }
+      .retrain { stroke: #b3261e; stroke-width: 1.5; fill: none; stroke-dasharray: 6 4; marker-end: url(#arrow-red); }
+      .lbl { font-size: 11px; fill: #2d3748; }
+      .lane { font-size: 15px; font-weight: 700; fill: #2d3748; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="780" fill="#ffffff"/>
+
+  <!-- Lanes -->
+  <rect x="10" y="30" width="1180" height="280" rx="10" fill="#eef4fb" stroke="#90a4c0"/>
+  <text class="lane" x="24" y="54">Offline – Kaggle notebooks (batch, cloud)</text>
+  <rect x="10" y="330" width="1180" height="430" rx="10" fill="#eef8f0" stroke="#8fbf98"/>
+  <text class="lane" x="24" y="354">Online – laptop: Docker Compose or Minikube (namespace aiml01)</text>
+
+  <!-- Offline row 1 -->
+  <rect class="ext" x="30" y="100" width="160" height="80" rx="6"/>
+  <text class="t" x="110" y="128" text-anchor="middle">IEEE-CIS data</text>
+  <text class="s" x="110" y="146" text-anchor="middle">Kaggle competition</text>
+  <text class="s" x="110" y="162" text-anchor="middle">590,540 labelled tx</text>
+
+  <rect class="box" x="220" y="100" width="160" height="80"/>
+  <text class="t" x="300" y="122" text-anchor="middle">F1 prep_data</text>
+  <text class="s" x="300" y="140" text-anchor="middle">join identity, EDA</text>
+  <text class="s" x="300" y="156" text-anchor="middle">time split 70/15/15</text>
+  <text class="s" x="300" y="172" text-anchor="middle">aiml01-data-prep</text>
+
+  <rect class="box" x="410" y="100" width="160" height="80"/>
+  <text class="t" x="490" y="122" text-anchor="middle">F2 build_features</text>
+  <text class="s" x="490" y="140" text-anchor="middle">client/card/device keys</text>
+  <text class="s" x="490" y="156" text-anchor="middle">18 features + Feast check</text>
+  <text class="s" x="490" y="172" text-anchor="middle">aiml01-features</text>
+
+  <rect class="box" x="600" y="100" width="160" height="80"/>
+  <text class="t" x="680" y="122" text-anchor="middle">F3 train</text>
+  <text class="s" x="680" y="140" text-anchor="middle">LR, XGBoost (+SMOTE)</text>
+  <text class="s" x="680" y="156" text-anchor="middle">1% FPR threshold on val</text>
+  <text class="s" x="680" y="172" text-anchor="middle">aiml01-train</text>
+
+  <rect class="box" x="790" y="100" width="160" height="80"/>
+  <text class="t" x="870" y="122" text-anchor="middle">F4 train_gnn (T4)</text>
+  <text class="s" x="870" y="140" text-anchor="middle">GraphSAGE, blend</text>
+  <text class="s" x="870" y="156" text-anchor="middle">fraud rings, client risk</text>
+  <text class="s" x="870" y="172" text-anchor="middle">aiml01-gnn</text>
+
+  <rect class="box" x="980" y="100" width="170" height="80"/>
+  <text class="t" x="1065" y="122" text-anchor="middle">F5 export bundle</text>
+  <text class="s" x="1065" y="140" text-anchor="middle">models/ + data/ (30 MB)</text>
+  <text class="s" x="1065" y="156" text-anchor="middle">export_serving_bundle</text>
+  <text class="s" x="1065" y="172" text-anchor="middle">aiml01-serving-bundle</text>
+
+  <path class="flow" d="M190,140 H218"/>
+  <path class="flow" d="M380,140 H408"/>
+  <path class="flow" d="M570,140 H598"/>
+  <path class="flow" d="M760,140 H788"/>
+  <path class="flow" d="M950,140 H978"/>
+
+  <!-- Offline row 2 -->
+  <rect class="box" x="600" y="215" width="160" height="70"/>
+  <text class="t" x="680" y="238" text-anchor="middle">F6 drift_report</text>
+  <text class="s" x="680" y="256" text-anchor="middle">PSI + Evidently, weekly</text>
+  <text class="s" x="680" y="272" text-anchor="middle">aiml01-drift</text>
+
+  <rect class="ext" x="790" y="215" width="160" height="70" rx="6"/>
+  <text class="t" x="870" y="238" text-anchor="middle">MLflow (DagsHub)</text>
+  <text class="s" x="870" y="256" text-anchor="middle">experiment aiml01-fraud</text>
+  <text class="s" x="870" y="272" text-anchor="middle">model aiml01-xgb</text>
+
+  <path class="flow" d="M500,180 L640,213"/>
+  <path class="flow" d="M680,180 V213"/>
+  <path class="dash" d="M740,180 L815,213"/>
+  <path class="dash" d="M870,180 V213"/>
+  <path class="dash" d="M760,250 H788"/>
+  <text class="lbl" x="905" y="200">log runs</text>
+
+  <!-- Bundle handoff -->
+  <path class="dash" d="M1065,180 V378"/>
+  <text class="lbl" x="1058" y="300" text-anchor="end">fetch_serving_bundle.sh</text>
+
+  <!-- Online -->
+  <rect class="box" x="30" y="430" width="160" height="70"/>
+  <text class="t" x="110" y="456" text-anchor="middle">Replay producer</text>
+  <text class="s" x="110" y="474" text-anchor="middle">replay.parquet, 50 tx/s</text>
+  <text class="s" x="110" y="490" text-anchor="middle">optional --drift</text>
+
+  <rect class="store" x="230" y="430" width="170" height="70" rx="6"/>
+  <text class="t" x="315" y="456" text-anchor="middle">Kafka (KRaft)</text>
+  <text class="s" x="315" y="474" text-anchor="middle">topic transactions</text>
+  <text class="s" x="315" y="490" text-anchor="middle">key = TransactionID</text>
+
+  <rect class="box" x="440" y="405" width="200" height="120"/>
+  <text class="t" x="540" y="428" text-anchor="middle">Stream consumer</text>
+  <text class="s" x="540" y="448" text-anchor="middle">micro-batch ≤ 200 msgs / 50 ms</text>
+  <text class="s" x="540" y="464" text-anchor="middle">OnlineFeatureState.update</text>
+  <text class="s" x="540" y="480" text-anchor="middle">(same code as training,</text>
+  <text class="s" x="540" y="496" text-anchor="middle">warm start from history)</text>
+
+  <rect class="store" x="700" y="375" width="200" height="60" rx="6"/>
+  <text class="t" x="800" y="399" text-anchor="middle">Feast online store</text>
+  <text class="s" x="800" y="417" text-anchor="middle">Redis, view client_features</text>
+
+  <rect class="box" x="700" y="470" width="200" height="80"/>
+  <text class="t" x="800" y="494" text-anchor="middle">FastAPI scorer</text>
+  <text class="s" x="800" y="512" text-anchor="middle">XGBoost + client GNN risk</text>
+  <text class="s" x="800" y="528" text-anchor="middle">blend w = 0.5, thr 0.310</text>
+  <text class="s" x="800" y="544" text-anchor="middle">409 if features are stale</text>
+
+  <rect class="store" x="440" y="590" width="200" height="50" rx="6"/>
+  <text class="t" x="540" y="611" text-anchor="middle">Kafka topic scores</text>
+  <text class="s" x="540" y="628" text-anchor="middle">ScoreResponse JSON</text>
+
+  <rect class="store" x="700" y="600" width="200" height="60" rx="6"/>
+  <text class="t" x="800" y="624" text-anchor="middle">Case store</text>
+  <text class="s" x="800" y="642" text-anchor="middle">SQLite (WAL), table scored</text>
+
+  <rect class="box" x="960" y="380" width="200" height="70"/>
+  <text class="t" x="1060" y="402" text-anchor="middle">serving_bundle/ volume</text>
+  <text class="s" x="1060" y="420" text-anchor="middle">models → scorer</text>
+  <text class="s" x="1060" y="436" text-anchor="middle">history, replay, rings → services</text>
+
+  <rect class="box" x="960" y="560" width="200" height="70"/>
+  <text class="t" x="1060" y="583" text-anchor="middle">Streamlit dashboard</text>
+  <text class="s" x="1060" y="601" text-anchor="middle">alerts, cases, rings, model</text>
+  <text class="s" x="1060" y="617" text-anchor="middle">:8501 (NodePort 30851)</text>
+
+  <rect class="box" x="960" y="660" width="200" height="70"/>
+  <text class="t" x="1060" y="683" text-anchor="middle">Drift monitor</text>
+  <text class="s" x="1060" y="701" text-anchor="middle">PSI + performance every 30 s</text>
+  <text class="s" x="1060" y="717" text-anchor="middle">retrain decision</text>
+
+  <path class="flow" d="M190,465 H228"/>
+  <path class="flow" d="M400,465 H438"/>
+  <path class="flow" d="M640,435 L698,412"/>
+  <text class="lbl" x="648" y="400">1 push</text>
+  <path class="flow" d="M800,435 V468"/>
+  <text class="lbl" x="806" y="458">get_online_features</text>
+  <path class="flow" d="M640,500 L698,505" style="marker-start:url(#arrow)"/>
+  <text class="lbl" x="646" y="528">2 POST /score</text>
+  <path class="flow" d="M540,525 V588"/>
+  <text class="lbl" x="546" y="560">4 publish</text>
+  <path class="flow" d="M620,525 L720,598"/>
+  <text class="lbl" x="672" y="556">3 insert</text>
+  <path class="flow" d="M900,615 L958,595" style="marker-start:url(#arrow)"/>
+  <text class="lbl" x="896" y="585">read / labels</text>
+  <path class="flow" d="M900,645 L958,690"/>
+  <text class="lbl" x="905" y="690">read</text>
+  <path class="dash" d="M960,430 L902,495"/>
+  <path class="dash" d="M900,535 L995,558"/>
+  <text class="lbl" x="925" y="530">/model /health</text>
+
+  <!-- Retrain trigger back to Kaggle -->
+  <path class="retrain" d="M1160,695 H1180 V78 H680 V98"/>
+  <text class="lbl" x="600" y="72" fill="#b3261e">retrain trigger → kaggle kernels push -p kaggle/train (dry run by default)</text>
+
+  <!-- Legend -->
+  <line x1="30" y1="735" x2="70" y2="735" stroke="#333" stroke-width="1.5"/>
+  <text class="lbl" x="78" y="739">data flow</text>
+  <line x1="150" y1="735" x2="190" y2="735" stroke="#555" stroke-width="1.3" stroke-dasharray="6 4"/>
+  <text class="lbl" x="198" y="739">artefacts / control</text>
+  <rect x="320" y="727" width="20" height="14" fill="#fff8e1" stroke="#8d6e00"/>
+  <text class="lbl" x="346" y="739">stores and topics</text>
+  <rect x="460" y="727" width="20" height="14" fill="#f3e8ff" stroke="#6b46c1"/>
+  <text class="lbl" x="486" y="739">external services</text>
+</svg>
