@@ -70,7 +70,11 @@ def live_overview() -> None:
     conn = dd.connect(cfg["cases_db"])
     try:
         ov = dd.overview(
-            conn, cfg["alert_budget"], cfg["throughput_window_s"], cfg["latency_last_n"]
+            conn,
+            cfg["alert_budget"],
+            cfg["throughput_window_s"],
+            cfg["latency_last_n"],
+            cfg.get("expected_alert_rate"),
         )
         tl = dd.timeline(conn, cfg["timeline_bucket_s"], cfg["timeline_last_s"])
         sc = dd.status_counts(conn)
@@ -86,7 +90,8 @@ def live_overview() -> None:
     c[2].metric(
         "Alert rate",
         f"{ov['alert_rate']:.2%}",
-        delta=f"{ov['alert_rate'] - ov['alert_budget']:+.2%} vs {ov['alert_budget']:.0%} budget",
+        delta=f"{ov['alert_rate'] - ov['expected_alert_rate']:+.2%} vs "
+        f"{ov['expected_alert_rate']:.1%} expected",
         delta_color="inverse",
     )
     c[3].metric(
@@ -101,8 +106,8 @@ def live_overview() -> None:
     age = time.time() - ov["last_scored_at"]
     st.caption(
         f"Last transaction scored {age:.0f} s ago. Budget: the threshold is set for at most "
-        f"{ov['alert_budget']:.0%} of legitimate transactions flagged, so the overall alert rate "
-        "sits slightly above it when fraud is caught."
+        f"{ov['alert_budget']:.0%} of legitimate transactions flagged; with ~3.5% fraud and ~50% "
+        f"recall the expected overall alert rate is {ov['expected_alert_rate']:.1%}."
     )
     if not tl.empty:
         st.line_chart(tl.set_index("t")[["tps", "alerts"]], height=180)

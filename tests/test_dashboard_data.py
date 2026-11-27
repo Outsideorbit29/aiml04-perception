@@ -168,3 +168,26 @@ def test_load_rings_roundtrip(tmp_path, rings):
     rings.assign(client_key=rings["client_key"]).to_parquet(p)
     assert dd.load_rings(p).equals(rings)
     assert dd.load_rings(tmp_path / "missing.parquet").empty
+
+
+def test_overview_compares_total_alert_rate_with_expected(tmp_path):
+    from fraud.cases import CaseStore
+
+    store = CaseStore(tmp_path / "c.db")
+    rows = [
+        {
+            "transaction_id": i,
+            "event_time": float(i),
+            "score": 0.9 if i < 3 else 0.1,
+            "alert": i < 3,
+            "true_label": int(i < 3),
+        }
+        for i in range(100)
+    ]
+    store.insert(rows)
+    conn = dd.connect(tmp_path / "c.db")
+    plain = dd.overview(conn, alert_budget=0.01)
+    assert plain["alert_rate"] == 0.03 and plain["over_budget"]  # 3% > 1% budget
+    ov = dd.overview(conn, alert_budget=0.01, expected_alert_rate=0.027)
+    assert ov["expected_alert_rate"] == 0.027 and ov["over_budget"]
+    assert not dd.overview(conn, alert_budget=0.01, expected_alert_rate=0.035)["over_budget"]

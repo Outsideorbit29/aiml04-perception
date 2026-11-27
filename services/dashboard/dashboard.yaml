@@ -2,6 +2,9 @@
 # Any key can be overridden by an upper-case environment variable (e.g. CASES_DB, RINGS_PATH).
 rings_path: /app/data/rings.parquet
 alert_budget: 0.01          # configs/train.yaml max_fpr: at most 1% of legit transactions flagged
+# Expected TOTAL alert rate at that operating point: 1% x 96.5% legit + ~50% recall x 3.5% fraud
+# (docs/GRAPH.md live blend). The overview flags "over budget" above this, not above 1%.
+expected_alert_rate: 0.027
 refresh_s: 5                # auto-refresh period of the live panels
 throughput_window_s: 60     # throughput = transactions scored in the last N seconds / N
 latency_last_n: 5000        # latency percentiles over the most recent N transactions

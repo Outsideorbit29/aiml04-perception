@@ -10,4 +10,6 @@ TMP="$(mktemp -d)"
 rm -rf "$OUT"
 mv "$TMP/serving_bundle" "$OUT"
 rm -rf "$TMP"
+# F6 drift reference for the live monitor (optional; it falls back to history.parquet).
+"$KAGGLE" kernels output anish2906/aiml01-drift -p "$OUT/data" --file-pattern 'drift_reference\.json$'   || echo "no drift reference found; the monitor will build one from history.parquet"
 du -sh "$OUT"/models "$OUT"/data

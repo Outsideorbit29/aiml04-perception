@@ -83,13 +83,21 @@ def overview(
     alert_budget: float = 0.01,
     throughput_window_s: float = 60.0,
     latency_last_n: int = 5000,
+    expected_alert_rate: float | None = None,
 ) -> dict[str, Any]:
-    """Headline numbers: volume, alert rate vs budget, latency percentiles, recent throughput."""
+    """Headline numbers: volume, alert rate vs budget, latency percentiles, recent throughput.
+
+    `alert_budget` is a false-positive rate (share of legit transactions flagged), so the total
+    alert rate is compared with `expected_alert_rate` (budget on legit traffic plus the frauds
+    caught) when it is given; otherwise with the budget itself.
+    """
+    target = expected_alert_rate if expected_alert_rate is not None else alert_budget
     empty = {
         "scored": 0,
         "alerts": 0,
         "alert_rate": None,
         "alert_budget": alert_budget,
+        "expected_alert_rate": target,
         "over_budget": False,
         "latency_p50_ms": None,
         "latency_p95_ms": None,
@@ -118,7 +126,8 @@ def overview(
         "alerts": alerts,
         "alert_rate": rate,
         "alert_budget": alert_budget,
-        "over_budget": rate > alert_budget,
+        "expected_alert_rate": target,
+        "over_budget": rate > target,
         "latency_p50_ms": _pct(lat, 50),
         "latency_p95_ms": _pct(lat, 95),
         "throughput_tps": recent / throughput_window_s,

@@ -57,8 +57,8 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 - [x] F5.4 Load test: throughput and p50/p95/p99 latency recorded
 
 ## F6 Drift + retraining (Dec 7–8)
-- [ ] F6.1 Evidently data-drift report: reference = train, current = sliding window of live traffic
-- [ ] F6.2 Retrain trigger when drift share or PR-AUC on feedback labels crosses a threshold
+- [x] F6.1 Evidently data-drift report: reference = train, current = sliding window of live traffic
+- [x] F6.2 Retrain trigger when drift share or PR-AUC on feedback labels crosses a threshold
       (launches the Kaggle training job); inject drift in the replay to demo it
 
 ## F7 Dashboard + Kubernetes (Dec 8–10)
