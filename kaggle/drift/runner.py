@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
-REF = "aiml01-f6-drift"
+REF = "AIML-01"
 MODE = "full"  # smoke | full
 WORKDIR = "/kaggle/temp/repo"
 

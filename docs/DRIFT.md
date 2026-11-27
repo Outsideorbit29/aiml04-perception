@@ -33,7 +33,47 @@ training job), at most once per 24 h. It is a **dry run by default**: it prints 
 command; `--execute` (CLI) or `execute_retrain: true` (monitor) actually launches it.
 
 ## Offline results (Kaggle `anish2906/aiml01-drift`)
-RESULTS_PLACEHOLDER
+Version 2 (full, commit `fdad117`, 132 s on CPU), 2026-11-27. Reference: all 413,378 train rows
+(Evidently: a 50k sample); current: val + test (177,162 rows, days 120–182) in weekly windows.
+Score = F3 XGBoost (`xgb_smote`) at its val 1%-FPR threshold 0.2149; val alert rate 2.54%.
+MLflow run `f6-drift-full` (`5bb057144c4940d39dfe4d76aad62c71`) in experiment `aiml01-fraud`:
+per-window metrics, `drift_summary.json`, `drift_reference.json` and the HTML reports. Smoke run:
+version 1 (60k train rows vs the first 40k val rows).
+
+| Window (days) | Rows | Fraud rate | PSI drift share | Evidently drift share | Score PSI | PR-AUC | Precision | Recall | FPR | Retrain |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| all (120–182) | 177,162 | 3.46% | 0.00 | 0.19 | 0.001 | 0.516 | 0.588 | 0.456 | 1.15% | no |
+| w01 (120–126) | 20,798 | 3.43% | 0.00 | 0.11 | 0.002 | 0.695 | 0.709 | 0.601 | 0.88% | no |
+| w02 (127–133) | 19,258 | 3.78% | 0.00 | 0.08 | 0.002 | 0.567 | 0.627 | 0.455 | 1.06% | no |
+| w03 (134–140) | 18,572 | 3.29% | 0.00 | 0.14 | 0.001 | 0.518 | 0.639 | 0.440 | 0.85% | no |
+| w04 (141–147) | 18,549 | 3.44% | 0.00 | 0.14 | 0.000 | 0.421 | 0.560 | 0.365 | 1.02% | no |
+| w05 (148–154) | 21,443 | 3.08% | 0.00 | 0.11 | 0.000 | 0.494 | 0.537 | 0.427 | 1.17% | no |
+| w06 (155–161) | 19,811 | 2.85% | 0.00 | 0.11 | 0.002 | 0.446 | 0.495 | 0.446 | 1.34% | no |
+| w07 (162–168) | 21,038 | 3.47% | 0.00 | 0.19 | 0.004 | 0.454 | 0.530 | 0.412 | 1.31% | no |
+| w08 (169–175) | 19,941 | 3.68% | 0.00 | 0.22 | 0.004 | 0.538 | 0.579 | 0.473 | 1.31% | no |
+| w09 (176–182) | 17,752 | 4.21% | 0.00 | 0.11 | 0.006 | 0.498 | 0.601 | 0.469 | 1.36% | no |
+
+Findings:
+1. **No input feature crosses PSI 0.2.** The largest PSIs (0.10–0.19) are the history counters
+   (`card_n_devices`, `client_prior_count`), `D15`, `secs_since_prev`, `C9` and `weekday` in w01.
+   `TransactionDT` itself has PSI 8.3, which is why the time-trend columns are excluded.
+   Evidently (Wasserstein / Jensen–Shannon, default thresholds) flags 8–22% of the inputs per
+   week, always under the 30% preset share; it flags mostly the same counter features.
+2. **Prediction drift is negligible** (score PSI ≤ 0.006), and the label drifts only mildly (fraud
+   rate 2.9–4.2%; the 4.2% in the last week matches the upward drift in `docs/EDA.md`).
+3. **Performance drifts, but stays within the trigger thresholds.** The false-alert rate climbs from
+   0.88% to 1.31–1.36% over the last four weeks (1.36× the 1% budget against a trigger at 1.5×), and
+   weekly PR-AUC falls from 0.69 to 0.42–0.54 (trigger < 0.40). With `max_fpr_budget_ratio: 1.25`
+   the trigger would fire on w06–w09. The thresholds were kept as designed, not tuned on this
+   result.
+4. So, on this data, a fixed alert threshold slowly overspends the alert budget long before the
+   inputs drift. Re-picking the threshold on recent feedback is the cheaper fix than retraining.
+   The live monitor watches for this with the `alert_budget` and `alert_rate` checks.
+
+Retrain trigger dry run on this summary:
+`python -m scripts.drift_retrain --summary f6_drift/drift_summary.json` → last window w09,
+`retrain: false`, action `none`; on a window with drift it prints
+`[dry-run] would retrain: kaggle kernels push -p kaggle/train (...)`.
 
 ## Live monitor
 `python -m services.monitor.main` (in the services image; `--once` for a single check). Every
@@ -43,6 +83,11 @@ trigger action, last 200 decisions). Reference: `/app/data/drift_reference.json`
 job if present (train inputs + val scores + val alert rate); otherwise `history.parquet` for the
 inputs and the first 2,000 live scores as the score baseline. `MONITOR_<KEY>` env vars override
 the `monitor` section (e.g. `MONITOR_FEEDBACK_SOURCE=true_label`).
+
+Checked without Docker (2026-11-27): one `Monitor.check()` on a 4,000-row synthetic case store
+drawn from the Kaggle reference, with `amount_scale=3,shift_after=2000` applied, gives
+`PSI TransactionAmt 2.37, ProductCD 0.00 | score PSI 0.008 | retrain True ['drift share 0.50 >= 0.3']`
+and `[dry-run] would retrain: kaggle kernels push -p kaggle/train`.
 
 ## Demo (laptop, Docker; ask before starting the stack)
 ```bash
