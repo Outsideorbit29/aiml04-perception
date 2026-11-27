@@ -1,5 +1,5 @@
 # F5 local serving stack. Needs the serving bundle in ./serving_bundle (scripts/fetch_serving_bundle.sh).
-#   docker compose up -d --build kafka redis scorer consumer      # stack
+#   docker compose up -d --build kafka redis scorer consumer dashboard   # stack (dashboard: localhost:8501)
 #   docker compose run --rm producer --rate 50 --limit 5000        # replay test-period transactions
 #   docker compose down                                            # stop (add -v to drop Kafka data)
 x-app: &app
@@ -68,3 +68,13 @@ services:
     profiles: ["replay"]
     depends_on:
       kafka: {condition: service_healthy}
+
+  dashboard:
+    build: {context: ., dockerfile: services/dashboard/Dockerfile}
+    image: aiml01-dashboard:dev
+    volumes:
+      - ./serving_bundle/data:/app/data
+    ports: ["8501:8501"]
+    mem_limit: 512m
+    depends_on:
+      scorer: {condition: service_started}
