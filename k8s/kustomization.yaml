@@ -1,0 +1,13 @@
+# Long-running stack: kubectl apply -k k8s/
+# Run k8s/bundle-loader.yaml first (copy the serving bundle) and k8s/producer-job.yaml after.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - storage.yaml
+  - configmap.yaml
+  - kafka.yaml
+  - redis.yaml
+  - scorer.yaml
+  - consumer.yaml
+  - dashboard.yaml

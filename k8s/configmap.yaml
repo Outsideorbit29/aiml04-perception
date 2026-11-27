@@ -1,0 +1,14 @@
+# Environment overrides for configs/serving.yaml (upper-case key = env var). The in-cluster DNS
+# names match docker-compose (kafka, redis, scorer), so these equal the compose defaults; change
+# them here instead of rebuilding the image.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiml01-serving
+  namespace: aiml01
+data:
+  KAFKA_BOOTSTRAP: "kafka:9092"
+  SCORER_URL: "http://scorer:8000"
+  CASES_DB: "/app/data/cases.db"
+  STATS_PATH: "/app/data/consumer_stats.json"
+  RINGS_PATH: "/app/data/rings.parquet"

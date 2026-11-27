@@ -1,0 +1,11 @@
+# F7 analyst dashboard. Merged over configs/serving.yaml (cases_db, scorer_url, stats_path, ...).
+# Any key can be overridden by an upper-case environment variable (e.g. CASES_DB, RINGS_PATH).
+rings_path: /app/data/rings.parquet
+alert_budget: 0.01          # configs/train.yaml max_fpr: at most 1% of legit transactions flagged
+refresh_s: 5                # auto-refresh period of the live panels
+throughput_window_s: 60     # throughput = transactions scored in the last N seconds / N
+latency_last_n: 5000        # latency percentiles over the most recent N transactions
+timeline_bucket_s: 10
+timeline_last_s: 600
+queue_limit: 100            # alerts shown in the queue
+ring_graph_max_clients: 40  # cap for the ring network chart

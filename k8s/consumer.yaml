@@ -1,0 +1,57 @@
+# Stream consumer (services/consumer/main.py): Kafka -> features -> Redis -> scorer -> cases.db.
+# Single replica: it is the only writer of the SQLite case DB.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer
+  namespace: aiml01
+  labels: {app: consumer}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: consumer}
+  template:
+    metadata:
+      labels: {app: consumer}
+    spec:
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-deps
+          image: aiml01-services:dev
+          imagePullPolicy: Never
+          command:
+            - python
+            - -c
+            - |
+              import socket, sys, time
+              for hp in sys.argv[1:]:
+                  host, port = hp.rsplit(":", 1)
+                  while True:
+                      try:
+                          socket.create_connection((host, int(port)), timeout=2).close()
+                          break
+                      except OSError:
+                          print(f"waiting for {hp}", flush=True)
+                          time.sleep(2)
+            - kafka:9092
+            - redis:6379
+            - scorer:8000
+          resources:
+            limits: {cpu: 200m, memory: 128Mi}
+      containers:
+        - name: consumer
+          image: aiml01-services:dev
+          imagePullPolicy: Never
+          args: ["python", "-m", "services.consumer.main"]
+          envFrom:
+            - configMapRef: {name: aiml01-serving}
+          volumeMounts:
+            - {name: bundle, mountPath: /app/models, subPath: models, readOnly: true}
+            - {name: bundle, mountPath: /app/data, subPath: data}
+          resources:
+            requests: {cpu: 250m, memory: 800Mi}
+            limits: {cpu: "1", memory: 1500Mi}
+      volumes:
+        - name: bundle
+          persistentVolumeClaim: {claimName: aiml01-bundle}

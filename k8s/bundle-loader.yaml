@@ -1,0 +1,21 @@
+# Temporary pod used to copy the serving bundle into the PVC with "kubectl cp" (needs tar, which
+# busybox has). Delete it after copying. See docs/DEPLOY.md.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bundle-loader
+  namespace: aiml01
+  labels: {app: bundle-loader}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: loader
+      image: busybox:1.36
+      command: ["sh", "-c", "mkdir -p /bundle/models /bundle/data && sleep 3600"]
+      volumeMounts:
+        - {name: bundle, mountPath: /bundle}
+      resources:
+        limits: {cpu: 200m, memory: 64Mi}
+  volumes:
+    - name: bundle
+      persistentVolumeClaim: {claimName: aiml01-bundle}
