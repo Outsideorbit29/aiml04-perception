@@ -1,7 +1,7 @@
 # PLAN.md – AIML-04 Delivery Plan (cloud-first)
 
-Start **2026-11-09**, AIML-04 code-complete **2026-11-21**, both projects submitted by **2026-11-29**
-(one day of buffer before the 2026-11-30 portal deadline).
+Start **2026-11-09**, AIML-04 code-complete **2026-11-21**, both projects submitted by **2026-12-14**
+(one day of buffer before the 2026-12-15 portal deadline; moved from 2026-11-30 on the portal, checked 2026-11-26).
 
 > **Low-load rule:** anything that can run online runs online. The laptop only runs what physically
 > can't be done in the cloud: the CARLA simulator, the ROS2 closed loop, and building the TensorRT
@@ -42,7 +42,7 @@ The plan uses about 22 GPU-hours spread across two weeks: training ~15 h, evals 
 | M5 CARLA + ROS2 | Nov 16–19 | 💻 | sim-ros-integrator | Closed loop: car brakes for obstacles in sim |
 | M6 ONNX/TensorRT | Nov 18–20 | ☁ + 💻 | edge-optimizer | Before/after benchmark table, TRT engine running locally |
 | M7 Deliverables | Nov 20–22 | ☁ | docs-presenter + qa-reviewer | Demo video, README, diagrams, slides, reflection |
-| Submit | Nov 28–29 | — | main | Drive folder + GitHub link submitted once on the portal |
+| Submit | by Dec 14 | — | main | Drive folder + GitHub link submitted once on the portal |
 
 ## M0 – Setup (Nov 9–10)
 Online:
@@ -123,7 +123,7 @@ Code is written and unit-tested without the simulator. The laptop runs CARLA onl
 - [ ] M7.7 Drive folder `Anish_Kumar_Gupta_Capstone_Projects/AIML-04/` with code zip, reports, screenshots, sample data, video. Link the full datasets rather than uploading them.
 - [ ] M7.8 **(S)** Hugging Face Space running the offline pipeline on an uploaded video, used as the "Live Deployment URL"
 
-## Submit (Nov 28–29)
+## Submit (by Dec 14; deadline Dec 15)
 - [ ] Both subfolders (AIML-04, AIML-01) complete; access set to "Anyone with the link"
 - [ ] GitHub URL, deployment/demo URL and Drive URL ready
 - [ ] Submit once on the portal (it cannot be resubmitted)

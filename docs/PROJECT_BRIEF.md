@@ -9,7 +9,7 @@ Source: Nexvia Technologies student portal (`/student/projects`), Project #1 of 
 | Difficulty | Intermediate |
 | Estimated effort | 14 days |
 | Assigned | 2026-10-29 |
-| Deadline | **2026-11-30** |
+| Deadline | **2026-12-15** (portal checked 2026-11-26; originally 2026-11-30) |
 | Status | Assigned |
 
 ## Description
@@ -44,3 +44,10 @@ BDD100K · KITTI · Waymo Open Dataset · nuScenes · Cityscapes (segmentation) 
 - General access: "Anyone with the link can view / comment".
 - Form fields: GitHub repository URL (required), live deployment URL (Vercel/Netlify/Render), Drive folder URL, reviewer notes.
 - **Single submission only.** It is locked once submitted.
+
+### Portal update (checked 2026-11-26)
+- Deadline moved to **2026-12-15** for both projects.
+- The form takes **one public GitHub repo URL** that holds both projects "as subfolders or branches
+  (e.g. AIML-04 and AIML-01) with complete source code, tests, and screenshots". Here AIML-04 is on
+  `main` and AIML-01 (Real-Time Financial Fraud Detection) is on branch `AIML-01`.
+- The Google Drive folder URL and the live deployment URL are now optional.

@@ -5,7 +5,7 @@ Instructions for any AI coding agent (Claude Code, Codex, Cursor, subagents) wor
 ## 1. Context
 - Project: **AIML-04 Autonomous Driving Perception Stack**. Brief: `docs/PROJECT_BRIEF.md`.
 - Design: `ARCHITECTURE.md`. Roadmap: `PLAN.md`. Do not add features outside them; propose changes in your report instead.
-- Hard deadline **2026-11-30**. A second internship project (AIML-01 Fraud Detection) has the same deadline, so prefer the simplest approach that meets the brief.
+- Hard deadline **2026-12-15** (portal, checked 2026-11-26; was 2026-11-30). A second internship project (AIML-01 Fraud Detection) has the same deadline, so prefer the simplest approach that meets the brief.
 
 ## 2. Environment: cloud-first, low laptop load
 **Rule: anything that can run online runs online.** The user wants the laptop load kept as low as
