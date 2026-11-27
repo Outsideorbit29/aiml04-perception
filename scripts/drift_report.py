@@ -320,7 +320,8 @@ def log_mlflow(summary: dict[str, Any], out_dir: Path, smoke: bool) -> None:
 
         from fraud.tracking import configure
 
-        configure(load_config("configs/mlflow.yaml"))
+        mlflow.set_tracking_uri(configure(load_config("configs/mlflow.yaml")))
+        mlflow.set_experiment(os.environ["MLFLOW_EXPERIMENT_NAME"])
         with mlflow.start_run(run_name=f"f6-drift-{'smoke' if smoke else 'full'}"):
             mlflow.log_params(
                 {

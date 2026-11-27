@@ -16,7 +16,7 @@ import sys
 
 REPO = "https://github.com/Outsideorbit29/aiml04-perception.git"
 REF = "aiml01-f6-drift"
-MODE = "smoke"  # smoke | full
+MODE = "full"  # smoke | full
 WORKDIR = "/kaggle/temp/repo"
 
 

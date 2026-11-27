@@ -24,7 +24,8 @@ retrain:
 # Columns that change with calendar time by construction (day counters, the clock itself, history
 # lengths that grow as the replay goes on). They drift in every window and say nothing about the
 # customers, so they are reported but left out of the drift share.
-exclude_from_share: [TransactionDT, D1, D2, D3, D4, D10, D15, client_prior_count]
+exclude_from_share: [TransactionDT, D1, D2, D3, D4, D10, D15, client_prior_count, card_n_devices,
+  device_prior_count, device_n_clients]
 
 # Offline weekly report (Kaggle job kaggle/drift).
 offline:

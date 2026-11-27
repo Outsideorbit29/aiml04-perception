@@ -53,6 +53,7 @@ def _config(tmp_path, **offline):
     )
     cfg["offline"]["evidently"]["enabled"] = False
     cfg["retrain"]["min_window"] = 100
+    cfg["retrain"]["drift_share"] = 0.15  # 1 of the 5 synthetic inputs drifts
     path = tmp_path / "drift.yaml"
     path.write_text(yaml.safe_dump(cfg))
     return path
@@ -80,9 +81,8 @@ def test_drift_report_with_model(features_dir):
 
     train = pd.read_parquet(features_dir / "input" / "f2" / "features" / "train.parquet")
     spec = FeatureSpec.fit(train, ["TransactionAmt", "hour", "C1", "cnt_7d"], ["ProductCD"], 1)
-    model = xgb.XGBClassifier(n_estimators=20, max_depth=3).fit(
-        spec.transform(train), train["isFraud"]
-    )
+    dtrain = xgb.DMatrix(spec.transform(train), label=train["isFraud"])  # no sklearn in CI
+    model = xgb.train({"max_depth": 3, "objective": "binary:logistic"}, dtrain, 20)
     mdir = features_dir / "input" / "f3"
     mdir.mkdir()
     model.save_model(mdir / "model.json")
