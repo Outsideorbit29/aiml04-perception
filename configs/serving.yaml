@@ -18,4 +18,6 @@ start_date: "2017-12-01"          # TransactionDT anchor (configs/data.yaml)
 producer_rate: 50                 # transactions per second
 producer_limit: 0                 # 0 = whole replay file
 consumer_stats_every: 500         # write latency/throughput stats every N transactions
+consumer_batch: 200               # max messages per poll; features pushed / cases committed per batch
+consumer_poll_s: 0.05             # max wait to fill a batch (bounds the added latency)
 http_timeout_s: 5

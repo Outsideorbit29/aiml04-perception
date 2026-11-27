@@ -37,6 +37,25 @@ def warm_state(cfg: dict, feat_cfg: dict) -> OnlineFeatureState:
     return state
 
 
+def ensure_topics(cfg: dict) -> None:
+    """Create the topics up front so the consumer doesn't wait for a metadata refresh."""
+    from confluent_kafka.admin import AdminClient, NewTopic
+
+    admin = AdminClient({"bootstrap.servers": cfg["kafka_bootstrap"]})
+    existing = set(admin.list_topics(timeout=10).topics)
+    new = [
+        NewTopic(t, num_partitions=1, replication_factor=1)
+        for t in (cfg["topic_transactions"], cfg["topic_scores"])
+        if t not in existing
+    ]
+    for topic, fut in admin.create_topics(new).items() if new else []:
+        try:
+            fut.result()
+            print(f"created topic {topic}", flush=True)
+        except Exception as exc:  # already created by another process
+            print(f"topic {topic}: {exc}", flush=True)
+
+
 def main() -> None:
     import httpx
     from confluent_kafka import Consumer, Producer
@@ -57,6 +76,7 @@ def main() -> None:
             "enable.auto.commit": True,
         }
     )
+    ensure_topics(cfg)
     consumer.subscribe([cfg["topic_transactions"]])
     out = Producer({"bootstrap.servers": cfg["kafka_bootstrap"]})
 
@@ -66,65 +86,108 @@ def main() -> None:
         "http_ms": [],
         "e2e_ms": [],
     }
-    n, t_start, alerts = 0, time.time(), 0
+    n, alerts, busy_s, t_first = 0, 0, 0.0, None
     print("consumer ready", flush=True)
-    try:
-        while True:
-            msg = consumer.poll(1.0)
-            if msg is None:
-                continue
-            if msg.error():
-                print("kafka error:", msg.error(), flush=True)
-                continue
-            tx: dict[str, Any] = json.loads(msg.value())
-            produced_at = tx.pop("_produced_at", None)
-            t0 = time.perf_counter()
-            f = state.update(tx)
+
+    def flush(pending: list[tuple[dict, dict, float]]) -> list[dict]:
+        """Push a group's features in one call, then score each transaction."""
+        if not pending:
+            return []
+        t0 = time.perf_counter()
+        store.push(
+            [
+                {
+                    **f,
+                    "TransactionID": tx["TransactionID"],
+                    "event_timestamp": start + pd.Timedelta(seconds=int(tx["TransactionDT"])),
+                }
+                for tx, f, _ in pending
+            ]
+        )
+        push_ms = (time.perf_counter() - t0) * 1000 / len(pending)
+        rows = []
+        for tx, f, feat_ms in pending:
             t1 = time.perf_counter()
-            event_ts = start + pd.Timedelta(seconds=int(tx["TransactionDT"]))
-            store.push([{**f, "TransactionID": tx["TransactionID"], "event_timestamp": event_ts}])
-            t2 = time.perf_counter()
             resp = http.post("/score", json=json_safe(tx))
-            t3 = time.perf_counter()
+            http_ms = (time.perf_counter() - t1) * 1000
             if resp.status_code != 200:
                 print(
                     f"scorer {resp.status_code} for {tx['TransactionID']}: {resp.text}", flush=True
                 )
                 continue
             r = resp.json()
-            alerts += int(r["alert"])
+            timings["features_ms"].append(feat_ms)
+            timings["push_ms"].append(push_ms)
+            timings["http_ms"].append(http_ms)
+            rows.append({"tx": tx, "f": f, "r": r, "latency_ms": feat_ms + push_ms + http_ms})
+        return rows
+
+    try:
+        while True:
+            msgs = consumer.consume(
+                num_messages=cfg["consumer_batch"], timeout=cfg["consumer_poll_s"]
+            )
+            if not msgs:
+                continue
+            t_batch = time.perf_counter()
+            t_first = t_first or time.time()
+            scored, pending, seen = [], [], set()
+            for msg in msgs:
+                if msg.error():
+                    print("kafka error:", msg.error(), flush=True)
+                    continue
+                tx: dict[str, Any] = json.loads(msg.value())
+                t0 = time.perf_counter()
+                f = state.update(tx)
+                feat_ms = (time.perf_counter() - t0) * 1000
+                # The online store keeps one row per client: flush before a client repeats so
+                # the scorer always finds this transaction's own features.
+                if f["client_key"] in seen:
+                    scored += flush(pending)
+                    pending, seen = [], set()
+                pending.append((tx, f, feat_ms))
+                seen.add(f["client_key"])
+            scored += flush(pending)
             cases.insert(
                 [
                     {
-                        "transaction_id": tx["TransactionID"],
-                        "event_time": tx["TransactionDT"],
-                        "client_key": f["client_key"],
-                        "card_key": f["card_key"],
-                        "device_key": f["device_key"] if isinstance(f["device_key"], str) else None,
-                        "amount": tx["TransactionAmt"],
-                        "product": tx.get("ProductCD"),
-                        "score": r["score"],
-                        "p_xgb": r["p_xgb"],
-                        "gnn_risk": r["gnn_risk"],
-                        "alert": r["alert"],
-                        "latency_ms": (t3 - t0) * 1000,
-                        "true_label": tx.get("isFraud"),
+                        "transaction_id": s["tx"]["TransactionID"],
+                        "event_time": s["tx"]["TransactionDT"],
+                        "client_key": s["f"]["client_key"],
+                        "card_key": s["f"]["card_key"],
+                        "device_key": s["f"]["device_key"]
+                        if isinstance(s["f"]["device_key"], str)
+                        else None,
+                        "amount": s["tx"]["TransactionAmt"],
+                        "product": s["tx"].get("ProductCD"),
+                        "score": s["r"]["score"],
+                        "p_xgb": s["r"]["p_xgb"],
+                        "gnn_risk": s["r"]["gnn_risk"],
+                        "alert": s["r"]["alert"],
+                        "latency_ms": s["latency_ms"],
+                        "true_label": s["tx"].get("isFraud"),
                     }
+                    for s in scored
                 ]
             )
-            out.produce(cfg["topic_scores"], key=str(tx["TransactionID"]), value=json.dumps(r))
+            now = time.time()
+            for s in scored:
+                out.produce(
+                    cfg["topic_scores"], key=str(s["tx"]["TransactionID"]), value=json.dumps(s["r"])
+                )
+                if s["tx"].get("_produced_at"):
+                    timings["e2e_ms"].append((now - s["tx"]["_produced_at"]) * 1000)
             out.poll(0)
-            timings["features_ms"].append((t1 - t0) * 1000)
-            timings["push_ms"].append((t2 - t1) * 1000)
-            timings["http_ms"].append((t3 - t2) * 1000)
-            if produced_at:
-                timings["e2e_ms"].append((time.time() - produced_at) * 1000)
-            n += 1
-            if n % cfg["consumer_stats_every"] == 0:
+            busy_s += time.perf_counter() - t_batch
+            before, n = n, n + len(scored)
+            alerts += sum(int(s["r"]["alert"]) for s in scored)
+            if n // cfg["consumer_stats_every"] > before // cfg["consumer_stats_every"]:
                 stats = {
                     "processed": n,
                     "alerts": alerts,
-                    "throughput_tps": n / (time.time() - t_start),
+                    "wall_tps": n / max(time.time() - t_first, 1e-9),
+                    "capacity_tps": n / max(busy_s, 1e-9),
+                    "batch_size": cfg["consumer_batch"],
                     "features_names": len(names),
                     **{k: percentiles(v[-5000:]) for k, v in timings.items()},
                     "cases": cases.stats(),
@@ -132,7 +195,8 @@ def main() -> None:
                 with open(cfg["stats_path"], "w") as fh:
                     json.dump(stats, fh, indent=2)
                 print(
-                    f"{n} tx, {stats['throughput_tps']:.1f} tx/s, http p95 "
+                    f"{n} tx, wall {stats['wall_tps']:.1f} tx/s, capacity "
+                    f"{stats['capacity_tps']:.1f} tx/s, http p95 "
                     f"{stats['http_ms'].get('p95', 0):.1f} ms, e2e p95 "
                     f"{stats['e2e_ms'].get('p95', 0):.1f} ms, alerts {alerts}",
                     flush=True,
