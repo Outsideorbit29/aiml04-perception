@@ -22,14 +22,14 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 ## F0 Setup (Nov 26–27)
 - [x] F0.1 Orphan branch `AIML-01` in the shared repo; brief, plan, agent rules
 - [x] F0.2 Python package skeleton (`fraud/`), `pyproject.toml`, CI (ruff + pytest)
-- [ ] F0.3 Accept IEEE-CIS rules on Kaggle (**user**); MLflow tracking account (**user**)
+- [ ] F0.3 Accept IEEE-CIS rules on Kaggle (**user**, done 2026-11-27); MLflow tracking account (**user**, needed by F3)
 - [ ] F0.4 Docker Desktop (or WSL Docker) and Minikube available locally (check, don't install yet)
 
 ## F1 Data + EDA (Nov 27–28)
-- [ ] F1.1 Kaggle job: load and join transaction + identity tables, time-based train/val/test split
-      (code done: `scripts/prep_data.py`, `kaggle/data_prep/`; smoke then full run pending)
-- [ ] F1.2 EDA: imbalance, amount distribution, missingness, fraud by time/device/card
-      (`fraud/eda.py`, run inside the F1.1 job; write-up in `docs/EDA.md` after the full run)
+- [x] F1.1 Kaggle job: load and join transaction + identity tables, time-based train/val/test split
+      (code done: `scripts/prep_data.py`, `kaggle/data_prep/`; full run 2026-11-27, see `docs/EXPERIMENTS.md`)
+- [x] F1.2 EDA: imbalance, amount distribution, missingness, fraud by time/device/card
+      (`fraud/eda.py`, run inside the F1.1 job; write-up in `docs/EDA.md`)
 - [x] F1.3 Small fixtures in `tests/fixtures/`: 300 **synthetic** rows with the IEEE-CIS schema
       (`scripts/make_fixtures.py`); the competition data is not redistributed in the repo
 
