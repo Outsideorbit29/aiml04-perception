@@ -1,0 +1,40 @@
+# F3: fraud classifiers on the F2 features. Selection on val PR-AUC; test is reported once.
+input_dir: auto            # folder containing features/{train,val,test}.parquet
+out_dir: /kaggle/working/f3_model
+target: isFraud
+max_fpr: 0.01              # alert budget: at most 1% of legit transactions flagged
+category_min_count: 20
+seed: 42
+
+# Feature groups (columns come from features_summary.json written by F2).
+# "raw" = transaction fields only; "full" = raw + F2 behavioural features.
+experiments:
+  - {name: logreg, model: logreg, features: full}
+  - {name: xgb_raw, model: xgb, features: raw, imbalance: weight}
+  - {name: xgb, model: xgb, features: full, imbalance: weight}
+  - {name: xgb_smote, model: xgb, features: full, imbalance: smote}
+
+xgb:
+  n_estimators: 3000
+  learning_rate: 0.04
+  max_depth: 8
+  min_child_weight: 5
+  subsample: 0.8
+  colsample_bytree: 0.6
+  reg_lambda: 1.0
+  tree_method: hist
+  eval_metric: aucpr
+  early_stopping_rounds: 150
+
+smote:
+  sampling_strategy: 0.2   # minority : majority after resampling
+  k_neighbors: 5
+
+logreg:
+  C: 0.5
+  max_iter: 2000
+
+register_name: aiml01-xgb
+smoke:
+  train_rows: 60000
+  n_estimators: 300
