@@ -22,7 +22,7 @@ Brief: `docs/PROJECT_BRIEF.md`. **(S)** = stretch, skip if late.
 ## F0 Setup (Nov 26–27)
 - [x] F0.1 Orphan branch `AIML-01` in the shared repo; brief, plan, agent rules
 - [x] F0.2 Python package skeleton (`fraud/`), `pyproject.toml`, CI (ruff + pytest)
-- [ ] F0.3 Accept IEEE-CIS rules on Kaggle (**user**, done 2026-11-27); MLflow tracking account (**user**, needed by F3)
+- [x] F0.3 Accept IEEE-CIS rules on Kaggle; MLflow on DagsHub (`configs/mlflow.yaml`, token in private Kaggle dataset `aiml04-secrets`)
 - [ ] F0.4 Docker Desktop (or WSL Docker) and Minikube available locally (check, don't install yet)
 
 ## F1 Data + EDA (Nov 27–28)

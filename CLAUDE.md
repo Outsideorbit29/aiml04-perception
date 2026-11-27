@@ -19,7 +19,8 @@ worktree at `D:\Project_ai_aiml01`; AIML-04 (`main`) is at `D:\Project_ai`. Dead
 _Last updated: 2026-11-27_ — F0.1, F0.2, F1 done. Full data prep: 590,540 rows, fraud 3.5%,
 split 413,378 / 88,581 / 88,581 (`docs/EDA.md`). Splits are parquet in the Kaggle output of
 `anish2906/aiml01-data-prep` (`/kaggle/input/aiml01-data-prep/f1_data/splits/` when attached via
-kernel_sources). Next: F2 features + Feast. Open: MLflow tracking choice (DagsHub vs file store) before F3.
+kernel_sources). Next: F2 features + Feast. MLflow: DagsHub `Outsideorbit29/aiml04-perception.mlflow`, experiment `aiml01-fraud`; jobs call
+`fraud.tracking.configure()` and must attach dataset `anish2906/aiml04-secrets` (file `dagshub_token`).
 
 Useful facts:
 - Local tests: `py -3.14 -m pytest -q` works (pandas, pytest, yaml installed) except the parquet

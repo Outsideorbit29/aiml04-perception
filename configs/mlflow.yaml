@@ -1,0 +1,9 @@
+# MLflow tracking on DagsHub (repo mirrored from GitHub). The token is never in the repo:
+# Kaggle jobs read it from the private dataset anish2906/aiml04-secrets (file dagshub_token),
+# locally from the MLFLOW_TRACKING_PASSWORD env var.
+tracking_uri: https://dagshub.com/Outsideorbit29/aiml04-perception.mlflow
+username: Outsideorbit29
+experiment: aiml01-fraud
+token_file: dagshub_token
+# Used when no token is found: runs are written here and can be imported later.
+fallback_uri: file:///kaggle/working/mlruns
