@@ -589,7 +589,8 @@ nav.bar .hint { color: var(--muted); font-size: 13px; }
         <ul class="small">
           <li>Every 30 s, latest 2,000 cases: PSI on amount and product, score PSI, reviewed-alert precision, estimated false-alert rate, alert rate</li>
           <li>Trigger: <code>kaggle kernels push -p kaggle/train</code>, at most once per 24 h, <strong>dry run</strong> by default</li>
-          <li>Synthetic check (no Docker): amount ×3 after 2,000 rows gives PSI 2.37 on TransactionAmt, drift share 0.50 → retrain True. <span class="tag todo">live run TBD</span></li>
+          <li>Live run on the Docker stack: amount ×3 after 2,000 of 5,000 replayed rows gives PSI 1.47–1.63 on TransactionAmt, drift share 0.50 → dry-run retrain. Score PSI stays ≤ 0.04. <span class="tag done">live</span></li>
+          <li>One false trigger on a 962-row warm-up window (ProductCD PSI 0.23), so the minimum window is now 1,000 rows</li>
         </ul>
       </div>
     </div>
@@ -701,7 +702,7 @@ nav.bar .hint { color: var(--muted); font-size: 13px; }
           <li>Retraining can only reuse the same splits: the dataset has no newer data</li>
           <li>Live drift covers amount, product and scores only; the full input set is checked offline</li>
           <li>SQLite case store means one consumer replica</li>
-          <li>Not yet run live: monitor + drift demo, Minikube</li>
+          <li>The live drift demo is a synthetic shift (amounts ×3) on replayed data, not real drift</li>
         </ul>
       </div>
       <div>
