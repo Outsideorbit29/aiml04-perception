@@ -6,6 +6,11 @@ is written with CaseStore.set_status and becomes the feedback label F6 uses.
 
 Run from the repo root:  streamlit run services/dashboard/app.py
 Config: configs/serving.yaml + services/dashboard/dashboard.yaml, env overrides (CASES_DB, ...).
+
+Demo mode (DASHBOARD_DEMO=1, used by services/dashboard/streamlit_app.py on Streamlit Community
+Cloud): a synthetic case store, rings table and consumer stats are generated at startup by
+fraud.demo_data into DASHBOARD_DEMO_DIR (default: a temp folder); no scorer, Kafka or IEEE-CIS
+data is needed.
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -29,13 +35,29 @@ from fraud import dashboard_data as dd  # noqa: E402
 
 st.set_page_config(page_title="AIML-01 Fraud Analyst", layout="wide")
 
+DEMO = os.environ.get("DASHBOARD_DEMO", "").lower() in ("1", "true", "yes")
+DEMO_DIR = Path(
+    os.environ.get("DASHBOARD_DEMO_DIR", Path(tempfile.gettempdir()) / "aiml01_dashboard_demo")
+)
+
+
+@st.cache_resource(show_spinner="Generating synthetic demo data...")
+def demo_paths(demo_dir: str) -> dict[str, str]:
+    """Build the synthetic demo once per server process (Streamlit Cloud disk is ephemeral)."""
+    from fraud.demo_data import write_demo
+
+    return {k: str(v) for k, v in write_demo(demo_dir).items()}
+
 
 @st.cache_data(ttl=60)
-def get_config() -> dict[str, Any]:
-    return dd.dashboard_config(
+def get_config(demo: bool, demo_dir: str) -> dict[str, Any]:  # args are cache keys
+    cfg = dd.dashboard_config(
         os.environ.get("SERVING_CONFIG", ROOT / "configs" / "serving.yaml"),
         os.environ.get("DASHBOARD_CONFIG", ROOT / "services" / "dashboard" / "dashboard.yaml"),
     )
+    if demo:
+        cfg.update(demo_paths(demo_dir), scorer_url="")
+    return cfg
 
 
 @st.cache_data(show_spinner=False)
@@ -60,9 +82,23 @@ def fmt(v: float | None, spec: str = ".1f", none: str = "–") -> str:
     return none if v is None else format(v, spec)
 
 
-cfg = get_config()
+cfg = get_config(DEMO, str(DEMO_DIR))
 st.title("Real-time fraud detection: analyst dashboard")
-st.caption(f"Case DB `{cfg['cases_db']}` · scorer `{cfg['scorer_url']}`")
+if DEMO:
+    st.warning(
+        "**Demo mode: synthetic data, not IEEE-CIS; the live system runs on Kafka + Feast + "
+        "FastAPI (see README).** Transactions, scores, rings and latencies are generated from a "
+        "fixed seed when the app starts. Analyst actions work and are shared by all visitors "
+        "until the app restarts or the data is reset."
+    )
+    with st.sidebar:
+        st.subheader("Demo")
+        if st.button("Reset demo data"):
+            demo_paths.clear()
+            get_config.clear()
+            st.rerun()
+else:
+    st.caption(f"Case DB `{cfg['cases_db']}` · scorer `{cfg['scorer_url']}`")
 
 
 @st.fragment(run_every=cfg["refresh_s"])
@@ -104,8 +140,13 @@ def live_overview() -> None:
         help="confirmed / (confirmed + dismissed), from analyst decisions only",
     )
     age = time.time() - ov["last_scored_at"]
+    when = (
+        f"Demo data generated {age / 60:.0f} min ago (static replay, no producer)."
+        if DEMO
+        else f"Last transaction scored {age:.0f} s ago."
+    )
     st.caption(
-        f"Last transaction scored {age:.0f} s ago. Budget: the threshold is set for at most "
+        f"{when} Budget: the threshold is set for at most "
         f"{ov['alert_budget']:.0%} of legitimate transactions flagged; with ~3.5% fraud and ~50% "
         f"recall the expected overall alert rate is {ov['expected_alert_rate']:.1%}."
     )
@@ -254,12 +295,27 @@ def rings_tab() -> None:
             conn.close()
 
 
+def demo_model() -> dict[str, Any] | None:
+    return dd.load_consumer_stats(cfg.get("model_path", ""))  # same "JSON or None" reader
+
+
 def model_tab() -> None:
-    base = cfg["scorer_url"].rstrip("/")
-    timeout = float(cfg.get("http_timeout_s", 5))
-    info, health = fetch_json(f"{base}/model", timeout), fetch_json(f"{base}/health", timeout)
+    if DEMO:
+        st.info(
+            "The public demo has no scorer. In the full system this tab reads the FastAPI "
+            "scorer's `GET /model` and `GET /health`; below is the synthetic scoring rule the "
+            "demo data was generated with."
+        )
+        info, health = demo_model(), {"status": "demo (no scorer)"}
+    else:
+        base = cfg["scorer_url"].rstrip("/")
+        timeout = float(cfg.get("http_timeout_s", 5))
+        info, health = fetch_json(f"{base}/model", timeout), fetch_json(f"{base}/health", timeout)
+        if info is None:
+            st.error(f"Scorer not reachable at {base}.")
+            return
     if info is None:
-        st.error(f"Scorer not reachable at {base}.")
+        st.error("No model information available.")
         return
     c = st.columns(4)
     c[0].metric("Model", str(info.get("model", "?")))

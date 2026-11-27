@@ -54,3 +54,41 @@ STATS_PATH=serving_bundle/data/consumer_stats.json SCORER_URL=http://localhost:8
 ```
 
 **Kubernetes (Minikube):** see [DEPLOY.md](DEPLOY.md); the dashboard is on NodePort 30851.
+
+## Public demo (Streamlit Community Cloud)
+Live URL: **`<add the Streamlit Cloud URL here>`** (F7.3, the portal's optional Live Deployment URL)
+
+The public app runs the same `services/dashboard/app.py` in **demo mode**. The entrypoint
+`services/dashboard/streamlit_app.py` sets `DASHBOARD_DEMO=1`; at startup
+`fraud/demo_data.py` generates, from a fixed seed, a case store with the `fraud.cases` schema
+(4,000 scored transactions over 10 minutes, ~3% alerts, ~3.4% fraud, a third of the alerts
+already reviewed), five fraud rings and a consumer-stats snapshot, written to a temp folder
+(`DASHBOARD_DEMO_DIR`). Nothing comes from IEEE-CIS (competition rules forbid redistribution):
+keys start with `demo-`, transaction ids start at 9,000,000 and scores come from simple
+distributions, not the trained model. There is no Kafka, Redis or scorer; the Model tab shows the
+synthetic scoring rule instead of `GET /model`. A banner says so on every page.
+
+Confirm / Dismiss work against the demo DB. All visitors share it until the app restarts
+(Streamlit Cloud's disk is ephemeral) or someone clicks **Reset demo data** in the sidebar.
+`services/dashboard/requirements.txt` (next to the entrypoint, so Streamlit Cloud uses it instead
+of the root `requirements.txt`) holds only streamlit, numpy, pandas, pyarrow and pyyaml.
+
+**Deploy (one time, about 5 minutes):**
+1. Go to <https://share.streamlit.io> and sign in with GitHub (account `Outsideorbit29`); allow
+   access to the public repo when asked.
+2. Click **Create app** → **Deploy a public app from GitHub** (or **New app**).
+3. Repository `Outsideorbit29/aiml04-perception`, branch `AIML-01`, main file path
+   `services/dashboard/streamlit_app.py`.
+4. Optional: set **App URL** to something readable, e.g. `aiml01-fraud-dashboard`.
+5. **Advanced settings** → Python version **3.12**. No secrets are needed. Save, then **Deploy**.
+6. The first build takes a few minutes. Open the URL, check the yellow demo banner, confirm one
+   alert, and paste the URL above and into the portal.
+
+Free apps sleep after a few days without visits; opening the URL wakes them in about a minute.
+Every push to `AIML-01` redeploys the app.
+
+**Run demo mode locally** (any Python 3.10–3.13 with the dashboard requirements):
+```bash
+streamlit run services/dashboard/streamlit_app.py          # or: DASHBOARD_DEMO=1 streamlit run services/dashboard/app.py
+```
+The Docker image and the Kubernetes deployment keep demo mode off (`DASHBOARD_DEMO` unset).
